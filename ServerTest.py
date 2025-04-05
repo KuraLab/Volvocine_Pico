@@ -76,24 +76,6 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     return df[["agent_id", "chunk_id", "time_pc_sec_abs", "a0", "a1", "a2"]]
 
 # ---------------------------
-# ログ再読み込み
-# ---------------------------
-def load_recent_chunks():
-    print("[DEBUG] current_chunk_files before plotting:")
-    for fname in current_chunk_files:
-        print(f"  - {fname}")
-
-    dfs = []
-    for file in current_chunk_files:
-        try:
-            df = pd.read_csv(file)
-            if all(col in df.columns for col in ["agent_id", "chunk_id", "time_pc_sec_abs", "a0", "a1", "a2"]):
-                dfs.append(df[["agent_id", "chunk_id", "time_pc_sec_abs", "a0", "a1", "a2"]])
-        except Exception as e:
-            print(f"[WARN] Failed to load {file}: {e}")
-    return dfs
-
-# ---------------------------
 # メイン受信ループ
 # ---------------------------
 def main():
