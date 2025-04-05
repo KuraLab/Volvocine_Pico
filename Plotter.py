@@ -4,6 +4,11 @@ from itertools import cycle
 import os
 
 def plot_chunks(file_list):
+    # None チェックを追加
+    if not file_list:
+        print("[INFO] No files provided to plot.")
+        return
+
     # 単一ファイルパスが来たらリストに変換
     if isinstance(file_list, str):
         file_list = [file_list]
