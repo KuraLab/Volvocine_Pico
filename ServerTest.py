@@ -103,7 +103,7 @@ def main():
                 recv_time = time.time()
 
                 # デバッグログ: 受信データの内容を確認
-                print(f"[DEBUG] Received data from {addr}, length={len(data)}")
+                #print(f"[DEBUG] Received data from {addr}, length={len(data)}")
 
                 if not is_valid_log_packet(data):
                     print(f"[INFO] Ignored dummy or malformed packet from {addr}, length={len(data)}")
@@ -117,7 +117,7 @@ def main():
                 raw = data[5:]
 
                 # デバッグログ: パケット解析結果を確認
-                print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, raw_length={len(raw)}")
+                #print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, raw_length={len(raw)}")
 
                 if len(raw) % RECORD_SIZE != 0:
                     print(f"[WARN] Invalid record size from {addr}")
