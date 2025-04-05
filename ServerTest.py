@@ -4,7 +4,6 @@ import time
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
-from itertools import cycle
 from Plotter import plot_chunks
 from ChunkSaver import merge_and_save_chunks
 from keyinput import check_key
@@ -34,9 +33,10 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     if not chunk_data:
         return None
 
-    send_micros = chunk_send_micros[-1]
-    recv_time = chunk_recv_times[-1]
-    offset = recv_time - (send_micros / 1e6)
+    # 平均オフセットを送信時刻の下位16bit再構成で算出
+    wrapped_send_secs = [(((s >> 10) % 65536) << 10) / 1e6 for s in chunk_send_micros]
+    offsets = [recv - send for send, recv in zip(wrapped_send_secs, chunk_recv_times)]
+    offset = sum(offsets) / len(offsets)
 
     df = pd.DataFrame(chunk_data, columns=["micros16", "a0", "a1", "a2"])
 
