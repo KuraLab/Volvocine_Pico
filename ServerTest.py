@@ -7,30 +7,8 @@ import matplotlib.pyplot as plt
 from itertools import cycle
 from Plotter import plot_chunks
 from ChunkSaver import merge_and_save_chunks
-import sys
-import os
-if os.name == 'nt':
-    import msvcrt
+from keyinput import check_key
 
-    def check_key():
-        if msvcrt.kbhit():
-            return msvcrt.getwch()
-        return None
-else:
-    import select
-    import tty
-    import termios
-
-    def check_key():
-        dr, _, _ = select.select([sys.stdin], [], [], 0)
-        if dr:
-            old_settings = termios.tcgetattr(sys.stdin)
-            try:
-                tty.setcbreak(sys.stdin.fileno())
-                return sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-        return None
 
 # ---------------------------
 # 設定
