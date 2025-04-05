@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from Plotter import plot_chunks
 from ChunkSaver import merge_and_save_chunks
 from keyinput import check_key
+import os  # フォルダ作成用にosモジュールをインポート
 
 
 # ---------------------------
@@ -19,6 +20,12 @@ CHUNK_TIMEOUT = 1.0
 
 STRUCT_FORMAT = "<HBBB"  # micros16, a0, a1, a2
 RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 5 bytes
+
+SAVE_FOLDER = "saved_chunks"  # 保存用フォルダ名
+
+# 保存用フォルダを作成（存在しない場合のみ）
+if not os.path.exists(SAVE_FOLDER):
+    os.makedirs(SAVE_FOLDER)
 
 agent_buffers = {}  # agent_id -> (chunk_data, send_micros_list, recv_time_list)
 agent_lastrecv_time = {}
@@ -62,7 +69,8 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     df["agent_id"] = agent_id
     df["chunk_id"] = chunk_id
 
-    filename = f"chunk_agent_{agent_id}_{timestamp}.csv"
+    # 保存先を保存用フォルダに変更
+    filename = os.path.join(SAVE_FOLDER, f"chunk_agent_{agent_id}_{timestamp}.csv")
     save_columns = [
         "time_pc_sec_abs", "micros32", "micros32_raw", "time_local_sec",
         "a0", "a1", "a2", "agent_id", "chunk_id"
