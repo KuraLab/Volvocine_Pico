@@ -2,37 +2,26 @@ import pandas as pd
 from datetime import datetime
 import os
 
-def merge_and_save_chunks(file_list, output_dir="."):
-    if not file_list:
-        print("[INFO] No chunk files to merge.")
-        return None
+SAVE_FOLDER = "."
 
-    dfs = []
-    for file in file_list:
-        try:
-            df = pd.read_csv(file)
-            dfs.append(df)
-        except Exception as e:
-            print(f"[WARN] Failed to read {file}: {e}")
+def merge_and_save_chunks(chunk_files):
+    # マージデータ専用フォルダの作成
+    merged_folder = os.path.join(SAVE_FOLDER, "merged_chunks")
+    if not os.path.exists(merged_folder):
+        os.makedirs(merged_folder)
 
-    if not dfs:
-        print("[INFO] No valid dataframes loaded.")
-        return None
+    # マージ処理
+    merged_data = pd.DataFrame()
+    for file in chunk_files:
+        df = pd.read_csv(file)
+        merged_data = pd.concat([merged_data, df], ignore_index=True)
 
-    merged_df = pd.concat(dfs, ignore_index=True)
-
-    os.makedirs(output_dir, exist_ok=True)
+    # 保存先ファイル名の生成
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    outname = os.path.join(output_dir, f"merged_log_{timestamp}.csv")
-    merged_df.to_csv(outname, index=False)
-    print(f"[INFO] Merged log saved to {outname}")
+    merged_file = os.path.join(merged_folder, f"merged_{timestamp}.csv")
 
-    # 元ファイルを削除
-    for file in file_list:
-        try:
-            os.remove(file)
-            print(f"[INFO] Deleted chunk file: {file}")
-        except Exception as e:
-            print(f"[WARN] Failed to delete {file}: {e}")
+    # マージデータを保存
+    merged_data.to_csv(merged_file, index=False)
+    print(f"[INFO] Merged data saved to {merged_file}")
 
-    return outname
+    return merged_file
