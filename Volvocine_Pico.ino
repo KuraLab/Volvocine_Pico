@@ -5,6 +5,10 @@
 #include <math.h> 
 #include "agent_config.h"
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 // WiFi設定
 const char* ssid = "Buffalo-G-4510";
 const char* password = "33354682";
