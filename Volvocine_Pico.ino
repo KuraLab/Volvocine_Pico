@@ -167,6 +167,13 @@ void logSensorData() {
   loopCounter++;
 }
 
+void warmUpUDP() {
+  udp.beginPacket(serverIP, serverPort);
+  udp.write((uint8_t)0);  // これでOK
+  udp.endPacket();
+  delay(50);
+}
+
 void setup() {
   pinMode(digitalInputPin, INPUT);
   Serial.begin(115200);
@@ -185,6 +192,9 @@ void setup() {
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
+  udp.begin(12345);
+  warmUpUDP();  // ← ARP回避のためのダミー送信
+
   // agent_id 読み込み
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
   Serial.printf("Loaded agent_id: %d\n", agent_id);
@@ -198,6 +208,8 @@ void setup() {
 
   // 初期状態をオフに設定
   paused = true;
+  logIndex = 0;  // バッファインデックスを初期化
+  sendLogBuffer();
   Serial.println("[INFO] System is paused. Press the button to start.");
 }
 
