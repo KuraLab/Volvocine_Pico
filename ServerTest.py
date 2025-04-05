@@ -75,6 +75,10 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
 
     return df[["agent_id", "chunk_id", "time_pc_sec_abs", "a0", "a1", "a2"]]
 
+def is_valid_log_packet(data):
+    # ダミー: agent_id==0 かつ payloadがない（最低1レコード＝5バイト未満）
+    return len(data) >= 10 and data[0] != 0
+
 # ---------------------------
 # メイン受信ループ
 # ---------------------------
@@ -93,7 +97,10 @@ def main():
                 # デバッグログ: 受信データの内容を確認
                 print(f"[DEBUG] Received data from {addr}, length={len(data)}")
 
-                if len(data) < 5:
+                if not is_valid_log_packet(data):
+                    print(f"[INFO] Ignored dummy or malformed packet from {addr}, length={len(data)}")
+                    continue
+                elif len(data) < 5:
                     print(f"[WARN] Short packet from {addr}")
                     continue
 
