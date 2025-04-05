@@ -90,6 +90,9 @@ def main():
                 data, addr = sock.recvfrom(BUFFER_SIZE)
                 recv_time = time.time()
 
+                # デバッグログ: 受信データの内容を確認
+                print(f"[DEBUG] Received data from {addr}, length={len(data)}")
+
                 if len(data) < 5:
                     print(f"[WARN] Short packet from {addr}")
                     continue
@@ -97,6 +100,9 @@ def main():
                 agent_id = data[0]
                 send_micros = struct.unpack("<I", data[1:5])[0]
                 raw = data[5:]
+
+                # デバッグログ: パケット解析結果を確認
+                print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, raw_length={len(raw)}")
 
                 if len(raw) % RECORD_SIZE != 0:
                     print(f"[WARN] Invalid record size from {addr}")
