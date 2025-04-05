@@ -173,7 +173,7 @@ def main():
                 pass
 
             key = check_key()
-            if key == '\r':
+            if key in ('\r', '\n'):
                 print("[INFO] Manual chunk flush.")
                 for ag_id in list(agent_buffers.keys()):
                     data, send_list, recv_list = agent_buffers[ag_id]
