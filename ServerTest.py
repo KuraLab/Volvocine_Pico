@@ -4,10 +4,33 @@ import time
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
-import msvcrt
 from itertools import cycle
 from Plotter import plot_chunks
 from ChunkSaver import merge_and_save_chunks
+import sys
+import os
+if os.name == 'nt':
+    import msvcrt
+
+    def check_key():
+        if msvcrt.kbhit():
+            return msvcrt.getwch()
+        return None
+else:
+    import select
+    import tty
+    import termios
+
+    def check_key():
+        dr, _, _ = select.select([sys.stdin], [], [], 0)
+        if dr:
+            old_settings = termios.tcgetattr(sys.stdin)
+            try:
+                tty.setcbreak(sys.stdin.fileno())
+                return sys.stdin.read(1)
+            finally:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+        return None
 
 # ---------------------------
 # 設定
@@ -149,21 +172,19 @@ def main():
             except socket.timeout:
                 pass
 
-            if msvcrt.kbhit():
-                key = msvcrt.getwch()
-                if key == '\r':
-                    print("[INFO] Manual chunk flush.")
-                    for ag_id in list(agent_buffers.keys()):
-                        data, send_list, recv_list = agent_buffers[ag_id]
-                        if data:
-                            build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
-                        agent_buffers[ag_id] = ([], [], [])
-
-                    merged_path = merge_and_save_chunks(current_chunk_files)
-                    print("[INFO] Merged and saved chunks.")
-                    plot_chunks(merged_path)
-                    current_chunk_files.clear()
-                    print("[DEBUG] current_chunk_files cleared.")
+            key = check_key()
+            if key == '\r':
+                print("[INFO] Manual chunk flush.")
+                for ag_id in list(agent_buffers.keys()):
+                    data, send_list, recv_list = agent_buffers[ag_id]
+                    if data:
+                        build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
+                    agent_buffers[ag_id] = ([], [], [])
+                merged_path = merge_and_save_chunks(current_chunk_files)
+                print("[INFO] Merged and saved chunks.")
+                plot_chunks(merged_path)
+                current_chunk_files.clear()
+                print("[DEBUG] current_chunk_files cleared.")
 
     except KeyboardInterrupt:
         print("[INFO] Interrupted by user.")
