@@ -102,7 +102,7 @@ void sendLogBuffer() {
 // ---------------------------------------------------
 void logSensorData() {
   unsigned long now = micros();
-  Serial.printf("[DEBUG] Sensor logged at micros=%lu, micros>>10=%lu\n\r", now, now >> 10);  // ←追加（センサ取得時刻デバッグ）
+  //Serial.printf("[DEBUG] Sensor logged at micros=%lu, micros>>10=%lu\n\r", now, now >> 10);  // ←追加（センサ取得時刻デバッグ）
   unsigned long dt = now - prevLoopEndTime;
   prevLoopEndTime = now;
 
