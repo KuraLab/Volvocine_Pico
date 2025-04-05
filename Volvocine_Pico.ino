@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <LittleFS.h>
-#include <math.h>  // for fmodf, M_PI
+#include <math.h> 
 #include "agent_config.h"
 
 // WiFi設定
