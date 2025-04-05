@@ -57,62 +57,51 @@ int loopCounter = 0;
 //   (各パケット先頭に agent_id の1バイトと送信時の時刻4バイトを付加して送る)
 // ---------------------------------------------------
 void sendLogBuffer() {
-    Serial.printf("[DEBUG] logIndex before sending: %d\n", logIndex);
-    if (logIndex == 0) {
-        Serial.println("[INFO] No data to send.");
-        return;
-    }
+  const int maxPacketBytes = 512;
+  uint8_t packet[maxPacketBytes];
 
-    const int maxPacketBytes = 512;
-    uint8_t packet[maxPacketBytes];
+  int sentCount = 0;
+  int i = 0;
 
-    int sentCount = 0;
-    int i = 0;
+  while (i < logIndex) {
+    size_t offset = 0;
 
+    // 1) agent_id (1バイト)
+    packet[offset++] = (uint8_t)agent_id;
+
+    // 2) 送信時刻 (4バイト, micros)
+    uint32_t sendMicros = micros();
+    Serial.printf("[DEBUG] Sending packet at micros=%lu, micros>>10=%lu\n\r", sendMicros, sendMicros >> 10);  // ←追加（送信時刻デバッグ）
+    memcpy(&packet[offset], &sendMicros, sizeof(sendMicros));
+    offset += sizeof(sendMicros);  // 4バイト
+
+    // 3) ログデータを詰める
+    int perPacketCount = 0;
     while (i < logIndex) {
-        size_t offset = 0;
+      if (offset + sizeof(CompressedLogData) > maxPacketBytes) {
+        break;
+      }
 
-        // 1) agent_id (1バイト)
-        packet[offset++] = (uint8_t)agent_id;
-
-        // 2) 送信時刻 (4バイト, micros)
-        uint32_t sendMicros = micros();
-        memcpy(&packet[offset], &sendMicros, sizeof(sendMicros));
-        offset += sizeof(sendMicros);
-
-        // 3) ログデータを詰める
-        int perPacketCount = 0;
-        while (i < logIndex) {
-            if (offset + sizeof(CompressedLogData) > maxPacketBytes) {
-                break;
-            }
-
-            memcpy(&packet[offset], &logBuffer[i], sizeof(CompressedLogData));
-            offset += sizeof(CompressedLogData);
-            i++;
-            perPacketCount++;
-        }
-
-        // デバッグログ: 送信データの内容を確認
-        Serial.printf("[DEBUG] Sending packet: offset=%d, perPacketCount=%d\n", offset, perPacketCount);
-
-        // 4) UDP送信
-        udp.beginPacket(serverIP, serverPort);
-        udp.write(packet, offset);
-        udp.endPacket();
-
-        sentCount += perPacketCount;
+      memcpy(&packet[offset], &logBuffer[i], sizeof(CompressedLogData));
+      offset += sizeof(CompressedLogData);
+      i++;
+      perPacketCount++;
     }
 
-    Serial.printf("[INFO] Sent %d records from RAM\n", sentCount);
+    // 4) UDP送信
+    udp.beginPacket(serverIP, serverPort);
+    udp.write(packet, offset);
+    udp.endPacket();
 
-    if (bufferOverflowed) {
-        Serial.println("[WARN] Some data may have been lost due to buffer overflow.");
-        bufferOverflowed = false;
-    }
+    sentCount += perPacketCount;
+  }
 
-    // バッファをリセット
-    logIndex = 0;
+  Serial.printf("[INFO] Sent %d records from RAM\n", sentCount);
+
+  if (bufferOverflowed) {
+    Serial.println("[WARN] Some data may have been lost due to buffer overflow.");
+    bufferOverflowed = false;
+  }
 }
 
 
@@ -120,11 +109,6 @@ void sendLogBuffer() {
 // センサ読み取り＋RAMバッファ保存（dtはサーボ用のみ）
 // ---------------------------------------------------
 void logSensorData() {
-  Serial.printf("[DEBUG] logIndex before sending: %d\n", logIndex);
-  if (logIndex == 0) {
-      Serial.println("[INFO] No data to send.");
-      return;
-  }
   unsigned long now = micros();
   unsigned long dt = now - prevLoopEndTime;
   prevLoopEndTime = now;
