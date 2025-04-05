@@ -2,7 +2,7 @@ import pandas as pd
 from datetime import datetime
 import os
 
-SAVE_FOLDER = "."
+SAVE_FOLDER = "."  # マージデータ保存用フォルダ
 
 def merge_and_save_chunks(chunk_files):
     # マージデータ専用フォルダの作成
@@ -23,5 +23,13 @@ def merge_and_save_chunks(chunk_files):
     # マージデータを保存
     merged_data.to_csv(merged_file, index=False)
     print(f"[INFO] Merged data saved to {merged_file}")
+
+    # チャンクファイルを削除
+    for file in chunk_files:
+        try:
+            os.remove(file)
+            print(f"[INFO] Deleted chunk file: {file}")
+        except OSError as e:
+            print(f"[ERROR] Could not delete file {file}: {e}")
 
     return merged_file
