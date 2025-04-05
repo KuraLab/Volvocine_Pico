@@ -15,7 +15,7 @@ from ChunkSaver import merge_and_save_chunks
 UDP_PORT = 5000
 BUFFER_SIZE = 1024
 SOCKET_TIMEOUT = 0.5
-CHUNK_TIMEOUT = 2.0
+CHUNK_TIMEOUT = 1.0
 
 STRUCT_FORMAT = "<HBBB"  # micros16, a0, a1, a2
 RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 5 bytes
