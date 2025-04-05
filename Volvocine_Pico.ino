@@ -33,7 +33,7 @@ struct __attribute__((packed)) CompressedLogData {
   uint8_t  analog2;   // 1バイト
 };
 
-#define CONTROL_PERIOD_US 10000
+#define CONTROL_PERIOD_US 2000 // 制御周期 (μs)
 #define LOG_BUFFER_SIZE   36000
 CompressedLogData logBuffer[LOG_BUFFER_SIZE];
 int logIndex = 0;
@@ -47,6 +47,10 @@ bool bufferOverflowed = false;
 
 // agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
 int agent_id = 0;
+
+// データ保存間隔を設定 (例: 5ループごとに保存)
+const int saveInterval = 5;
+int loopCounter = 0;
 
 // ---------------------------------------------------
 // 送信バッファをまとめてUDP送信
@@ -106,7 +110,6 @@ void sendLogBuffer() {
 // ---------------------------------------------------
 void logSensorData() {
   unsigned long now = micros();
-  //Serial.printf("[DEBUG] Sensor logged at micros=%lu, micros>>10=%lu\n\r", now, now >> 10);  // ←追加（センサ取得時刻デバッグ）
   unsigned long dt = now - prevLoopEndTime;
   prevLoopEndTime = now;
 
@@ -115,40 +118,43 @@ void logSensorData() {
   float currentSin = cosf(phi);
   myServo.write(110 + 60 * currentSin);
 
-  // ログ用構造体
-  CompressedLogData entry;
-  entry.micros16 = now >> 10;
+  // データ保存は指定された間隔でのみ実行
+  if (loopCounter % saveInterval == 0) {
+    // ログ用構造体
+    CompressedLogData entry;
+    entry.micros16 = now >> 10;
 
-  // analog0: phiを [0..2π) → 0..255 に圧縮
-  float phiMod = fmodf(phi, 2.0f * (float)M_PI);
-  if (phiMod < 0) phiMod += 2.0f * (float)M_PI;
-  entry.analog0 = (uint8_t)(phiMod * (255.0f / (2.0f * (float)M_PI)));
+    // analog0: phiを [0..2π) → 0..255 に圧縮
+    float phiMod = fmodf(phi, 2.0f * (float)M_PI);
+    if (phiMod < 0) phiMod += 2.0f * (float)M_PI;
+    entry.analog0 = (uint8_t)(phiMod * (255.0f / (2.0f * (float)M_PI)));
 
-  // analog1
-  int raw1 = analogRead(analogPin1);  // 0..4095
-  entry.analog1 = (uint8_t)(raw1 >> 4);
+    // analog1
+    int raw1 = analogRead(analogPin1);  // 0..4095
+    entry.analog1 = (uint8_t)(raw1 >> 4);
 
-  // analog2
-  int raw2 = analogRead(analogPin2);
-  int extended2 = raw2 << 2;  // ×4
-  if (extended2 > 4095) extended2 = 4095;
-  entry.analog2 = (uint8_t)(extended2 >> 4);
+    // analog2
+    int raw2 = analogRead(analogPin2);
+    int extended2 = raw2 << 2;  // ×4
+    if (extended2 > 4095) extended2 = 4095;
+    entry.analog2 = (uint8_t)(extended2 >> 4);
 
-  // バッファに書き込み
-  if (logIndex < LOG_BUFFER_SIZE) {
-    logBuffer[logIndex++] = entry;
-  } else {
-    // 1度だけWarnを出す
-    if (!bufferOverflowed) {
-      Serial.println("[WARN] log buffer overflow!");
-      bufferOverflowed = true;
+    // バッファに書き込み
+    if (logIndex < LOG_BUFFER_SIZE) {
+      logBuffer[logIndex++] = entry;
+    } else {
+      // 1度だけWarnを出す
+      if (!bufferOverflowed) {
+        Serial.println("[WARN] log buffer overflow!");
+        bufferOverflowed = true;
+      }
     }
-  }
 
-  // バッファ使用率 (10件毎に表示)
-  if (logIndex % 10 == 0) {
-    float usage = (float)logIndex / LOG_BUFFER_SIZE * 100.0f;
-    Serial.printf("[STATUS] buffer: %d/%d (%.1f%%)\n", logIndex, LOG_BUFFER_SIZE, usage);
+    // バッファ使用率 (10件毎に表示)
+    if (logIndex % 10 == 0) {
+      float usage = (float)logIndex / LOG_BUFFER_SIZE * 100.0f;
+      Serial.printf("[STATUS] buffer: %d/%d (%.1f%%)\n", logIndex, LOG_BUFFER_SIZE, usage);
+    }
   }
 
   // 周期制御
@@ -156,6 +162,9 @@ void logSensorData() {
   if (elapsed < CONTROL_PERIOD_US) {
     delayMicroseconds(CONTROL_PERIOD_US - elapsed);
   }
+
+  // ループカウンタをインクリメント
+  loopCounter++;
 }
 
 void setup() {
@@ -163,6 +172,7 @@ void setup() {
   Serial.begin(115200);
   analogReadResolution(12);
   myServo.attach(22);
+  myServo.write(80);
 
   // WiFi接続
   Serial.print("Connecting to WiFi...");
@@ -179,8 +189,16 @@ void setup() {
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
+  // サーボモータを真ん中に動かす
+  myServo.write(90);
+  Serial.println("[INFO] Servo moved to center position (90 degrees)");
+
   Serial.println("[INFO] Ready to log in RAM");
   prevLoopEndTime = micros();
+
+  // 初期状態をオフに設定
+  paused = true;
+  Serial.println("[INFO] System is paused. Press the button to start.");
 }
 
 void loop() {
