@@ -87,6 +87,16 @@ def is_valid_log_packet(data):
     # ダミー: agent_id==0 かつ payloadがない（最低1レコード＝5バイト未満）
     return len(data) >= 10 and data[0] != 0
 
+def handle_handshake(sock, data, addr):
+    """
+    クライアントからのハンドシェイクメッセージに応答する関数。
+    """
+    handshake_message = "HELLO"
+    if data.decode('utf-8') == handshake_message:
+        response = "READY"
+        sock.sendto(response.encode('utf-8'), addr)
+        print(f"[INFO] Handshake response sent to {addr}")
+
 # ---------------------------
 # メイン受信ループ
 # ---------------------------
@@ -101,6 +111,11 @@ def main():
             try:
                 data, addr = sock.recvfrom(BUFFER_SIZE)
                 recv_time = time.time()
+
+                # ハンドシェイクメッセージの処理
+                if data.decode('utf-8') == "HELLO":
+                    handle_handshake(sock, data, addr)
+                    continue
 
                 # デバッグログ: 受信データの内容を確認
                 #print(f"[DEBUG] Received data from {addr}, length={len(data)}")

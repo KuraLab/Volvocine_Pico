@@ -174,13 +174,6 @@ void logSensorData() {
   loopCounter++;
 }
 
-void warmUpUDP() {
-  udp.beginPacket(serverIP, serverPort);
-  udp.write((uint8_t)0);  // これでOK
-  udp.endPacket();
-  delay(50);
-}
-
 void setup() {
   pinMode(digitalInputPin, INPUT);
   Serial.begin(115200);
