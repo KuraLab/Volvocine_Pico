@@ -4,6 +4,8 @@
 #include <LittleFS.h>
 #include <math.h> 
 #include "agent_config.h"
+#include "ServerUtils.h"
+#include "WiFiManager.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -57,6 +59,11 @@ int loopCounter = 0;
 //   (各パケット先頭に agent_id の1バイトと送信時の時刻4バイトを付加して送る)
 // ---------------------------------------------------
 void sendLogBuffer() {
+  if (!isServerReady(udp, serverIP, serverPort)) {
+    Serial.println("[ERROR] Server not ready. Aborting log transmission.");
+    return;
+  }
+
   const int maxPacketBytes = 512;
   uint8_t packet[maxPacketBytes];
 
@@ -182,18 +189,10 @@ void setup() {
   myServo.write(80);
 
   // WiFi接続
-  Serial.print("Connecting to WiFi...");
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi connected.");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+  connectToWiFi(ssid, password);
 
   udp.begin(12345);
-  warmUpUDP();  // ← ARP回避のためのダミー送信
+  warmUpUDP(udp, serverIP, serverPort);  // ServerUtils.cppの関数を呼び出し
 
   // agent_id 読み込み
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
