@@ -190,7 +190,28 @@ void setup() {
   connectToWiFi(ssid, password);
 
   udp.begin(12345);
-  warmUpUDP(udp, serverIP, serverPort);  // ServerUtils.cppの関数を呼び出し
+
+  // サーバー接続先を選択
+  IPAddress serverIP1(192, 168, 13, 98);
+  IPAddress serverIP2(192, 168, 13, 99);
+  
+  warmUpUDP(udp, serverIP1, serverPort);  // ServerUtils.cppの関数を呼び出し
+  warmUpUDP(udp, serverIP2, serverPort);  
+  
+  while (true) {
+    if (isServerReady(udp, serverIP1, serverPort)) {
+      serverIP = serverIP1;
+      Serial.println("[INFO] Connected to server at 192.168.13.98");
+      break;
+    } else if (isServerReady(udp, serverIP2, serverPort)) {
+      serverIP = serverIP2;
+      Serial.println("[INFO] Connected to server at 192.168.13.99");
+      break;
+    } else {
+      Serial.println("[WARN] No servers are ready. Retrying in 1 second...");
+      delay(1000);  // 1秒待機して再試行
+    }
+  }
 
   // agent_id 読み込み
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
