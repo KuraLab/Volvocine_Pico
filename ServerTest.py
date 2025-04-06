@@ -129,9 +129,6 @@ def main():
                 send_micros = struct.unpack("<I", data[1:5])[0]
                 raw = data[5:]
 
-                # デバッグログ: パケット解析結果を確認
-                # print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, raw_length={len(raw)}")
-
                 if len(raw) % RECORD_SIZE != 0:
                     print(f"[WARN] Invalid record size from {addr}")
                     continue

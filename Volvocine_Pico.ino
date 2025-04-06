@@ -125,10 +125,17 @@ void logSensorData() {
   unsigned long dt = now - prevLoopEndTime;
   prevLoopEndTime = now;
 
+  // analog1
+  int raw1 = analogRead(analogPin1);  // 0..4095
+  // analog2
+  int raw2 = analogRead(analogPin2);
+  float flex = (float)raw2 / 4095.0f - 0.16;  // 0..1
+  //Serial.printf("[DEBUG] raw1: %d, raw2: %d, flex: %.2f\n", raw1, raw2, flex);
+
   // サーボ制御
-  phi += omega * (float)dt / 1e6f;
-  float currentSin = cosf(phi);
-  myServo.write(110 + 60 * currentSin);
+  phi += (omega + kappa * cosf(phi) * flex) * (float)dt / 1e6f;
+  float currentCos = cosf(phi);
+  myServo.write(110 + 60 * currentCos);
 
   // データ保存は指定された間隔でのみ実行
   if (loopCounter % saveInterval == 0) {
@@ -141,12 +148,8 @@ void logSensorData() {
     if (phiMod < 0) phiMod += 2.0f * (float)M_PI;
     entry.analog0 = (uint8_t)(phiMod * (255.0f / (2.0f * (float)M_PI)));
 
-    // analog1
-    int raw1 = analogRead(analogPin1);  // 0..4095
     entry.analog1 = (uint8_t)(raw1 >> 4);
 
-    // analog2
-    int raw2 = analogRead(analogPin2);
     int extended2 = raw2 << 2;  // ×4
     if (extended2 > 4095) extended2 = 4095;
     entry.analog2 = (uint8_t)(extended2 >> 4);
@@ -218,7 +221,7 @@ void setup() {
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
   requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
-  
+
   // サーボモータを真ん中に動かす
   myServo.write(90);
   Serial.println("[INFO] Servo moved to center position (90 degrees)");
