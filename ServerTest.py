@@ -108,9 +108,11 @@ def main():
                 data, addr = sock.recvfrom(BUFFER_SIZE)
                 recv_time = time.time()
 
+                print(f"[DEBUG] Received data from {addr}: {data.decode('utf-8')}")
+
                 # パラメータリクエストの処理
                 if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
-                    handle_parameter_request(sock, addr)
+                    handle_parameter_request(sock, data, addr)
                     continue
 
                 # ハンドシェイクメッセージの処理

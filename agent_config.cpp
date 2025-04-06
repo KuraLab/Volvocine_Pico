@@ -22,10 +22,15 @@ int readAgentIdFromFile() {
     return line.toInt(); // ファイルの値をintに変換して返す
 }
 
-void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, float &omega, float &kappa, float &alpha) {
+void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &alpha) {
+  // デバッグ情報を含むリクエスト文字列を作成
+  int analogValue26 = analogRead(26);  // 26ピンのアナログ入力値を取得
+  char requestBuffer[64];
+  snprintf(requestBuffer, sizeof(requestBuffer), "REQUEST_PARAMS,id:%d,analog26:%d", agent_id, analogValue26);
+
   // リクエスト送信
   udp.beginPacket(serverIP, serverPort);
-  udp.write("REQUEST_PARAMS");  // パラメータリクエスト用の識別文字列
+  udp.write(requestBuffer);  // デバッグ情報付きリクエスト
   udp.endPacket();
 
   // 応答待機

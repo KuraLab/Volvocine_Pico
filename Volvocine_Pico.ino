@@ -16,7 +16,7 @@ const char* ssid = "Buffalo-G-4510";
 const char* password = "33354682";
 
 // UDP設定
-IPAddress serverIP(192, 168, 13, 6);
+IPAddress serverIP(192, 168, 13, 98);
 unsigned int serverPort = 5000;
 WiFiUDP udp;
 
@@ -224,7 +224,7 @@ void loop() {
       logIndex = 0;
 
       // サーバーにパラメータをリクエスト
-      requestParametersFromServer(udp, serverIP, serverPort, omega, kappa, alpha);
+      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     }
   }
@@ -232,7 +232,7 @@ void loop() {
 
   // ポーズ中に一定間隔でパラメータをリクエスト
   if (paused && millis() - lastRequestTime >= 5000) {  // 1秒以上経過
-    requestParametersFromServer(udp, serverIP, serverPort, omega, kappa, alpha);
+    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }
 
