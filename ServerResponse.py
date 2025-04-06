@@ -30,13 +30,13 @@ def handle_parameter_request(sock, data, addr):
             agent_id = int(parts[1].split(':')[1])  # id:<value>
             analog26 = int(parts[2].split(':')[1])  # analog26:<value>
 
-            # デバッグ情報を表示
-            print(f"[DEBUG] Agent ID: {agent_id}, Analog26: {analog26}")
+            # analog26 を電圧値に変換
+            voltage = (analog26 / 4095) * 3.3 * 2
 
             # サーバー側のパラメータを送信
             response = f"omega:{omega:.2f},kappa:{kappa:.2f},alpha:{alpha:.2f}"
             sock.sendto(response.encode('utf-8'), addr)
-            print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Analog26: {analog26}: {response}")
+            print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Voltage: {voltage:.2f}: {response}")
 
         except (IndexError, ValueError) as e:
             print(f"[ERROR] Failed to parse parameter request: {request_str}")
