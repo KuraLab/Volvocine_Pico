@@ -16,7 +16,7 @@ const char* ssid = "Buffalo-G-4510";
 const char* password = "33354682";
 
 // UDP設定
-IPAddress serverIP(192, 168, 13, 5);
+IPAddress serverIP(192, 168, 13, 6);
 unsigned int serverPort = 5000;
 WiFiUDP udp;
 
@@ -59,9 +59,10 @@ int loopCounter = 0;
 //   (各パケット先頭に agent_id の1バイトと送信時の時刻4バイトを付加して送る)
 // ---------------------------------------------------
 void sendLogBuffer() {
-  if (!isServerReady(udp, serverIP, serverPort)) {
-    Serial.println("[ERROR] Server not ready. Aborting log transmission.");
-    return;
+  // サーバーが準備できるまで待機
+  while (!isServerReady(udp, serverIP, serverPort)) {
+    Serial.println("[ERROR] Server not ready. Retrying in 1 second...");
+    delay(500);  // 1秒待機
   }
 
   const int maxPacketBytes = 512;

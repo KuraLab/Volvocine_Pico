@@ -8,6 +8,7 @@ from Plotter import plot_chunks
 from ChunkSaver import merge_and_save_chunks
 from keyinput import check_key
 import os  # フォルダ作成用にosモジュールをインポート
+from ServerResponse import handle_handshake  # 新しいモジュールをインポート
 
 
 # ---------------------------
@@ -87,16 +88,6 @@ def is_valid_log_packet(data):
     # ダミー: agent_id==0 かつ payloadがない（最低1レコード＝5バイト未満）
     return len(data) >= 10 and data[0] != 0
 
-def handle_handshake(sock, data, addr):
-    """
-    クライアントからのハンドシェイクメッセージに応答する関数。
-    """
-    handshake_message = "HELLO"
-    if data.decode('utf-8') == handshake_message:
-        response = "READY"
-        sock.sendto(response.encode('utf-8'), addr)
-        print(f"[INFO] Handshake response sent to {addr}")
-
 # ---------------------------
 # メイン受信ループ
 # ---------------------------
@@ -113,12 +104,12 @@ def main():
                 recv_time = time.time()
 
                 # ハンドシェイクメッセージの処理
-                if data.decode('utf-8') == "HELLO":
+                if data.startswith(b"HELLO"):  # バイト列で比較
                     handle_handshake(sock, data, addr)
                     continue
 
                 # デバッグログ: 受信データの内容を確認
-                #print(f"[DEBUG] Received data from {addr}, length={len(data)}")
+                # print(f"[DEBUG] Received data from {addr}, length={len(data)}")
 
                 if not is_valid_log_packet(data):
                     print(f"[INFO] Ignored dummy or malformed packet from {addr}, length={len(data)}")
@@ -132,7 +123,7 @@ def main():
                 raw = data[5:]
 
                 # デバッグログ: パケット解析結果を確認
-                #print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, raw_length={len(raw)}")
+                # print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, raw_length={len(raw)}")
 
                 if len(raw) % RECORD_SIZE != 0:
                     print(f"[WARN] Invalid record size from {addr}")
