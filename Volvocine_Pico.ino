@@ -217,6 +217,8 @@ void setup() {
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
+  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
+  
   // サーボモータを真ん中に動かす
   myServo.write(90);
   Serial.println("[INFO] Servo moved to center position (90 degrees)");
@@ -252,7 +254,7 @@ void loop() {
   lastButtonState = currentButtonState;
 
   // ポーズ中に一定間隔でパラメータをリクエスト
-  if (paused && millis() - lastRequestTime >= 5000) {  // 1秒以上経過
+  if (paused && millis() - lastRequestTime >= 60000) {  // 1秒以上経過
     requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }
