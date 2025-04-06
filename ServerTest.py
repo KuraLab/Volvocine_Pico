@@ -8,7 +8,7 @@ from Plotter import plot_chunks
 from ChunkSaver import merge_and_save_chunks
 from keyinput import check_key
 import os  # フォルダ作成用にosモジュールをインポート
-from ServerResponse import handle_handshake  # 新しいモジュールをインポート
+from ServerResponse import handle_handshake, handle_parameter_request  # 新しいモジュールをインポート
 
 
 # ---------------------------
@@ -31,6 +31,11 @@ if not os.path.exists(SAVE_FOLDER):
 agent_buffers = {}  # agent_id -> (chunk_data, send_micros_list, recv_time_list)
 agent_lastrecv_time = {}
 current_chunk_files = []
+
+# サーバー側で管理するパラメータ
+omega = 3.14 * 3  # 周波数
+kappa = 1.5   # フィードバックゲイン
+alpha = 0.2   # 位相遅れ定数
 
 # ---------------------------
 # チャンク処理
@@ -103,13 +108,15 @@ def main():
                 data, addr = sock.recvfrom(BUFFER_SIZE)
                 recv_time = time.time()
 
+                # パラメータリクエストの処理
+                if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
+                    handle_parameter_request(sock, addr)
+                    continue
+
                 # ハンドシェイクメッセージの処理
                 if data.startswith(b"HELLO"):  # バイト列で比較
                     handle_handshake(sock, data, addr)
                     continue
-
-                # デバッグログ: 受信データの内容を確認
-                # print(f"[DEBUG] Received data from {addr}, length={len(data)}")
 
                 if not is_valid_log_packet(data):
                     print(f"[INFO] Ignored dummy or malformed packet from {addr}, length={len(data)}")

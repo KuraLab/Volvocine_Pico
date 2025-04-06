@@ -22,53 +22,28 @@ int readAgentIdFromFile() {
     return line.toInt(); // ファイルの値をintに変換して返す
 }
 
-bool requestParameters(int agent_id, WiFiUDP &udpParam, IPAddress serverIP, unsigned int paramServerPort, float &omega, float &kappa) {
-  // エージェント固有のパラメータ要求メッセージを作成
-  char reqMsg[50];
-  sprintf(reqMsg, "REQUEST_PARAM,agent=%d", agent_id);
-  
-  // サーバに要求メッセージを送信
-  udpParam.beginPacket(serverIP, paramServerPort);
-  udpParam.print(reqMsg);
-  udpParam.endPacket();
+void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, float &omega, float &kappa, float &alpha) {
+  // リクエスト送信
+  udp.beginPacket(serverIP, serverPort);
+  udp.write("REQUEST_PARAMS");  // パラメータリクエスト用の識別文字列
+  udp.endPacket();
 
-  // 応答を待つ（タイムアウト2000ms）
+  // 応答待機
   unsigned long startTime = millis();
-  while (millis() - startTime < 2000) {
-    int packetSize = udpParam.parsePacket();
+  while (millis() - startTime < 2000) {  // 最大2秒待機
+    int packetSize = udp.parsePacket();
     if (packetSize) {
-      char buff[100];
-      int len = udpParam.read(buff, sizeof(buff) - 1);
+      char buffer[128];
+      int len = udp.read(buffer, sizeof(buffer) - 1);
       if (len > 0) {
-        buff[len] = '\0';
-      }
-      String reply = String(buff);
-      // 例: "PARAM,omega=0.1,kappa=1.5"
-      if (reply.startsWith("PARAM,")) {
-        int idxOmega = reply.indexOf("omega=");
-        int idxKappa = reply.indexOf("kappa=");
-        if (idxOmega != -1 && idxKappa != -1) {
-          int commaAfterOmega = reply.indexOf(',', idxOmega);
-          String omegaStr;
-          if (commaAfterOmega == -1) {
-            omegaStr = reply.substring(idxOmega + 6);
-          } else {
-            omegaStr = reply.substring(idxOmega + 6, commaAfterOmega);
-          }
-          String kappaStr = reply.substring(idxKappa + 6);
-          omega = omegaStr.toFloat();
-          kappa = kappaStr.toFloat();
-          Serial.println("Received parameters from server:");
-          Serial.print("  omega = ");
-          Serial.println(omega, 6);
-          Serial.print("  kappa = ");
-          Serial.println(kappa, 6);
-          return true;
-        }
+        buffer[len] = '\0';  // 文字列終端を追加
+        sscanf(buffer, "omega:%f,kappa:%f,alpha:%f", &omega, &kappa, &alpha);
+        Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, alpha=%.2f\n", omega, kappa, alpha);
+        return;
       }
     }
-    delay(10);
+    delay(100);  // 少し待機
   }
-  Serial.println("Parameter request timed out.");
-  return false;
+
+  Serial.println("[WARN] Parameter request timed out.");
 }

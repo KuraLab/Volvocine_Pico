@@ -45,6 +45,8 @@ bool lastButtonState = false;
 unsigned long prevLoopEndTime = 0;
 float phi = 0;
 float omega = 3.0f * 3.14f;
+float kappa = 1.0f;  // フィードバックゲイン
+float alpha = 0.1f;  // 位相遅れ定数
 bool bufferOverflowed = false;
 
 // agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
@@ -53,6 +55,8 @@ int agent_id = 0;
 // データ保存間隔を設定 (例: 5ループごとに保存)
 const int saveInterval = 5;
 int loopCounter = 0;
+
+unsigned long lastRequestTime = 0;  // 最後にリクエストを送信した時刻
 
 // ---------------------------------------------------
 // 送信バッファをまとめてUDP送信
@@ -218,9 +222,19 @@ void loop() {
       sendLogBuffer();
       // バッファ初期化
       logIndex = 0;
+
+      // サーバーにパラメータをリクエスト
+      requestParametersFromServer(udp, serverIP, serverPort, omega, kappa, alpha);
+      lastRequestTime = millis();  // リクエスト送信時刻を記録
     }
   }
   lastButtonState = currentButtonState;
+
+  // ポーズ中に一定間隔でパラメータをリクエスト
+  if (paused && millis() - lastRequestTime >= 5000) {  // 1秒以上経過
+    requestParametersFromServer(udp, serverIP, serverPort, omega, kappa, alpha);
+    lastRequestTime = millis();  // リクエスト送信時刻を更新
+  }
 
   // 記録中
   if (!paused) {
