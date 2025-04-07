@@ -130,7 +130,6 @@ void logSensorData() {
   // analog2
   int raw2 = analogRead(analogPin2);
   float flex = (float)raw2 / 4095.0f - 0.16;  // 0..1
-  //Serial.printf("[DEBUG] raw1: %d, raw2: %d, flex: %.2f\n", raw1, raw2, flex);
 
   // サーボ制御
   phi += (omega + kappa * cosf(phi) * flex) * (float)dt / 1e6f;
