@@ -1,7 +1,7 @@
 # サーバー側で管理するパラメータ
 omega = 3.14 * 3  # 周波数
 kappa = 100       # フィードバックゲイン
-alpha = 0.2       # 位相遅れ定数
+alpha = -3.14*0.5       # 位相遅れ定数
 
 def handle_handshake(sock, data, addr):
     """

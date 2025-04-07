@@ -22,11 +22,11 @@ def plot_latest_file_in_merged_chunks(directory="merged_chunks"):
 
 if __name__ == "__main__":
     # ファイル選択モードを有効にするかどうか
-    select_file_mode = False  # Trueなら選択モード、Falseなら最新ファイルをプロット
+    select_file_mode = True  # Trueなら選択モード、Falseなら最新ファイルをプロット
 
     if select_file_mode:
         # 選択モードの場合
-        selected_file = "merged_chunks/example.csv"  # プロットしたいファイルを指定
+        selected_file = "merged_chunks/merged_20250407_231718.csv"  # プロットしたいファイルを指定
         if os.path.isfile(selected_file):
             print(f"[INFO] Selected file: {selected_file}")
             plot_relativePhase(selected_file)
