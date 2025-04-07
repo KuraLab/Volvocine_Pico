@@ -132,7 +132,7 @@ void logSensorData() {
   float flex = (float)raw2 / 4095.0f - 0.16;  // 0..1
 
   // サーボ制御
-  phi += (omega + kappa * cosf(phi) * flex) * (float)dt / 1e6f;
+  phi += (omega + kappa * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
   float currentCos = cosf(phi);
   myServo.write(110 + 60 * currentCos);
 
