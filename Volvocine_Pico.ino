@@ -63,12 +63,6 @@ unsigned long lastRequestTime = 0;  // 最後にリクエストを送信した�
 //   (各パケット先頭に agent_id の1バイトと送信時の時刻4バイトを付加して送る)
 // ---------------------------------------------------
 void sendLogBuffer() {
-  // サーバーが準備できるまで待機
-  while (!isServerReady(udp, serverIP, serverPort)) {
-    Serial.println("[ERROR] Server not ready. Retrying in 1 second...");
-    delay(500);  // 1秒待機
-  }
-
   const int maxPacketBytes = 512;
   uint8_t packet[maxPacketBytes];
 
@@ -76,6 +70,14 @@ void sendLogBuffer() {
   int i = 0;
 
   while (i < logIndex) {
+      // サーバーが準備できるまで待機
+    while (!isServerReady(udp, serverIP, serverPort)) {
+      Serial.println("[ERROR] Server not ready. Retrying in 1 second...");
+      delay(500);  // 1秒待機
+      if (WiFi.status() != WL_CONNECTED) {
+        connectToWiFi(ssid, password);
+      }
+    }
     size_t offset = 0;
 
     // 1) agent_id (1バイト)
@@ -257,6 +259,12 @@ void loop() {
 
   // ポーズ中に一定間隔でパラメータをリクエスト
   if (paused && millis() - lastRequestTime >= 60000) {  // 1秒以上経過
+    // WiFi接続確認
+    while (WiFi.status() != WL_CONNECTED) {
+      connectToWiFi(ssid, password);
+    }
+    Serial.println("[INFO] WiFi connected.");
+    
     requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }
