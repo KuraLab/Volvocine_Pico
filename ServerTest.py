@@ -5,10 +5,10 @@ from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 from Plotter import plot_chunks
-from ChunkSaver import merge_and_save_chunks
 from keyinput import check_key
 import os  # フォルダ作成用にosモジュールをインポート
 from ServerResponse import handle_handshake, handle_parameter_request  # 新しいモジュールをインポート
+from ChunkProcessor import build_dataframe_for_chunk, merge_and_save_chunks  # 新しいモジュールをインポート
 
 
 # ---------------------------
@@ -40,55 +40,6 @@ alpha = 0.2   # 位相遅れ定数
 # ---------------------------
 # チャンク処理
 # ---------------------------
-def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_recv_times):
-    global current_chunk_files
-
-    if not chunk_data:
-        return None
-
-    # 平均オフセットを送信時刻の下位16bit再構成で算出
-    wrapped_send_secs = [(((s >> 10) % 65536) << 10) / 1e6 for s in chunk_send_micros]
-    offsets = [recv - send for send, recv in zip(wrapped_send_secs, chunk_recv_times)]
-    offset = sum(offsets) / len(offsets)
-
-    df = pd.DataFrame(chunk_data, columns=["micros16", "a0", "a1", "a2"])
-
-    micros_list = df["micros16"].tolist()
-    extended = [0] * len(micros_list)
-    wrap_offset = 0
-    prev = micros_list[0]
-    extended[0] = prev
-    for i in range(1, len(micros_list)):
-        curr = micros_list[i]
-        if curr < prev:
-            wrap_offset += 65536
-        extended[i] = curr + wrap_offset
-        prev = curr
-
-    df["micros32"] = extended
-    df["micros32_raw"] = [val << 10 for val in extended]
-    df["time_local_sec"] = [val / 1e6 for val in df["micros32_raw"]]
-    df["time_pc_sec_abs"] = df["time_local_sec"] + offset
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    chunk_id = timestamp
-    df["agent_id"] = agent_id
-    df["chunk_id"] = chunk_id
-
-    # 保存先を保存用フォルダに変更
-    filename = os.path.join(SAVE_FOLDER, f"chunk_agent_{agent_id}_{timestamp}.csv")
-    save_columns = [
-        "time_pc_sec_abs", "micros32", "micros32_raw", "time_local_sec",
-        "a0", "a1", "a2", "agent_id", "chunk_id"
-    ]
-    df.to_csv(filename, index=False, columns=save_columns)
-    print(f"[INFO] Agent={agent_id}, chunk size={len(df)} -> Saved to {filename}")
-
-    current_chunk_files.append(filename)
-    print(f"[DEBUG] Added to current_chunk_files: {filename}")
-
-    return df[["agent_id", "chunk_id", "time_pc_sec_abs", "a0", "a1", "a2"]]
-
 def is_valid_log_packet(data):
     # ダミー: agent_id==0 かつ payloadがない（最低1レコード＝5バイト未満）
     return len(data) >= 10 and data[0] != 0
@@ -138,7 +89,9 @@ def main():
                         print(f"[INFO] Agent {agent_id} chunk timeout.")
                         chunk_data, send_list, recv_list = agent_buffers[agent_id]
                         if chunk_data:
-                            build_dataframe_for_chunk(agent_id, chunk_data, send_list, recv_list)
+                            _, saved_file = build_dataframe_for_chunk(agent_id, chunk_data, send_list, recv_list)
+                            if saved_file:
+                                current_chunk_files.append(saved_file)  # 保存されたファイルを追跡
                         agent_buffers[agent_id] = ([], [], [])
 
                 if agent_id not in agent_buffers:
@@ -169,7 +122,9 @@ def main():
                 for ag_id in list(agent_buffers.keys()):
                     data, send_list, recv_list = agent_buffers[ag_id]
                     if data:
-                        build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
+                        _, saved_file = build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
+                        if saved_file:
+                            current_chunk_files.append(saved_file)  # 保存されたファイルを追跡
                     agent_buffers[ag_id] = ([], [], [])
                 merged_path = merge_and_save_chunks(current_chunk_files)
                 print("[INFO] Merged and saved chunks.")
