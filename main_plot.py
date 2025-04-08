@@ -1,7 +1,7 @@
 import os
 from Plotter import plot_chunks, plot_relativePhase
 
-def plot_latest_file_in_merged_chunks(directory="merged_chunks"):
+def plot_nth_latest_file_in_merged_chunks(n, directory="merged_chunks"):
     # ディレクトリが存在するか確認
     if not os.path.isdir(directory):
         print(f"[ERROR] Directory not found: {directory}")
@@ -13,12 +13,19 @@ def plot_latest_file_in_merged_chunks(directory="merged_chunks"):
         print(f"[INFO] No CSV files found in directory: {directory}")
         return
 
-    # 最新のファイルを取得
-    latest_file = max(csv_files, key=os.path.getmtime)
-    print(f"[INFO] Latest file found: {latest_file}")
+    # ファイルを更新日時でソート
+    csv_files.sort(key=os.path.getmtime, reverse=True)
+
+    # n番目のファイルを取得
+    if n > len(csv_files) or n < 1:
+        print(f"[ERROR] Invalid value for n: {n}. There are only {len(csv_files)} files.")
+        return
+
+    nth_file = csv_files[n - 1]
+    print(f"[INFO] {n}th latest file found: {nth_file}")
 
     # プロット関数を呼び出し
-    plot_relativePhase(latest_file)
+    plot_relativePhase(nth_file)
 
 if __name__ == "__main__":
     # ファイル選択モードを有効にするかどうか
@@ -33,5 +40,6 @@ if __name__ == "__main__":
         else:
             print(f"[ERROR] Selected file not found: {selected_file}")
     else:
-        # 最新ファイルをプロット
-        plot_latest_file_in_merged_chunks()
+        # 最新からn番目のファイルをプロット
+        n = 2  # ここでnを指定
+        plot_nth_latest_file_in_merged_chunks(n)
