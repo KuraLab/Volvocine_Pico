@@ -12,14 +12,14 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     if not chunk_data:
         return None, None  # データがない場合は None を返す
 
-    # 平均オフセットを送信時刻の下位16bit再構成で算出
-    wrapped_send_secs = [(((s >> 10) % 65536) << 10) / 1e6 for s in chunk_send_micros]
+    # 平均オフセットを送信時刻の下位24ビット再構成で算出
+    wrapped_send_secs = [(((s >> 8) % 16777216) << 8) / 1e6 for s in chunk_send_micros]
     offsets = [recv - send for send, recv in zip(wrapped_send_secs, chunk_recv_times)]
     offset = sum(offsets) / len(offsets)
 
-    df = pd.DataFrame(chunk_data, columns=["micros16", "a0", "a1", "a2"])
-
-    micros_list = df["micros16"].tolist()
+    df = pd.DataFrame(chunk_data, columns=["micros24", "a0", "a1", "a2"])
+    
+    micros_list = df["micros24"].tolist()
     extended = [0] * len(micros_list)
     wrap_offset = 0
     prev = micros_list[0]
@@ -27,12 +27,12 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     for i in range(1, len(micros_list)):
         curr = micros_list[i]
         if curr < prev:
-            wrap_offset += 65536
+            wrap_offset += 16777216  # 24ビットのオーバーフローを補正
         extended[i] = curr + wrap_offset
         prev = curr
 
     df["micros32"] = extended
-    df["micros32_raw"] = [val << 10 for val in extended]
+    df["micros32_raw"] = [val << 8 for val in extended]  # 24ビットを32ビットに拡張
     df["time_local_sec"] = [val / 1e6 for val in df["micros32_raw"]]
     df["time_pc_sec_abs"] = df["time_local_sec"] + offset
 

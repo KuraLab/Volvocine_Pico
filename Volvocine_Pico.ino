@@ -27,16 +27,16 @@ const int analogPin2 = 28;
 
 Servo myServo;
 
-// 1レコード5バイトの圧縮構造体 (RAM保持用)
+// 1レコード6バイトの圧縮構造体 (RAM保持用)
 struct __attribute__((packed)) CompressedLogData {
-  uint16_t micros16;  // 2バイト: (micros >> 10)
-  uint8_t  analog0;   // 1バイト
-  uint8_t  analog1;   // 1バイト
-  uint8_t  analog2;   // 1バイト
+  uint32_t micros24 : 24;  // 3バイト: (micros >> 8)
+  uint8_t  analog0;        // 1バイト
+  uint8_t  analog1;        // 1バイト
+  uint8_t  analog2;        // 1バイト
 };
 
 #define CONTROL_PERIOD_US 2000 // 制御周期 (μs)
-#define LOG_BUFFER_SIZE   36000
+#define LOG_BUFFER_SIZE   30000
 CompressedLogData logBuffer[LOG_BUFFER_SIZE];
 int logIndex = 0;
 bool paused = false;
@@ -57,7 +57,6 @@ const int saveInterval = 5;
 int loopCounter = 0;
 
 unsigned long lastRequestTime = 0;  // 最後にリクエストを送信した時刻
-
 // ---------------------------------------------------
 // 送信バッファをまとめてUDP送信
 //   (各パケット先頭に agent_id の1バイトと送信時の時刻4バイトを付加して送る)
@@ -65,58 +64,90 @@ unsigned long lastRequestTime = 0;  // 最後にリクエストを送信した�
 void sendLogBuffer() {
   const int maxPacketBytes = 512;
   uint8_t packet[maxPacketBytes];
+  const int maxRetries = 100;
 
   int sentCount = 0;
   int i = 0;
 
   while (i < logIndex) {
-      // サーバーが準備できるまで待機
-    while (!isServerReady(udp, serverIP, serverPort)) {
-      Serial.println("[ERROR] Server not ready. Retrying in 1 second...");
-      delay(500);  // 1秒待機
-      if (WiFi.status() != WL_CONNECTED) {
-        connectToWiFi(ssid, password);
-      }
-    }
-    size_t offset = 0;
+    int retry = 0;
+    bool ackReceived = false;
 
-    // 1) agent_id (1バイト)
-    packet[offset++] = (uint8_t)agent_id;
+    while (retry < maxRetries && !ackReceived) {
+      size_t offset = 0;
+      int startIndex = i;
 
-    // 2) 送信時刻 (4バイト, micros)
-    uint32_t sendMicros = micros();
-    Serial.printf("[DEBUG] Sending packet at micros=%lu, micros>>10=%lu\n\r", sendMicros, sendMicros >> 10);  // ←追加（送信時刻デバッグ）
-    memcpy(&packet[offset], &sendMicros, sizeof(sendMicros));
-    offset += sizeof(sendMicros);  // 4バイト
-
-    // 3) ログデータを詰める
-    int perPacketCount = 0;
-    while (i < logIndex) {
-      if (offset + sizeof(CompressedLogData) > maxPacketBytes) {
-        break;
+      // サーバー準備チェック
+      while (!isServerReady(udp, serverIP, serverPort)) {
+        Serial.println("[ERROR] Server not ready. Retrying in 1 second...");
+        delay(500);
+        if (WiFi.status() != WL_CONNECTED) {
+          connectToWiFi(ssid, password);
+        }
       }
 
-      memcpy(&packet[offset], &logBuffer[i], sizeof(CompressedLogData));
-      offset += sizeof(CompressedLogData);
-      i++;
-      perPacketCount++;
+      // 1) agent_id (1バイト)
+      packet[offset++] = (uint8_t)agent_id;
+
+      // 2) 送信時刻 (4バイト)
+      uint32_t sendMicros = micros();
+      memcpy(&packet[offset], &sendMicros, sizeof(sendMicros));
+      offset += sizeof(sendMicros);  // 4バイト
+
+      // 3) データパック詰め
+      int perPacketCount = 0;
+      uint32_t lastMicros24 = 0;
+
+      while (i < logIndex) {
+        if (offset + sizeof(CompressedLogData) > maxPacketBytes) {
+          break;
+        }
+
+        // タイムスタンプを一時変数経由でコピー
+        uint32_t micros24Value = logBuffer[i].micros24;
+        memcpy(&packet[offset], &micros24Value, 3);
+        offset += 3;
+
+        memcpy(&packet[offset], &logBuffer[i].analog0, sizeof(CompressedLogData) - 3);
+        offset += sizeof(CompressedLogData) - 3;
+
+        lastMicros24 = micros24Value;  // 最後の値を保存
+        i++;
+        perPacketCount++;
+      }
+
+      // 4) UDP送信
+      udp.beginPacket(serverIP, serverPort);
+      udp.write(packet, offset);
+      udp.endPacket();
+
+      Serial.printf("[INFO] Packet sent (%d records). Waiting for ACK...\n", perPacketCount);
+
+      // 5) ACK待機
+      ackReceived = waitForAck(udp, agent_id, lastMicros24, 1000);
+      if (!ackReceived) {
+        retry++;
+        Serial.printf("[WARN] ACK not received (retry %d/%d). Resending...\n", retry, maxRetries);
+        i = startIndex;  // 再送時は戻る
+        delay(100);
+      } else {
+        sentCount += perPacketCount;
+      }
     }
 
-    // 4) UDP送信
-    udp.beginPacket(serverIP, serverPort);
-    udp.write(packet, offset);
-    udp.endPacket();
-
-    sentCount += perPacketCount;
+    if (!ackReceived) {
+      Serial.println("[ERROR] Failed to receive ACK after multiple retries. Aborting this packet.");
+    }
   }
 
-  Serial.printf("[INFO] Sent %d records from RAM\n", sentCount);
+  Serial.printf("[INFO] Sent %d records from RAM (with ACK)\n", sentCount);
 
   if (bufferOverflowed) {
     Serial.println("[WARN] Some data may have been lost due to buffer overflow.");
     bufferOverflowed = false;
   }
 }
+
 
 
 // ---------------------------------------------------
@@ -142,7 +173,7 @@ void logSensorData() {
   if (loopCounter % saveInterval == 0) {
     // ログ用構造体
     CompressedLogData entry;
-    entry.micros16 = now >> 10;
+    entry.micros24 = now >> 8;  // 24ビットに圧縮
 
     // analog0: phiを [0..2π) → 0..255 に圧縮
     float phiMod = fmodf(phi, 2.0f * (float)M_PI);

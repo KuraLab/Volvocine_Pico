@@ -29,7 +29,7 @@ def plot_nth_latest_file_in_merged_chunks(n, directory="merged_chunks"):
 
 if __name__ == "__main__":
     # ファイル選択モードを有効にするかどうか
-    select_file_mode = True  # Trueなら選択モード、Falseなら最新ファイルをプロット
+    select_file_mode = False  # Trueなら選択モード、Falseなら最新ファイルをプロット
 
     if select_file_mode:
         # 選択モードの場合
@@ -41,5 +41,5 @@ if __name__ == "__main__":
             print(f"[ERROR] Selected file not found: {selected_file}")
     else:
         # 最新からn番目のファイルをプロット
-        n = 2  # ここでnを指定
+        n = 1  # ここでnを指定
         plot_nth_latest_file_in_merged_chunks(n)

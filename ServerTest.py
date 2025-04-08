@@ -19,8 +19,8 @@ BUFFER_SIZE = 1024
 SOCKET_TIMEOUT = 1.0
 CHUNK_TIMEOUT = 5.0
 
-STRUCT_FORMAT = "<HBBB"  # micros16, a0, a1, a2
-RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 5 bytes
+STRUCT_FORMAT = "<6B"  # micros24 (3バイト), a0, a1, a2
+RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 6 bytes
 
 SAVE_FOLDER = "saved_chunks"  # 保存用フォルダ名
 
@@ -99,18 +99,31 @@ def main():
 
                 chunk_data, send_list, recv_list = agent_buffers[agent_id]
 
-                offset_sec = recv_time - ((((send_micros >> 10) % 65536) << 10) / 1e6)
+                offset_sec = recv_time - ((((send_micros >> 8) % 16777216) << 8) / 1e6)
                 print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, "
                       f"recv_time={recv_time:.6f}, offset_sec={offset_sec:.6f}")
 
                 for i in range(len(raw) // RECORD_SIZE):
                     record = raw[i*RECORD_SIZE:(i+1)*RECORD_SIZE]
-                    micros16, a0, a1, a2 = struct.unpack(STRUCT_FORMAT, record)
-                    chunk_data.append((micros16, a0, a1, a2))
+                    b0, b1, b2, a0, a1, a2 = struct.unpack(STRUCT_FORMAT, record)
+                    micros24 = b0 | (b1 << 8) | (b2 << 16)
+                    # 3バイトのタイムスタンプを32ビットに拡張
+                    micros32 = micros24 & 0xFFFFFF  # 下位24ビットを取得
+                    chunk_data.append((micros32, a0, a1, a2))
 
                 send_list.append(send_micros)
                 recv_list.append(recv_time)
                 agent_buffers[agent_id] = (chunk_data, send_list, recv_list)
+                # 最後のレコードの micros24 を取得してACK送信
+                if len(raw) >= RECORD_SIZE:
+                    last_record = raw[-RECORD_SIZE:]
+                    b0, b1, b2, *_ = struct.unpack(STRUCT_FORMAT, last_record)
+                    last_micros24 = b0 | (b1 << 8) | (b2 << 16)
+
+                    ack = bytearray()
+                    ack.append(agent_id)
+                    ack += last_micros24.to_bytes(3, 'little')
+                    sock.sendto(ack, addr)
                 agent_lastrecv_time[agent_id] = recv_time
 
             except socket.timeout:
