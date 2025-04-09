@@ -13,8 +13,8 @@ def plot_nth_latest_file_in_merged_chunks(n, directory="merged_chunks"):
         print(f"[INFO] No CSV files found in directory: {directory}")
         return
 
-    # ファイルを更新日時でソート
-    csv_files.sort(key=os.path.getmtime, reverse=True)
+    # ファイル名でソート
+    csv_files.sort(key=lambda f: os.path.basename(f))
 
     # n番目のファイルを取得
     if n > len(csv_files) or n < 1:
