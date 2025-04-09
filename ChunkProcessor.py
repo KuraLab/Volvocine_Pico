@@ -54,6 +54,11 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     return df[["agent_id", "chunk_id", "time_pc_sec_abs", "a0", "a1", "a2"]], filename
 
 def merge_and_save_chunks(chunk_files):
+    # チャンクファイルが存在しない場合は処理をスキップ
+    if not chunk_files:
+        print("[INFO] No chunk files provided. Skipping merge process.")
+        return None
+
     # マージデータ専用フォルダの作成
     merged_folder = os.path.join(".", "merged_chunks")
     if not os.path.exists(merged_folder):
