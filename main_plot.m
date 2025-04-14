@@ -5,10 +5,10 @@ function main_plot()
     directory = 'merged_chunks'; % データが保存されているディレクトリ
 
     % 最初のn秒をカットする設定
-    n_seconds_to_cut = 20; % プロット時に最初のn秒をカット
+    n_seconds_to_cut = 15; % プロット時に最初のn秒をカット
 
     % 最新からn番目のファイルをプロット
-    n = 7; % ここでnを指定
+    n = 2; % ここでnを指定
     plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut);
 end
 
