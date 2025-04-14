@@ -1,5 +1,5 @@
 clear;
-N = 6;
+N = 5;
 dt = 0.01;
 time = 20;
 steps = time/dt;
@@ -17,7 +17,7 @@ c1 = 1;      % 回転方向
 c2 = 0.1;    % 平進方向
 
 efficiency = ones(1, N); % 各モジュールの発揮率 (基本は1)
-efficiency(2) = 0;       % 例: モジュール2が故障している場合
+efficiency(3) = 0;       % 例: モジュール2が故障している場合
 
 q(1, 1:N) = 2*pi*(rand(1, N)-0.5);
 
@@ -46,9 +46,21 @@ end
 % 発揮率が0でないモジュールのインデックスを取得
 activeModules = find(efficiency > 0);
 
+% 位相差の計算
+phaseDiff = mod(q(:, activeModules) - Theta + pi + 0.05, 2*pi) - pi - shift;
+
+% 値がpi以上ジャンプする箇所にNaNを挿入
+for j = 1:length(activeModules)
+    for i = 2:steps
+        if abs(phaseDiff(i, j) - phaseDiff(i-1, j)) >= pi
+            phaseDiff(i, j) = NaN;
+        end
+    end
+end
+
 % 位相差のプロット
 figure('Position', position);
-plot(dt:dt:steps*dt, mod(q(:, activeModules)-Theta+pi+0.05, 2*pi)-pi-shift)
+plot(dt:dt:steps*dt, phaseDiff)
 grid on
 set(gca, 'TickLabelInterpreter', 'latex')
 xlim([0, steps*dt])
