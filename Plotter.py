@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from itertools import cycle
 import os
 import numpy as np
+import matplotlib.ticker as ticker  # 目盛りのフォーマット用
 
 def plot_chunks(file_list):
     # None チェックを追加
@@ -109,74 +110,67 @@ def plot_relativePhase(file_list):
     df_all = pd.concat(dfs, ignore_index=True)
 
     # 新しい時系列を定義 (100Hz)
-    # 初期値を適切に設定
-    min_time = df_all["time_pc_sec_abs"].min()  # 全体の最小値
-    max_time = df_all["time_pc_sec_abs"].max()  # 全体の最大値
+    min_time = df_all["time_pc_sec_abs"].min()
+    max_time = df_all["time_pc_sec_abs"].max()
 
     for agent_id, sub in df_all.groupby("agent_id"):
         sub = sub.sort_values("time_pc_sec_abs")
-        # 各エージェントのデータ範囲を考慮して更新
-        min_time = max(min_time, sub["time_pc_sec_abs"].min())  # 各エージェントの最小値
-        max_time = min(max_time, sub["time_pc_sec_abs"].max())  # 各エージェントの最大値
+        min_time = max(min_time, sub["time_pc_sec_abs"].min())
+        max_time = min(max_time, sub["time_pc_sec_abs"].max())
 
-    # チェックを追加
     if min_time >= max_time:
         print(f"[INFO] No overlapping time range for agents. min_time={min_time}, max_time={max_time}")
         return
 
-    new_time_series = np.arange(min_time, max_time, 0.01)
+    new_time_series = np.arange(min_time, max_time, 0.01) - min_time  # 最小値を基準にシフト
 
     # 線形補間で位相データを再定義
     interpolated_data = {}
     for agent_id, sub in df_all.groupby("agent_id"):
         sub = sub.sort_values("time_pc_sec_abs")
-        
-        # 位相データのジャンプを補正
         sub["a0"] = correct_phase_discontinuity(sub["a0"].values)
-        
-        # 線形補間
         interpolated_data[agent_id] = {
             "time": new_time_series,
-            "a0": np.interp(new_time_series, sub["time_pc_sec_abs"], sub["a0"])
+            "a0": np.interp(new_time_series + min_time, sub["time_pc_sec_abs"], sub["a0"])  # シフト前の時間で補間
         }
 
     # 基準エージェントの選択
-    base_agent_id = min(interpolated_data.keys())  # 最初のエージェントを基準とする
+    base_agent_id = min(interpolated_data.keys())
     base_agent_a0 = interpolated_data[base_agent_id]["a0"]
 
-    fig, axs = plt.subplots(2, 1, figsize=(9, 6), sharex=True)
+    fig, ax = plt.subplots(figsize=(9, 6))
     colors = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
-
-    # 元データをプロット (補正前のデータ)
-    for agent_id, sub in df_all.groupby("agent_id"):
-        sub = sub.sort_values("time_pc_sec_abs")
-        axs[0].plot(sub["time_pc_sec_abs"], sub["a0"], label=f"Agent {agent_id} (raw)", color=next(colors))
 
     # 線形補間と補正後のデータを使用して相対位相差を計算
     for agent_id, data in interpolated_data.items():
         if agent_id == base_agent_id:
-            continue  # 基準エージェントはスキップ
+            continue
 
-        # 相対位相差を計算 (単純な引き算)
-        phase_diff = (data["a0"] - base_agent_a0 + 128) % 256 - 128  # 256でモッドを取る
-
-        # 位相差のジャンプを検出してNaNを挿入
+        phase_diff = (data["a0"] - base_agent_a0 + 128) % 256 - 128
         phase_diff_with_nan = phase_diff.copy()
         for i in range(1, len(phase_diff)):
-            if abs(phase_diff[i] - phase_diff[i - 1]) > 128:  # ジャンプを検出
-                phase_diff_with_nan[i] = np.nan  # NaNを挿入
+            if abs(phase_diff[i] - phase_diff[i - 1]) > 128:
+                phase_diff_with_nan[i] = np.nan
+
+        # 縦軸のデータを 2π/256 でスケール
+        phase_diff_with_nan = phase_diff_with_nan * (2 * np.pi / 256)
 
         print(f"[DEBUG] Agent {agent_id}: Phase diff with NaN (first 10 values) = {phase_diff_with_nan[:10]}")
-        axs[1].plot(data["time"], phase_diff_with_nan, label=f"Agent {agent_id} - Agent {base_agent_id}", color=next(colors))
+        ax.plot(data["time"], phase_diff_with_nan, label=f"Agent {agent_id} - Agent {base_agent_id}", color=next(colors))
+
+    # 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
+    ax.set_ylim(-np.pi, np.pi)
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(base=np.pi / 2))  # π/2 間隔
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / np.pi)}π" if x % np.pi == 0 else f"{x / np.pi:.1f}π"))
 
     # プロットの設定
-    axs[0].set_ylabel("Phase (a0) (Raw)")
-    axs[1].set_ylabel("Phase Diff")
-    axs[1].set_xlabel("Time (s)")
-    axs[0].legend(title="Agents (Raw Data)")
-    axs[1].legend(title="Relative Phase")
-    axs[0].grid(True)
-    axs[1].grid(True)
+    ax.set_ylabel("Phase Diff (radians)")
+    ax.set_xlabel("Time (s)")
+    ax.legend(title="Relative Phase")
+    ax.grid(True)
+
+    # 横軸の範囲をデータの両端に合わせる
+    ax.set_xlim(0, new_time_series[-1])
 
     plt.tight_layout()
     plt.show()
