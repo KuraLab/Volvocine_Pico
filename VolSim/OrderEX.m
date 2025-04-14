@@ -4,7 +4,7 @@ clear;
 %figHandle = openfig('1118_6_3.fig', 'invisible');
 %figHandle = openfig('matlab_figure_20241001_1015_02.fig', 'invisible');
 %figHandle = openfig('matlab_figure_20241001_1017_02.fig', 'invisible');
-figHandle = openfig('62.fig', 'invisible');
+figHandle = openfig('./exports/6-1sim.fig', 'invisible');
 
 
 
