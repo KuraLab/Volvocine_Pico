@@ -1,4 +1,4 @@
-function plot_relative_phase_matlab(file_list, base_agent_id)
+function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds)
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -60,7 +60,14 @@ function plot_relative_phase_matlab(file_list, base_agent_id)
         return;
     end
 
-    new_time_series = (min_time:0.01:max_time) - min_time; % 最小値を基準にシフト
+    % 最初のn秒をカット
+    start_time = min_time + n_seconds;
+    if start_time >= max_time
+        disp('[INFO] Specified n_seconds exceeds the available time range.');
+        return;
+    end
+
+    new_time_series = (start_time:0.01:max_time) - start_time; % n秒後を基準にシフト
 
     % 線形補間で位相データを再定義
     interpolated_data = struct();
@@ -70,7 +77,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id)
         sub = sortrows(sub, 'time_pc_sec_abs');
         sub.a0 = correct_phase_discontinuity(sub.a0);
         interpolated_data(agent_id).time = new_time_series;
-        interpolated_data(agent_id).a0 = interp1(sub.time_pc_sec_abs - min_time, sub.a0, new_time_series, 'linear', 'extrap');
+        interpolated_data(agent_id).a0 = interp1(sub.time_pc_sec_abs - start_time, sub.a0, new_time_series, 'linear', 'extrap');
     end
 
     % 基準エージェントの選択
@@ -116,12 +123,12 @@ function plot_relative_phase_matlab(file_list, base_agent_id)
     % 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
     ylim([-pi, pi]);
     yticks(-pi:pi/2:pi);
-    yticklabels({'-π', '-π/2', '0', 'π/2', 'π'});
+    yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'}); % LaTeX形式に変更
 
     % プロットの設定
-    xlabel('Time (s)');
-    ylabel('Relative Phase (rad)');
-    %legend('show', 'Location', 'best');
+    xlabel('Time (s)', 'Interpreter', 'latex'); % LaTeX形式
+    ylabel('Relative Phase (rad)', 'Interpreter', 'latex'); % LaTeX形式
+    %legend('show', 'Location', 'best', 'Interpreter', 'latex'); % LaTeX形式 (必要に応じて有効化)
     grid on;
     tuneFigure;
     hold off;
