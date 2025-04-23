@@ -69,14 +69,14 @@ def main():
                 if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
                     agent_id = data[15] if len(data) > 15 else 99  # 例: 99をデフォルト
                     agent_addrs[agent_id] = addr  # ★ここで登録
-                    handle_parameter_request(sock, addr, agent_id)  # ←引数を3つに修正
+                    handle_parameter_request(sock, data, addr)  # ←引数を3つに修正
                     continue
 
                 # ハンドシェイクメッセージの処理
                 if data.startswith(b"HELLO"):  # バイト列で比較
                     agent_id = data[5] if len(data) > 5 else 99  # 例: 99をデフォルト
                     agent_addrs[agent_id] = addr  # ★ここで登録
-                    handle_handshake(sock, addr)
+                    handle_handshake(sock, data, addr)
                     continue
 
                 if not is_valid_log_packet(data):
