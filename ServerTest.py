@@ -69,14 +69,14 @@ def main():
                 if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
                     agent_id = data[15] if len(data) > 15 else 99  # 例: 99をデフォルト
                     agent_addrs[agent_id] = addr  # ★ここで登録
-                    handle_parameter_request(sock, data, addr)  # ←引数を3つに修正
+                    handle_parameter_request(sock, addr, agent_id)  # ←引数を3つに修正
                     continue
 
                 # ハンドシェイクメッセージの処理
                 if data.startswith(b"HELLO"):  # バイト列で比較
                     agent_id = data[5] if len(data) > 5 else 99  # 例: 99をデフォルト
                     agent_addrs[agent_id] = addr  # ★ここで登録
-                    handle_handshake(sock, data, addr)
+                    handle_handshake(sock, addr)
                     continue
 
                 if not is_valid_log_packet(data):
@@ -169,6 +169,13 @@ def main():
                 print("[INFO] Sending STOP command to IMU agent_id=99.")
                 if 99 in agent_addrs:
                     send_control_command(sock, agent_addrs[99], "STOP")
+                else:
+                    print("[WARN] IMU agent_id=99 not found.")
+
+            elif key == 'c':
+                print("[INFO] Sending CALIBRATE command to IMU agent_id=99.")
+                if 99 in agent_addrs:
+                    send_control_command(sock, agent_addrs[99], "CALIBRATE")
                 else:
                     print("[WARN] IMU agent_id=99 not found.")
 
