@@ -32,6 +32,9 @@ agent_buffers = {}  # agent_id -> (chunk_data, send_micros_list, recv_time_list)
 agent_lastrecv_time = {}
 current_chunk_files = []
 
+# グローバル変数として追加
+agent_addrs = {}  # agent_id -> addr
+
 # サーバー側で管理するパラメータ
 omega = 3.14 * 3  # 周波数
 kappa = 1.5   # フィードバックゲイン
@@ -43,6 +46,9 @@ alpha = 0.2   # 位相遅れ定数
 def is_valid_log_packet(data):
     # ダミー: agent_id==0 かつ payloadがない（最低1レコード＝5バイト未満）
     return len(data) >= 10 and data[0] != 0
+
+def send_control_command(sock, addr, cmd):
+    sock.sendto(cmd.encode(), addr)
 
 # ---------------------------
 # メイン受信ループ
@@ -61,11 +67,15 @@ def main():
 
                 # パラメータリクエストの処理
                 if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
-                    handle_parameter_request(sock, data, addr)
+                    agent_id = data[15] if len(data) > 15 else 99  # 例: 99をデフォルト
+                    agent_addrs[agent_id] = addr  # ★ここで登録
+                    handle_parameter_request(sock, data, addr)  # ←引数を3つに修正
                     continue
 
                 # ハンドシェイクメッセージの処理
                 if data.startswith(b"HELLO"):  # バイト列で比較
+                    agent_id = data[5] if len(data) > 5 else 99  # 例: 99をデフォルト
+                    agent_addrs[agent_id] = addr  # ★ここで登録
                     handle_handshake(sock, data, addr)
                     continue
 
@@ -114,6 +124,10 @@ def main():
                 send_list.append(send_micros)
                 recv_list.append(recv_time)
                 agent_buffers[agent_id] = (chunk_data, send_list, recv_list)
+                # データ受信時にlast_addrを更新
+                last_addr = addr
+                agent_addrs[agent_id] = addr  # データ受信時に追加
+
                 # 最後のレコードの micros24 を取得してACK送信
                 if len(raw) >= RECORD_SIZE:
                     last_record = raw[-RECORD_SIZE:]
@@ -144,6 +158,19 @@ def main():
                 plot_chunks(merged_path)
                 current_chunk_files.clear()
                 print("[DEBUG] current_chunk_files cleared.")
+            elif key == 's':
+                print("[INFO] Sending START command to IMU agent_id=99.")
+                if 99 in agent_addrs:
+                    send_control_command(sock, agent_addrs[99], "START")
+                else:
+                    print("[WARN] IMU agent_id=99 not found.")
+
+            elif key == 't':
+                print("[INFO] Sending STOP command to IMU agent_id=99.")
+                if 99 in agent_addrs:
+                    send_control_command(sock, agent_addrs[99], "STOP")
+                else:
+                    print("[WARN] IMU agent_id=99 not found.")
 
     except KeyboardInterrupt:
         print("[INFO] Interrupted by user.")
