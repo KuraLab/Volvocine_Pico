@@ -3,9 +3,13 @@
 #include <WiFiUdp.h>
 #include <LittleFS.h>
 #include <math.h> 
+#include <vector>
+#include <algorithm>
+#include <tuple> // std::tupleを使用するために必要
 #include "agent_config.h"
 #include "ServerUtils.h"
 #include "WiFiManager.h"
+#include "calculateTrimmedMean.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -36,7 +40,7 @@ struct __attribute__((packed)) CompressedLogData {
 };
 
 #define CONTROL_PERIOD_US 2000 // 制御周期 (μs)
-#define LOG_BUFFER_SIZE   30000
+#define LOG_BUFFER_SIZE   28000
 CompressedLogData logBuffer[LOG_BUFFER_SIZE];
 int logIndex = 0;
 bool paused = false;
@@ -57,6 +61,27 @@ const int saveInterval = 5;
 int loopCounter = 0;
 
 unsigned long lastRequestTime = 0;  // 最後にリクエストを送信した時刻
+
+// 窓サイズを定義
+const int windowSize = 1000; // 必要なサイズに変更
+std::vector<int> raw2Window(windowSize, 0); // 固定サイズのリングバッファ
+int raw2Index = 0; // 現在のインデックスを管理
+
+// 正規化する関数
+float normalize(float value, float lower, float upper) {
+  // 正規化
+  float normalized = (value - lower) / (upper - lower) - 0.5f;
+
+  // ±0.5にクリップ
+  if (normalized > 0.5f) {
+    normalized = 0.5f;
+  } else if (normalized < -0.5f) {
+    normalized = -0.5f;
+  }
+
+  return normalized;
+}
+
 // ---------------------------------------------------
 // 送信バッファをまとめてUDP送信
 //   (各パケット先頭に agent_id の1バイトと送信時の時刻4バイトを付加して送る)
@@ -148,8 +173,6 @@ void sendLogBuffer() {
   }
 }
 
-
-
 // ---------------------------------------------------
 // センサ読み取り＋RAMバッファ保存（dtはサーボ用のみ）
 // ---------------------------------------------------
@@ -162,7 +185,16 @@ void logSensorData() {
   int raw1 = analogRead(analogPin1);  // 0..4095
   // analog2
   int raw2 = analogRead(analogPin2);
-  float flex = (float)raw2 / 4095.0f - 0.16;  // 0..1
+
+  // リングバッファにデータを追加
+  raw2Window[raw2Index] = raw2;
+  raw2Index = (raw2Index + 1) % windowSize; // インデックスを循環させる
+
+  // 下位10%と上位10%の値、およびその平均を計算
+  auto [lowerValue, upperValue, trimmedMean] = calculateTrimmedMean(raw2Window, windowSize);
+
+  // 正規化
+  float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
 
   // サーボ制御
   phi += (omega + kappa * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
