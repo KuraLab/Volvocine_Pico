@@ -62,7 +62,6 @@ def main():
     try:
         while True:
             try:
-                print(agent_addrs)
                 data, addr = sock.recvfrom(BUFFER_SIZE)
                 recv_time = time.time()
 
