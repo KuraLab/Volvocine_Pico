@@ -62,20 +62,18 @@ def main():
     try:
         while True:
             try:
+                print(agent_addrs)
                 data, addr = sock.recvfrom(BUFFER_SIZE)
                 recv_time = time.time()
 
                 # パラメータリクエストの処理
                 if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
-                    agent_id = data[15] if len(data) > 15 else 99  # 例: 99をデフォルト
+                    agent_id = handle_parameter_request(sock, data, addr)  # ←引数を3つに修正
                     agent_addrs[agent_id] = addr  # ★ここで登録
-                    handle_parameter_request(sock, data, addr)  # ←引数を3つに修正
                     continue
 
                 # ハンドシェイクメッセージの処理
                 if data.startswith(b"HELLO"):  # バイト列で比較
-                    agent_id = data[5] if len(data) > 5 else 99  # 例: 99をデフォルト
-                    agent_addrs[agent_id] = addr  # ★ここで登録
                     handle_handshake(sock, data, addr)
                     continue
 
@@ -125,8 +123,6 @@ def main():
                 recv_list.append(recv_time)
                 agent_buffers[agent_id] = (chunk_data, send_list, recv_list)
                 # データ受信時にlast_addrを更新
-                last_addr = addr
-                agent_addrs[agent_id] = addr  # データ受信時に追加
 
                 # 最後のレコードの micros24 を取得してACK送信
                 if len(raw) >= RECORD_SIZE:
