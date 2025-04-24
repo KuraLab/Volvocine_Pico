@@ -37,11 +37,18 @@ def plot_chunks(file_list):
         return
 
     df_all = pd.concat(dfs, ignore_index=True)
-    fig, axs = plt.subplots(3, 1, figsize=(9, 6), sharex=True)
+
+    # agent_id==99のデータを分離
+    df_99 = df_all[df_all["agent_id"] == 99]
+    df_main = df_all[df_all["agent_id"] != 99]
+
+    # サブプロットを4段に
+    fig, axs = plt.subplots(4, 1, figsize=(9, 8), sharex=True)
     colors = {}
     color_cycle = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 
-    for (ag_id, _), sub in df_all.groupby(["agent_id", "chunk_id"]):
+    # 通常プロット（agent_id==99以外）
+    for (ag_id, _), sub in df_main.groupby(["agent_id", "chunk_id"]):
         if ag_id not in colors:
             colors[ag_id] = next(color_cycle)
         axs[0].plot(sub["time_pc_sec_abs"], sub["a0"], color=colors[ag_id])
@@ -52,12 +59,24 @@ def plot_chunks(file_list):
     axs[1].set_ylabel("a1")
     axs[2].set_ylabel("a2")
     axs[2].set_xlabel("PC time (sec)")
-    for ax in axs:
+    for ax in axs[:3]:
         ax.grid(True)
 
     handles = [plt.Line2D([0], [0], color=color, lw=2, label=f"Agent {ag_id}")
                for ag_id, color in colors.items()]
     axs[0].legend(handles=handles, title="Agents")
+
+    # agent_id==99 の a0, a1 を下段に重ねてプロット
+    if not df_99.empty:
+        axs[3].plot(df_99["time_pc_sec_abs"], df_99["a0"], label="Agent 99 a0", color="tab:blue")
+        axs[3].plot(df_99["time_pc_sec_abs"], df_99["a1"], label="Agent 99 a1", color="tab:orange")
+        axs[3].set_ylabel("Agent99\na0/a1")
+        axs[3].legend()
+        axs[3].grid(True)
+    else:
+        axs[3].set_visible(False)
+
+    axs[3].set_xlabel("PC time (sec)")
 
     plt.tight_layout()
     plt.show()
@@ -109,11 +128,15 @@ def plot_relativePhase(file_list):
 
     df_all = pd.concat(dfs, ignore_index=True)
 
-    # 新しい時系列を定義 (100Hz)
-    min_time = df_all["time_pc_sec_abs"].min()
-    max_time = df_all["time_pc_sec_abs"].max()
+    # agent_id==99のデータを分離
+    df_99 = df_all[df_all["agent_id"] == 99]
+    df_main = df_all[df_all["agent_id"] != 99]
 
-    for agent_id, sub in df_all.groupby("agent_id"):
+    # 新しい時系列を定義 (100Hz)
+    min_time = df_main["time_pc_sec_abs"].min()
+    max_time = df_main["time_pc_sec_abs"].max()
+
+    for agent_id, sub in df_main.groupby("agent_id"):
         sub = sub.sort_values("time_pc_sec_abs")
         min_time = max(min_time, sub["time_pc_sec_abs"].min())
         max_time = min(max_time, sub["time_pc_sec_abs"].max())
@@ -124,53 +147,77 @@ def plot_relativePhase(file_list):
 
     new_time_series = np.arange(min_time, max_time, 0.01) - min_time  # 最小値を基準にシフト
 
-    # 線形補間で位相データを再定義
+    # 線形補間で位相データを再定義（99以外のみ）
     interpolated_data = {}
-    for agent_id, sub in df_all.groupby("agent_id"):
+    for agent_id, sub in df_main.groupby("agent_id"):
         sub = sub.sort_values("time_pc_sec_abs")
         sub["a0"] = correct_phase_discontinuity(sub["a0"].values)
         interpolated_data[agent_id] = {
             "time": new_time_series,
-            "a0": np.interp(new_time_series + min_time, sub["time_pc_sec_abs"], sub["a0"])  # シフト前の時間で補間
+            "a0": np.interp(new_time_series + min_time, sub["time_pc_sec_abs"], sub["a0"])
         }
 
     # 基準エージェントの選択
     base_agent_id = min(interpolated_data.keys())
     base_agent_a0 = interpolated_data[base_agent_id]["a0"]
 
-    fig, ax = plt.subplots(figsize=(9, 6))
-    colors = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    if not df_99.empty:
+        # サブプロットを2段に
+        fig, axs = plt.subplots(2, 1, figsize=(9, 8), sharex=True)
+        colors = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 
-    # 線形補間と補正後のデータを使用して相対位相差を計算
-    for agent_id, data in interpolated_data.items():
-        if agent_id == base_agent_id:
-            continue
+        # 相対位相差プロット（99以外）
+        for agent_id, data in interpolated_data.items():
+            if agent_id == base_agent_id:
+                continue
+            phase_diff = (data["a0"] - base_agent_a0 + 128) % 256 - 128
+            phase_diff_with_nan = phase_diff.copy()
+            for i in range(1, len(phase_diff)):
+                if abs(phase_diff[i] - phase_diff[i - 1]) > 128:
+                    phase_diff_with_nan[i] = np.nan
+            phase_diff_with_nan = phase_diff_with_nan * (2 * np.pi / 256)
+            axs[0].plot(data["time"], phase_diff_with_nan, label=f"Agent {agent_id} - Agent {base_agent_id}", color=next(colors))
 
-        phase_diff = (data["a0"] - base_agent_a0 + 128) % 256 - 128
-        phase_diff_with_nan = phase_diff.copy()
-        for i in range(1, len(phase_diff)):
-            if abs(phase_diff[i] - phase_diff[i - 1]) > 128:
-                phase_diff_with_nan[i] = np.nan
+        axs[0].set_ylim(-np.pi, np.pi)
+        axs[0].yaxis.set_major_locator(ticker.MultipleLocator(base=np.pi / 2))
+        axs[0].yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / np.pi)}π" if x % np.pi == 0 else f"{x / np.pi:.1f}π"))
+        axs[0].set_ylabel("Phase Diff (radians)")
+        axs[0].legend(title="Relative Phase")
+        axs[0].grid(True)
 
-        # 縦軸のデータを 2π/256 でスケール
-        phase_diff_with_nan = phase_diff_with_nan * (2 * np.pi / 256)
+        # agent_id==99 の a0, a1 を下段にプロット
+        axs[1].plot(df_99["time_pc_sec_abs"] - min_time, df_99["a0"], label="Agent 99 a0", color="tab:blue")
+        axs[1].plot(df_99["time_pc_sec_abs"] - min_time, df_99["a1"], label="Agent 99 a1", color="tab:orange")
+        axs[1].set_ylabel("Agent99\na0/a1")
+        axs[1].legend()
+        axs[1].grid(True)
+        axs[1].set_xlabel("Time (s)")
+        axs[0].set_xlim(0, new_time_series[-1])
 
-        print(f"[DEBUG] Agent {agent_id}: Phase diff with NaN (first 10 values) = {phase_diff_with_nan[:10]}")
-        ax.plot(data["time"], phase_diff_with_nan, label=f"Agent {agent_id} - Agent {base_agent_id}", color=next(colors))
+        plt.tight_layout()
+        plt.show()
+    else:
+        # 99がない場合は普通に1段で表示
+        plt.figure(figsize=(9, 4))
+        colors = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+        for agent_id, data in interpolated_data.items():
+            if agent_id == base_agent_id:
+                continue
+            phase_diff = (data["a0"] - base_agent_a0 + 128) % 256 - 128
+            phase_diff_with_nan = phase_diff.copy()
+            for i in range(1, len(phase_diff)):
+                if abs(phase_diff[i] - phase_diff[i - 1]) > 128:
+                    phase_diff_with_nan[i] = np.nan
+            phase_diff_with_nan = phase_diff_with_nan * (2 * np.pi / 256)
+            plt.plot(data["time"], phase_diff_with_nan, label=f"Agent {agent_id} - Agent {base_agent_id}", color=next(colors))
 
-    # 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
-    ax.set_ylim(-np.pi, np.pi)
-    ax.yaxis.set_major_locator(ticker.MultipleLocator(base=np.pi / 2))  # π/2 間隔
-    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / np.pi)}π" if x % np.pi == 0 else f"{x / np.pi:.1f}π"))
-
-    # プロットの設定
-    ax.set_ylabel("Phase Diff (radians)")
-    ax.set_xlabel("Time (s)")
-    ax.legend(title="Relative Phase")
-    ax.grid(True)
-
-    # 横軸の範囲をデータの両端に合わせる
-    ax.set_xlim(0, new_time_series[-1])
-
-    plt.tight_layout()
-    plt.show()
+        plt.ylim(-np.pi, np.pi)
+        plt.gca().yaxis.set_major_locator(ticker.MultipleLocator(base=np.pi / 2))
+        plt.gca().yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{int(x / np.pi)}π" if x % np.pi == 0 else f"{x / np.pi:.1f}π"))
+        plt.ylabel("Phase Diff (radians)")
+        plt.xlabel("Time (s)")
+        plt.legend(title="Relative Phase")
+        plt.grid(True)
+        plt.xlim(0, new_time_series[-1])
+        plt.tight_layout()
+        plt.show()

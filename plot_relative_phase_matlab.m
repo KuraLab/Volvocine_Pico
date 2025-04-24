@@ -1,4 +1,4 @@
-function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds)
+function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration)
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -42,15 +42,19 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds)
     % データを結合
     df_all = vertcat(dfs{:});
 
+    % agent_id==99のデータを分離
+    df_99 = df_all(df_all.agent_id == 99, :);
+    df_main = df_all(df_all.agent_id ~= 99, :);
+
     % 新しい時系列を定義 (100Hz)
-    min_time = min(df_all.time_pc_sec_abs);
-    max_time = max(df_all.time_pc_sec_abs);
+    min_time = min(df_main.time_pc_sec_abs);
+    max_time = max(df_main.time_pc_sec_abs);
 
     % 各エージェントの時間範囲を調整
-    agents = unique(df_all.agent_id);
+    agents = unique(df_main.agent_id);
     for i = 1:length(agents)
         agent_id = agents(i);
-        sub = df_all(df_all.agent_id == agent_id, :);
+        sub = df_main(df_main.agent_id == agent_id, :);
         min_time = max(min_time, min(sub.time_pc_sec_abs));
         max_time = min(max_time, max(sub.time_pc_sec_abs));
     end
@@ -69,11 +73,11 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds)
 
     new_time_series = (start_time:0.01:max_time) - start_time; % n秒後を基準にシフト
 
-    % 線形補間で位相データを再定義
+    % 線形補間で位相データを再定義（99以外のみ）
     interpolated_data = struct();
     for i = 1:length(agents)
         agent_id = agents(i);
-        sub = df_all(df_all.agent_id == agent_id, :);
+        sub = df_main(df_main.agent_id == agent_id, :);
         sub = sortrows(sub, 'time_pc_sec_abs');
         sub.a0 = correct_phase_discontinuity(sub.a0);
         interpolated_data(agent_id).time = new_time_series;
@@ -89,7 +93,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds)
     end
     base_agent_a0 = interpolated_data(base_agent_id).a0;
 
-    % プロット
+    % サブプロットを2段に（→1段に変更）
     figure;
     hold on;
     colors = lines(length(agents));
@@ -123,15 +127,30 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds)
     % 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
     ylim([-pi, pi]);
     yticks(-pi:pi/2:pi);
-    yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'}); % LaTeX形式に変更
+    yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+    xlim([0 plot_duration]);
 
-    % プロットの設定
-    xlabel('Time (s)', 'Interpreter', 'latex'); % LaTeX形式
-    ylabel('Relative Phase (rad)', 'Interpreter', 'latex'); % LaTeX形式
-    %legend('show', 'Location', 'best', 'Interpreter', 'latex'); % LaTeX形式 (必要に応じて有効化)
+    xlabel('Time (s)', 'Interpreter', 'latex');
+    ylabel('Relative Phase (rad)', 'Interpreter', 'latex');
+    legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
     hold off;
+
+    % agent_id==99 の a0, a1 を別figureでプロット
+    if ~isempty(df_99)
+        figure;
+        hold on;
+        plot(df_99.time_pc_sec_abs - start_time, df_99.a0, 'DisplayName', 'Agent 99 a0', 'Color', [0 0.447 0.741]);
+        plot(df_99.time_pc_sec_abs - start_time, df_99.a1, 'DisplayName', 'Agent 99 a1', 'Color', [0.85 0.325 0.098]);
+        ylabel('Agent99 a0/a1');
+        legend('show');
+        grid on;
+        xlabel('Time (s)');
+        xlim([0 plot_duration]);
+        tuneFigure;
+        hold off;
+    end
 end
 
 function corrected_phase = correct_phase_discontinuity(phase_data)
