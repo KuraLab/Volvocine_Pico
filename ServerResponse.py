@@ -37,6 +37,7 @@ def handle_parameter_request(sock, data, addr):
             response = f"omega:{omega:.2f},kappa:{kappa:.2f},alpha:{alpha:.2f}"
             sock.sendto(response.encode('utf-8'), addr)
             print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Voltage: {voltage:.2f}: {response}")
+            return agent_id
 
         except (IndexError, ValueError) as e:
             print(f"[ERROR] Failed to parse parameter request: {request_str}")
