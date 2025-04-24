@@ -5,14 +5,17 @@ function main_plot()
     directory = 'merged_chunks'; % データが保存されているディレクトリ
 
     % 最初のn秒をカットする設定
-    n_seconds_to_cut = 15; % プロット時に最初のn秒をカット
+    n_seconds_to_cut = 4; % プロット時に最初のn秒をカット
+
+    % 何秒目までプロットするか
+    plot_duration = 30; % 例: 60秒までプロット
 
     % 最新からn番目のファイルをプロット
-    n = 2; % ここでnを指定
-    plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut);
+    n = 1; % ここでnを指定
+    plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration);
 end
 
-function plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut)
+function plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration)
     % ディレクトリが存在するか確認
     if ~isfolder(directory)
         fprintf('[ERROR] Directory not found: %s\n', directory);
@@ -41,5 +44,5 @@ function plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut)
     fprintf('[INFO] %dth latest file found: %s\n', n, nth_file);
 
     % プロット関数を呼び出し
-    plot_relative_phase_matlab(nth_file, [], n_seconds_to_cut);
+    plot_relative_phase_matlab(nth_file, [], n_seconds_to_cut, plot_duration);
 end
