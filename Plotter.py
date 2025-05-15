@@ -4,6 +4,7 @@ from itertools import cycle
 import os
 import numpy as np
 import matplotlib.ticker as ticker  # 目盛りのフォーマット用
+from datetime import datetime
 
 def plot_chunks(file_list):
     # None チェックを追加
@@ -140,17 +141,24 @@ def plot_relativePhase(file_list):
     # 異常チェック（補正後）
     detect_time_anomalies(df_all)
 
-    # 各チャンクごとの時刻範囲を表示
+    # チャンクごとの開始・終了UNIX時刻と範囲を算出
     summary = (
         df_all.groupby(["agent_id", "chunk_id"])["time_pc_sec_abs"]
         .agg(start_time="min", end_time="max")
         .assign(duration=lambda x: x["end_time"] - x["start_time"])
         .sort_values("start_time")
+        .reset_index()
     )
 
-    pd.set_option("display.float_format", "{:.3f}".format)
-    print("\n[INFO] Time range per chunk:")
-    print(summary.reset_index())
+    # UNIX秒 → datetime に変換（開始時刻のみ表示用）
+    summary["start_dt"] = summary["start_time"].apply(lambda t: datetime.fromtimestamp(t))
+
+    # 表示列（日時だけ）
+    columns_to_show = ["agent_id", "chunk_id", "start_dt", "duration"]
+
+    # 出力
+    print("\n[INFO] Time range per chunk (human-readable):")
+    print(summary[columns_to_show])
 
     # 各チャンクの開始時刻の不一致補正（オーバーフローで未来に飛んだチャンクを戻す）
     df_all = correct_chunk_start_times(df_all)
