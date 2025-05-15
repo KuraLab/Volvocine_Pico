@@ -37,6 +37,7 @@ def plot_chunks(file_list):
         return
 
     df_all = pd.concat(dfs, ignore_index=True)
+    detect_time_anomalies(df_all)
 
     # agent_id==99のデータを分離
     df_99 = df_all[df_all["agent_id"] == 99]
@@ -127,6 +128,33 @@ def plot_relativePhase(file_list):
         return
 
     df_all = pd.concat(dfs, ignore_index=True)
+    # オーバーフロー補正（agent_id, chunk_id ごとに補正）
+    corrected_dfs = []
+    for (agent_id, chunk_id), sub in df_all.groupby(["agent_id", "chunk_id"]):
+        sub_corrected = correct_large_jump(sub)
+        corrected_dfs.append(sub_corrected)
+
+    # 補正済みで再結合
+    df_all = pd.concat(corrected_dfs, ignore_index=True)
+
+    # 異常チェック（補正後）
+    detect_time_anomalies(df_all)
+
+    # 各チャンクごとの時刻範囲を表示
+    summary = (
+        df_all.groupby(["agent_id", "chunk_id"])["time_pc_sec_abs"]
+        .agg(start_time="min", end_time="max")
+        .assign(duration=lambda x: x["end_time"] - x["start_time"])
+        .sort_values("start_time")
+    )
+
+    pd.set_option("display.float_format", "{:.3f}".format)
+    print("\n[INFO] Time range per chunk:")
+    print(summary.reset_index())
+
+    # 各チャンクの開始時刻の不一致補正（オーバーフローで未来に飛んだチャンクを戻す）
+    df_all = correct_chunk_start_times(df_all)
+
 
     # agent_id==99のデータを分離
     df_99 = df_all[df_all["agent_id"] == 99]
@@ -221,3 +249,63 @@ def plot_relativePhase(file_list):
         plt.xlim(0, new_time_series[-1])
         plt.tight_layout()
         plt.show()
+
+
+def detect_time_anomalies(df, threshold_sec=1.0):
+    """
+    同一チャンク内での時間逆行やジャンプを検出し、ジャンプ秒数も表示。
+    """
+    for (agent_id, chunk_id), sub in df.groupby(["agent_id", "chunk_id"]):
+        sub = sub.sort_values("time_pc_sec_abs").reset_index(drop=True)
+        time_diff = sub["time_pc_sec_abs"].diff().fillna(0)
+
+        # 時間が戻った点（diff < 0）
+        backward_jumps = sub[time_diff < 0]
+        if not backward_jumps.empty:
+            print(f"[WARN] Time reversed in agent {agent_id}, chunk {chunk_id}:")
+            for idx in backward_jumps.index:
+                t_prev = sub.loc[idx - 1, "time_pc_sec_abs"] if idx > 0 else None
+                t_curr = sub.loc[idx, "time_pc_sec_abs"]
+                print(f"  At index {idx}: {t_prev:.6f} → {t_curr:.6f} (Δ = {t_curr - t_prev:.6f} sec)")
+
+        # 時間ジャンプ（diff > threshold）
+        large_jump_indices = sub.index[time_diff > threshold_sec]
+        if len(large_jump_indices) > 0:
+            print(f"[INFO] Large time jump (> {threshold_sec:.1f}s) in agent {agent_id}, chunk {chunk_id}:")
+            for idx in large_jump_indices:
+                t_prev = sub.loc[idx - 1, "time_pc_sec_abs"]
+                t_curr = sub.loc[idx, "time_pc_sec_abs"]
+                delta = t_curr - t_prev
+                print(f"  At index {idx}: {t_prev:.6f} → {t_curr:.6f} (Δ = {delta:.6f} sec)")
+
+
+# 時間ジャンプが大きすぎる場合に補正（例：4294秒前後のジャンプなら修正）
+T_OVERFLOW = 2**32 / 1e6  # 約4294.967296秒
+T_TOL = 5.0  # 許容誤差（秒）
+
+def correct_large_jump(sub, threshold_sec=T_OVERFLOW - T_TOL, jump_sec=T_OVERFLOW):
+    sub = sub.copy()
+    time_diff = sub["time_pc_sec_abs"].diff().fillna(0)
+    jump_idx = sub.index[time_diff > threshold_sec]
+    for idx in jump_idx:
+        sub.loc[idx:, "time_pc_sec_abs"] -= jump_sec
+        print(f"[FIX] Corrected overflow at index {idx}, subtracted {jump_sec} sec.")
+    return sub
+
+def correct_chunk_start_times(df, threshold_sec=4000.0, jump_sec=4294.967296):
+    """
+    各チャンクの開始時刻を比較し、極端に未来のタイムスタンプがあればジャンプ分だけ補正。
+    """
+    corrected_chunks = []
+    chunk_starts = df.groupby(["agent_id", "chunk_id"])["time_pc_sec_abs"].min().reset_index()
+    median_start = chunk_starts["time_pc_sec_abs"].median()
+
+    for (agent_id, chunk_id), sub in df.groupby(["agent_id", "chunk_id"]):
+        start_time = sub["time_pc_sec_abs"].min()
+        if start_time - median_start > threshold_sec:
+            print(f"[FIX] Corrected chunk time for agent {agent_id}, chunk {chunk_id}: {start_time:.3f} → {start_time - jump_sec:.3f}")
+            sub = sub.copy()
+            sub["time_pc_sec_abs"] -= jump_sec
+        corrected_chunks.append(sub)
+
+    return pd.concat(corrected_chunks, ignore_index=True)
