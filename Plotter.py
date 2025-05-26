@@ -5,6 +5,8 @@ import os
 import numpy as np
 import matplotlib.ticker as ticker  # 目盛りのフォーマット用
 from datetime import datetime
+import pywt  # 追加
+import matplotlib.gridspec as gridspec  # 追加
 
 def plot_chunks(file_list):
     # None チェックを追加
@@ -41,8 +43,12 @@ def plot_chunks(file_list):
     detect_time_anomalies(df_all)
 
     # agent_id==99のデータを分離
-    df_99 = df_all[df_all["agent_id"] == 99]
+    df_99 = df_all[df_all["agent_id"] == 99].copy()
     df_main = df_all[df_all["agent_id"] != 99]
+
+    # a1が170以上の時は-255する
+    if not df_99.empty:
+        df_99.loc[df_99["a1"] >= 170, "a1"] -= 255
 
     # サブプロットを4段に
     fig, axs = plt.subplots(4, 1, figsize=(9, 8), sharex=True)
@@ -165,8 +171,12 @@ def plot_relativePhase(file_list):
 
 
     # agent_id==99のデータを分離
-    df_99 = df_all[df_all["agent_id"] == 99]
+    df_99 = df_all[df_all["agent_id"] == 99].copy()
     df_main = df_all[df_all["agent_id"] != 99]
+
+    # a1が170以上の時は-255する
+    #if not df_99.empty:
+    #    df_99.loc[df_99["a1"] >= 170, "a1"] -= 255
 
     # 新しい時系列を定義 (100Hz)
     min_time = df_main["time_pc_sec_abs"].min()
@@ -198,8 +208,17 @@ def plot_relativePhase(file_list):
     base_agent_a0 = interpolated_data[base_agent_id]["a0"]
 
     if not df_99.empty:
-        # サブプロットを2段に
-        fig, axs = plt.subplots(2, 1, figsize=(9, 8), sharex=True)
+        # サブプロットを4段＋カラーバー用1列に
+        fig = plt.figure(figsize=(10, 12))
+        gs = gridspec.GridSpec(4, 2, width_ratios=[20, 1], wspace=0.3)
+        # 1列目の4つのAxesをx軸共有で作成
+        axs = []
+        for i in range(4):
+            if i == 0:
+                ax = fig.add_subplot(gs[i, 0])
+            else:
+                ax = fig.add_subplot(gs[i, 0], sharex=axs[0])
+            axs.append(ax)
         colors = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 
         # 相対位相差プロット（99以外）
@@ -227,8 +246,60 @@ def plot_relativePhase(file_list):
         axs[1].set_ylabel("Agent99\na0/a1")
         axs[1].legend()
         axs[1].grid(True)
-        axs[1].set_xlabel("Time (s)")
+
+        # --- ここからウェーブレット変換 ---
+        # a0, a1両方のパワーを計算
+        def smooth(x, window=100):
+            return np.convolve(x, np.ones(window)/window, mode='same')
+
+        signal_a0 = smooth(df_99["a0"].values)
+        signal_a1 = smooth(df_99["a1"].values)
+        time_vals = df_99["time_pc_sec_abs"].values
+
+        # サンプリング周期の推定
+        dt = np.median(np.diff(time_vals))
+
+        widths = np.arange(1, 64)
+        frequencies = pywt.scale2frequency('morl', widths) / dt
+
+
+
+        # ウェーブレット変換
+        cwtmatr_a0, _ = pywt.cwt(signal_a0, widths, 'morl', sampling_period=dt)
+        cwtmatr_a1, _ = pywt.cwt(signal_a1, widths, 'morl', sampling_period=dt)
+        power_a0 = np.abs(cwtmatr_a0)
+        power_a1 = np.abs(cwtmatr_a1)
+
+        # a0とa1のパワーを結合してvmin/vmaxを決定
+        all_power = np.concatenate([power_a0.flatten(), power_a1.flatten()])
+        vmin = np.percentile(all_power, 1)
+        vmax = np.percentile(all_power, 90)
+
+        # imshowのextentで縦軸をfrequencyに
+        im0 = axs[2].imshow(power_a0, aspect='auto',
+                            extent=[(df_99["time_pc_sec_abs"]-min_time).min(),
+                                    (df_99["time_pc_sec_abs"]-min_time).max(),
+                                    frequencies[-1], frequencies[0]],
+                            cmap='plasma', vmin=vmin, vmax=vmax)
+        axs[2].set_ylabel("Frequency (Hz)")
+        axs[2].set_title("Wavelet Power (Agent 99 a0)")
+
+        im1 = axs[3].imshow(power_a1, aspect='auto',
+                            extent=[(df_99["time_pc_sec_abs"]-min_time).min(),
+                                    (df_99["time_pc_sec_abs"]-min_time).max(),
+                                    frequencies[-1], frequencies[0]],
+                            cmap='plasma', vmin=vmin, vmax=vmax)
+        axs[3].set_ylabel("Frequency (Hz)")
+        axs[3].set_title("Wavelet Power (Agent 99 a1)")
+        axs[3].set_xlabel("Time (s)")
+
         axs[0].set_xlim(0, new_time_series[-1])
+        plt.tight_layout()
+
+        # カラーバー用のAxesを作成し、そこにカラーバーを描画
+        cax = fig.add_subplot(gs[2:4, 1])
+        cbar = fig.colorbar(im1, cax=cax, orientation='vertical', label='Power')
+        cbar.ax.tick_params(labelsize=10)
 
         plt.tight_layout()
         plt.show()
