@@ -187,10 +187,10 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         hold on;
         %plot(t99_all, a0_99_all, 'Color', [0 0.447 0.741], 'DisplayName', 'Agent 99 a0 (raw)');
         %plot(t99_all, a1_99_all, 'Color', [0.85 0.325 0.098], 'DisplayName', 'Agent 99 a1 (raw)');
-        plot(t99_all, a0_99_deg, 'Color', [0 0.447 0.741], 'DisplayName', 'e1');
-        plot(t99_all, a1_99_deg, 'Color', [0.85 0.325 0.098], 'DisplayName', 'e2');
-        ylabel('Euler angles (deg)');
-        legend('show', 'Location', 'best', 'Interpreter', 'latex');
+        plot(t99_all, a0_99_smooth, 'Color', [0 0.447 0.741], 'DisplayName', 'a0');
+        plot(t99_all, a1_99_smooth, 'Color', [0.85 0.325 0.098], 'DisplayName', 'a1');
+        ylabel('Agent99 a0/a1');
+        legend('show');
         grid on;
         xlabel('Time (s)');
         xlim([0, common_xmax]);
@@ -212,7 +212,6 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
 
         figure;
         subplot(2,1,1);
-        [wt_a0, f_a0] = cwt(double(a0_99), fs, 'VoicesPerOctave', 48);
         surf(t99, f_a0, log10(abs(wt_a0)), 'EdgeColor', 'none');
         surf(t99, f_a0, abs(wt_a0), 'EdgeColor', 'none');
         set(gca, 'YScale', 'log'); % logスケールに設定
@@ -225,7 +224,6 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         colorbar;
 
         subplot(2,1,2);
-        [wt_a1, f_a1] = cwt(double(a1_99), fs, 'VoicesPerOctave', 48);
         surf(t99, f_a1, log10(abs(wt_a1)), 'EdgeColor', 'none');
         surf(t99, f_a1, abs(wt_a1), 'EdgeColor', 'none');
         set(gca, 'YScale', 'log'); % logスケールに設定
