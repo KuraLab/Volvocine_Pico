@@ -155,13 +155,14 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     ylim([-pi, pi]);
     yticks(-pi:pi/2:pi);
     yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlim([0, common_xmax]);
+    xlim([0 common_xmax]);
 
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Relative Phase (rad)', 'Interpreter', 'latex');
     %legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
+    %saveFigure;
     hold off;
 
     % --- Agent99 a0/a1プロット ---
@@ -175,18 +176,26 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         a0_99_smooth = movmean(a0_99_all, windowsize);
         a1_99_smooth = movmean(a1_99_all, windowsize);
 
+        % 変換関数：uint8から角度（-180〜180度）に変換
+        decode_angle = @(u) (double(u) * 360.0 / 255.0) - 180.0;
+
+        % デコード（角度へ変換）
+        a0_99_deg = decode_angle(a0_99_smooth);
+        a1_99_deg = decode_angle(a1_99_smooth);
+
         figure;
         hold on;
         %plot(t99_all, a0_99_all, 'Color', [0 0.447 0.741], 'DisplayName', 'Agent 99 a0 (raw)');
         %plot(t99_all, a1_99_all, 'Color', [0.85 0.325 0.098], 'DisplayName', 'Agent 99 a1 (raw)');
-        plot(t99_all, a0_99_smooth, 'Color', [0 0.447 0.741], 'DisplayName', 'a0');
-        plot(t99_all, a1_99_smooth, 'Color', [0.85 0.325 0.098], 'DisplayName', 'a1');
+        plot(t99_all, a0_99_deg, 'Color', [0 0.447 0.741], 'DisplayName', 'a0');
+        plot(t99_all, a1_99_deg, 'Color', [0.85 0.325 0.098], 'DisplayName', 'a1');
         ylabel('Agent99 a0/a1');
         legend('show');
         grid on;
         xlabel('Time (s)');
         xlim([0, common_xmax]);
         tuneFigure;
+        %saveFigure;
         hold off;
 
         % --- Agent99 a0/a1のウェーブレット変換プロット ---
@@ -196,12 +205,15 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         t99 = t99(idx);
         a0_99 = a0_99_smooth(idx); % 5点移動平均でスムージング
         a1_99 = a1_99_smooth(idx); % 5点移動平均でスムージング
-        
-        [wt_a0, f_a0] = cwt(double(a0_99), fs, 'VoicesPerOctave', 48);
-        [wt_a1, f_a1] = cwt(double(a1_99), fs, 'VoicesPerOctave', 48);
-        wtmin = 0;
-        wtmax = max([max(abs(wt_a0(:))), max(abs(wt_a1(:)))])-13;
-        wtmax = 6;
+        % デコード（角度へ変換）
+        a0_99 = decode_angle(a0_99);
+        a1_99 = decode_angle(a1_99);
+        % 周波数範囲を指定
+        freq_range = [0.1 20]; % Hz
+        [wt_a0, f_a0] = cwt(a0_99, fs, 'FrequencyLimits', freq_range);
+        [wt_a1, f_a1] = cwt(a1_99, fs, 'FrequencyLimits', freq_range);
+
+        cmax = 8;
 
         figure;
         subplot(2,1,1);
@@ -212,8 +224,8 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         view(0, 90);
         %ylim([0.05 inf]); % log軸なので 0 は避ける
         ylabel('Freq [Hz]');
-        title('Agent99 a0 Wavelet');
-        clim([wtmin, wtmax]); % カラーマップの範囲を設定
+        title('e1 Wavelet');
+        clim([0 cmax]);
         colorbar;
 
         subplot(2,1,2);
@@ -225,9 +237,10 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         %ylim([0.05 inf]); % log軸なので 0 はNG
         xlabel('Time (s)');
         ylabel('Freq [Hz]');
-        title('Agent99 a1 Wavelet');
-        clim([wtmin, wtmax]); % カラーマップの範囲を設定
+        title('e2 Wavelet');
+        clim([0 cmax]);
         colorbar;
+        %saveFigure;
     end
 
 

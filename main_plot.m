@@ -8,7 +8,7 @@ function main_plot()
     n_seconds_to_cut = 0; % プロット時に最初のn秒をカット
 
     % 何秒目までプロットするか
-    plot_duration = 90; % 例: 60秒までプロット
+    plot_duration = 900; % 例: 60秒までプロット
 
     % 最新からn番目のファイルをプロット
     n = 1; % ここでnを指定

@@ -16,6 +16,7 @@ def build_dataframe_for_chunk(agent_id, chunk_data, chunk_send_micros, chunk_rec
     wrapped_send_secs = [(((s >> 8) % 16777216) << 8) / 1e6 for s in chunk_send_micros]
     offsets = [recv - send for send, recv in zip(wrapped_send_secs, chunk_recv_times)]
     offset = sum(offsets) / len(offsets)
+    print(len(offsets), f"Average offset for agent {agent_id}: {offset:.6f} seconds")
 
     df = pd.DataFrame(chunk_data, columns=["micros24", "a0", "a1", "a2"])
     

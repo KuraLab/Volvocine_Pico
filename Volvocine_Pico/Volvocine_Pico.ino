@@ -46,10 +46,17 @@ int logIndex = 0;
 bool paused = false;
 bool lastButtonState = false;
 
+// START受信時のログ開始時刻
+unsigned long startLoggingMillis = 0;
+unsigned long startLoggingMicros = 0;
+
 unsigned long prevLoopEndTime = 0;
+unsigned long prevLoopEndTime2 = 0;
 float phi = 0;
 float omega = 3.0f * 3.14f;
 float kappa = 1.0f;  // フィードバックゲイン
+float kappa_init = 0.0f;
+float kappa_now = 0.0f;
 float alpha = 0.1f;  // 位相遅れ定数
 bool bufferOverflowed = false;
 
@@ -179,11 +186,10 @@ void sendLogBuffer() {
 void logSensorData() {
   unsigned long now = micros();
   unsigned long dt = now - prevLoopEndTime;
+  unsigned long elapsed = now - startLoggingMicros;
   prevLoopEndTime = now;
 
-  // analog1
   int raw1 = analogRead(analogPin1);  // 0..4095
-  // analog2
   int raw2 = analogRead(analogPin2);
 
   // リングバッファにデータを追加
@@ -197,8 +203,8 @@ void logSensorData() {
   float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
 
   // サーボ制御
-  phi += (omega + kappa * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
-  float currentCos = cosf(phi);
+  phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * flex) * (float)dt / 1e6f;
+  float currentCos = cosf((float)elapsed / 1e6f * omega + phi);
   myServo.write(110 + 60 * currentCos);
 
   // データ保存は指定された間隔でのみ実行
@@ -208,7 +214,7 @@ void logSensorData() {
     entry.micros24 = now >> 8;  // 24ビットに圧縮
 
     // analog0: phiを [0..2π) → 0..255 に圧縮
-    float phiMod = fmodf(phi, 2.0f * (float)M_PI);
+    float phiMod = fmodf((float)elapsed / 1e6f * omega + phi, 2.0f * (float)M_PI);
     if (phiMod < 0) phiMod += 2.0f * (float)M_PI;
     entry.analog0 = (uint8_t)(phiMod * (255.0f / (2.0f * (float)M_PI)));
 
@@ -232,14 +238,21 @@ void logSensorData() {
     // バッファ使用率 (10件毎に表示)
     if (logIndex % 10 == 0) {
       float usage = (float)logIndex / LOG_BUFFER_SIZE * 100.0f;
-      Serial.printf("[STATUS] buffer: %d/%d (%.1f%%)\n", logIndex, LOG_BUFFER_SIZE, usage);
+      //Serial.printf("[STATUS] buffer: %d/%d (%.1f%%)\n", logIndex, LOG_BUFFER_SIZE, usage);
     }
   }
 
+
+  unsigned long now2 = micros();
+  unsigned long dt2 = now2 - prevLoopEndTime2;
   // 周期制御
-  unsigned long elapsed = micros() - now;
-  if (elapsed < CONTROL_PERIOD_US) {
-    delayMicroseconds(CONTROL_PERIOD_US - elapsed);
+  if (dt2 < CONTROL_PERIOD_US) {
+    delayMicroseconds(CONTROL_PERIOD_US - dt2);
+    prevLoopEndTime2 = micros();
+    //Serial.printf("[INFO] Loop took %lu us (expected %d us)\n", dt2, CONTROL_PERIOD_US);
+  } else{
+    prevLoopEndTime2 = micros();
+    //Serial.printf("[WARN] Loop took too long: %lu us (expected %d us)\n", dt2, CONTROL_PERIOD_US);
   }
 
   // ループカウンタをインクリメント
@@ -292,15 +305,44 @@ void setup() {
 
   Serial.println("[INFO] Ready to log in RAM");
   prevLoopEndTime = micros();
+  prevLoopEndTime2 = prevLoopEndTime;
 
   // 初期状態をオフに設定
   paused = true;
   logIndex = 0;  // バッファインデックスを初期化
   sendLogBuffer();
+  kappa_now = kappa_init;
   Serial.println("[INFO] System is paused. Press the button to start.");
 }
 
+// UDPコマンド受信処理
+void checkControlCommand() {
+  int packetSize = udp.parsePacket();
+  if (packetSize > 0) {
+    char buf[16] = {0};
+    udp.read(buf, sizeof(buf) - 1);
+    if (strcmp(buf, "START") == 0 && paused == true) {
+      paused = false;
+      startLoggingMillis = millis(); // ログ開始時刻を記録
+      startLoggingMicros = micros(); // ログ開始時刻を記録
+      Serial.println("[INFO] Received START command from server.");
+    } else if (strcmp(buf, "STOP") == 0 && paused == false) {
+      paused = true;
+      Serial.println("[INFO] Received STOP command from server.");
+      sendLogBuffer();
+      logIndex = 0;
+      kappa_now = kappa_init;
+    }
+  }
+}
+
 void loop() {
+  checkControlCommand();
+
+  if (!paused && (millis() - startLoggingMillis >= 20000)) {
+    kappa_now = kappa;
+  } 
+
   bool currentButtonState = digitalRead(digitalInputPin);
   if (currentButtonState && !lastButtonState) {
     paused = !paused;
@@ -312,17 +354,20 @@ void loop() {
       sendLogBuffer();
       // バッファ初期化
       logIndex = 0;
+      kappa_now = kappa_init;
 
       // サーバーにパラメータをリクエスト
       requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
       lastRequestTime = millis();  // リクエスト送信時刻を記録
+    } else{
+      startLoggingMillis = millis(); // ログ開始時刻を記録
+      startLoggingMicros = micros(); // ログ開始時刻を記録
     }
   }
   lastButtonState = currentButtonState;
 
   // ポーズ中に一定間隔でパラメータをリクエスト
-  if (paused && millis() - lastRequestTime >= 60000) {  // 1秒以上経過
-    // WiFi接続確認
+  if (paused && millis() - lastRequestTime >= 30000) {
     while (WiFi.status() != WL_CONNECTED) {
       connectToWiFi(ssid, password);
     }
