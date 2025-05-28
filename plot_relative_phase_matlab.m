@@ -1,4 +1,4 @@
-function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration)
+function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration, n_seconds, plot_duration)
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -42,6 +42,18 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     % データを結合
     df_all = vertcat(dfs{:});
 
+    % --- Pythonと同じ定数 ---
+    T_OVERFLOW = 2^32 / 1e6; % 約4294.967296秒
+    T_TOL = 5.0;             % 許容誤差（秒）
+    threshold_sec = T_OVERFLOW - T_TOL;
+    jump_sec = T_OVERFLOW;
+
+    % チャンク内ジャンプ補正
+    df_all = correct_large_jump_matlab(df_all, threshold_sec, jump_sec);
+
+    % チャンク開始時刻の未来ジャンプ補正
+    df_all = correct_chunk_start_times_matlab(df_all, 4000.0, T_OVERFLOW);
+
     % agent_id==99のデータを分離
     df_99 = df_all(df_all.agent_id == 99, :);
     df_main = df_all(df_all.agent_id ~= 99, :);
@@ -80,6 +92,8 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         sub = df_main(df_main.agent_id == agent_id, :);
         sub = sortrows(sub, 'time_pc_sec_abs');
         sub.a0 = correct_phase_discontinuity(sub.a0);
+        [unique_times, ia] = unique(sub.time_pc_sec_abs);
+        sub = sub(ia, :);
         interpolated_data(agent_id).time = new_time_series;
         interpolated_data(agent_id).a0 = interp1(sub.time_pc_sec_abs - start_time, sub.a0, new_time_series, 'linear', 'extrap');
     end
@@ -93,7 +107,20 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     end
     base_agent_a0 = interpolated_data(base_agent_id).a0;
 
-    % サブプロットを2段に（→1段に変更）
+    % Agent99 a0/a1プロット用の最大時刻
+    if ~isempty(df_99)
+        max_time_99 = max(df_99.time_pc_sec_abs - start_time);
+    else
+        max_time_99 = inf; % データがなければ無限大扱い
+    end
+
+    % 相対位相プロット用の最大時刻
+    max_time_phase = max(new_time_series); % ここもデータの最大値
+
+    % 両方の最大値の小さい方を採用
+    common_xmax = min([max_time_phase, max_time_99,plot_duration]);
+
+    % --- 相対位相プロット ---
     figure;
     hold on;
     colors = lines(length(agents));
@@ -135,22 +162,88 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
+    %saveFigure;
     hold off;
 
-    % agent_id==99 の a0, a1 を別figureでプロット
+    % --- Agent99 a0/a1プロット ---
     if ~isempty(df_99)
+        t99_all = df_99.time_pc_sec_abs - start_time;
+        a0_99_all = correct_large_jump_99(df_99.a0);
+        a1_99_all = correct_large_jump_99(df_99.a1);
+
+        % スムージング（5点移動平均）
+        windowsize = 5;
+        a0_99_smooth = movmean(a0_99_all, windowsize);
+        a1_99_smooth = movmean(a1_99_all, windowsize);
+
+        % 変換関数：uint8から角度（-180〜180度）に変換
+        decode_angle = @(u) (double(u) * 360.0 / 255.0) - 180.0;
+
+        % デコード（角度へ変換）
+        a0_99_deg = decode_angle(a0_99_smooth);
+        a1_99_deg = decode_angle(a1_99_smooth);
+
         figure;
         hold on;
-        plot(df_99.time_pc_sec_abs - start_time, df_99.a0, 'DisplayName', 'Agent 99 a0', 'Color', [0 0.447 0.741]);
-        plot(df_99.time_pc_sec_abs - start_time, df_99.a1, 'DisplayName', 'Agent 99 a1', 'Color', [0.85 0.325 0.098]);
+        %plot(t99_all, a0_99_all, 'Color', [0 0.447 0.741], 'DisplayName', 'Agent 99 a0 (raw)');
+        %plot(t99_all, a1_99_all, 'Color', [0.85 0.325 0.098], 'DisplayName', 'Agent 99 a1 (raw)');
+        plot(t99_all, a0_99_deg, 'Color', [0 0.447 0.741], 'DisplayName', 'a0');
+        plot(t99_all, a1_99_deg, 'Color', [0.85 0.325 0.098], 'DisplayName', 'a1');
         ylabel('Agent99 a0/a1');
         legend('show');
         grid on;
         xlabel('Time (s)');
-        xlim([0 plot_duration]);
+        xlim([0, common_xmax]);
         tuneFigure;
+        %saveFigure;
         hold off;
+
+        % --- Agent99 a0/a1のウェーブレット変換プロット ---
+        fs = 100; % サンプリング周波数
+        t99 = t99_all;
+        idx = t99 >= 0 & t99 <= common_xmax;
+        t99 = t99(idx);
+        a0_99 = a0_99_smooth(idx); % 5点移動平均でスムージング
+        a1_99 = a1_99_smooth(idx); % 5点移動平均でスムージング
+        % デコード（角度へ変換）
+        a0_99 = decode_angle(a0_99);
+        a1_99 = decode_angle(a1_99);
+        % 周波数範囲を指定
+        freq_range = [0.1 20]; % Hz
+        [wt_a0, f_a0] = cwt(a0_99, fs, 'FrequencyLimits', freq_range);
+        [wt_a1, f_a1] = cwt(a1_99, fs, 'FrequencyLimits', freq_range);
+
+        cmax = 8;
+
+        figure;
+        subplot(2,1,1);
+        surf(t99, f_a0, log10(abs(wt_a0)), 'EdgeColor', 'none');
+        surf(t99, f_a0, abs(wt_a0), 'EdgeColor', 'none');
+        set(gca, 'YScale', 'log'); % logスケールに設定
+        axis tight;
+        view(0, 90);
+        %ylim([0.05 inf]); % log軸なので 0 は避ける
+        ylabel('Freq [Hz]');
+        title('e1 Wavelet');
+        clim([0 cmax]);
+        colorbar;
+
+        subplot(2,1,2);
+        surf(t99, f_a1, log10(abs(wt_a1)), 'EdgeColor', 'none');
+        surf(t99, f_a1, abs(wt_a1), 'EdgeColor', 'none');
+        set(gca, 'YScale', 'log'); % logスケールに設定
+        axis tight;
+        view(0, 90);
+        %ylim([0.05 inf]); % log軸なので 0 はNG
+        xlabel('Time (s)');
+        ylabel('Freq [Hz]');
+        title('e2 Wavelet');
+        clim([0 cmax]);
+        colorbar;
+        %saveFigure;
     end
+
+
 end
 
 function corrected_phase = correct_phase_discontinuity(phase_data)
@@ -162,6 +255,78 @@ function corrected_phase = correct_phase_discontinuity(phase_data)
             corrected_phase(i:end) = corrected_phase(i:end) + 256;
         elseif diff > 128
             corrected_phase(i:end) = corrected_phase(i:end) - 256;
+        end
+    end
+end
+
+function df_all = correct_large_jump_matlab(df_all, threshold_sec, jump_sec)
+    % グループ化（agent_id, chunk_id 単位）
+    [G, ~] = findgroups(df_all.agent_id, df_all.chunk_id);
+    fprintf('[INFO] Found %d unique chunks.\n', max(G));
+
+    % 該当ブロックを修正
+    for i = 1:max(G)
+        idx = find(G == i);
+        if isempty(idx)
+            continue;
+        end
+
+        % 時系列を並び替え
+        [~, sorted_idx_rel] = sort(df_all.time_pc_sec_abs(idx));
+        idx = idx(sorted_idx_rel);
+        
+        time_series = df_all.time_pc_sec_abs(idx);
+        time_diff = [0; diff(time_series)];
+
+        jump_idx = find(time_diff > threshold_sec);
+        for j = 1:length(jump_idx)
+            fix_range = jump_idx(j):length(time_series);
+            df_all.time_pc_sec_abs(idx(fix_range)) = df_all.time_pc_sec_abs(idx(fix_range)) - jump_sec;
+            fprintf('[FIX] Corrected overflow at index %d, subtracted %.6f sec.\n', idx(jump_idx(j)), jump_sec);
+        end
+    end
+
+end
+
+function df_all = correct_chunk_start_times_matlab(df_all, threshold_sec, jump_sec)
+
+    [G, chunk_keys] = findgroups(df_all.agent_id, df_all.chunk_id);
+    chunk_start = splitapply(@(x) min(x), df_all.time_pc_sec_abs, G);
+    median_start = median(chunk_start);
+
+    has_chunk_id = size(chunk_keys, 2) >= 2;
+
+    for i = 1:max(G)
+        idx = find(G == i);
+        if isempty(idx)
+            continue;  % 空グループスキップ
+        end
+        start_time = df_all.time_pc_sec_abs(idx(1));
+        if start_time - median_start > threshold_sec
+            df_all.time_pc_sec_abs(idx) = df_all.time_pc_sec_abs(idx) - jump_sec;
+            % agent_id, chunk_idの表示（chunk_idが無い場合も対応）
+            if has_chunk_id
+                aid = chunk_keys(i,1);
+                cid = chunk_keys(i,2);
+            else
+                aid = chunk_keys(i);
+                cid = -1;  % または NaN
+            end
+            fprintf('[FIX] Corrected chunk time for agent %d, chunk %d: %.3f → %.3f\n', ...
+                aid, cid, start_time, start_time - jump_sec);
+        end
+    end
+end
+
+function corrected = correct_large_jump_99(data)
+    % 200以上のジャンプがあれば、その方向に±255補正
+    corrected = double(data);
+    for i = 2:length(corrected)
+        diff = corrected(i) - corrected(i-1);
+        if diff > 200
+            corrected(i:end) = corrected(i:end) - 255;
+        elseif diff < -200
+            corrected(i:end) = corrected(i:end) + 255;
         end
     end
 end

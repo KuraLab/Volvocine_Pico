@@ -41,5 +41,5 @@ if __name__ == "__main__":
             print(f"[ERROR] Selected file not found: {selected_file}")
     else:
         # 最新からn番目のファイルをプロット
-        n = 5  # ここでnを指定
+        n = 3  # ここでnを指定
         plot_nth_latest_file_in_merged_chunks(n)

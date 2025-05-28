@@ -121,8 +121,6 @@ def main():
                 send_list.append(send_micros)
                 recv_list.append(recv_time)
                 agent_buffers[agent_id] = (chunk_data, send_list, recv_list)
-                # データ受信時にlast_addrを更新
-
                 # 最後のレコードの micros24 を取得してACK送信
                 if len(raw) >= RECORD_SIZE:
                     last_record = raw[-RECORD_SIZE:]
