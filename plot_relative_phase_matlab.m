@@ -1,4 +1,4 @@
-function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration, n_seconds, plot_duration)
+function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration)
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -155,7 +155,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     ylim([-pi, pi]);
     yticks(-pi:pi/2:pi);
     yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlim([0 plot_duration]);
+    xlim([0 common_xmax]);
 
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Relative Phase (rad)', 'Interpreter', 'latex');
