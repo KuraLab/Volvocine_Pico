@@ -186,9 +186,7 @@ void logSensorData() {
   unsigned long dt = now - prevLoopEndTime;
   prevLoopEndTime = now;
 
-  // analog1
   int raw1 = analogRead(analogPin1);  // 0..4095
-  // analog2
   int raw2 = analogRead(analogPin2);
 
   // リングバッファにデータを追加

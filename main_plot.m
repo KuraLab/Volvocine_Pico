@@ -11,7 +11,7 @@ function main_plot()
     plot_duration = 900; % 例: 60秒までプロット
 
     % 最新からn番目のファイルをプロット
-    n = 6; % ここでnを指定
+    n = 1; % ここでnを指定
     plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration);
 end
 

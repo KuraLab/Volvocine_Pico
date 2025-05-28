@@ -159,7 +159,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
 
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Relative Phase (rad)', 'Interpreter', 'latex');
-    legend('show', 'Location', 'best', 'Interpreter', 'latex');
+    %legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
     %saveFigure;
