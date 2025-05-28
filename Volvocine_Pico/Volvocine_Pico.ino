@@ -200,8 +200,8 @@ void logSensorData() {
   float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
 
   // サーボ制御
-  phi += (omega + kappa_now * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
-  float currentCos = cosf(phi);
+  phi += kappa_now * cosf(phi - alpha) * flex * (float)dt / 1e6f;
+  float currentCos = cosf(startLoggingMillis * omega + phi);
   myServo.write(110 + 60 * currentCos);
 
   // データ保存は指定された間隔でのみ実行
