@@ -5,7 +5,7 @@ import os
 import numpy as np
 import matplotlib.ticker as ticker  # 目盛りのフォーマット用
 from datetime import datetime
-import pywt  # 追加
+#import pywt  # 追加
 import matplotlib.gridspec as gridspec  # 追加
 
 def plot_chunks(file_list):
