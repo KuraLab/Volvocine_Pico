@@ -50,6 +50,7 @@ bool lastButtonState = false;
 unsigned long startLoggingMillis = 0;
 
 unsigned long prevLoopEndTime = 0;
+unsigned long prevLoopEndTime2 = 0;
 float phi = 0;
 float omega = 3.0f * 3.14f;
 float kappa = 1.0f;  // フィードバックゲイン
@@ -184,6 +185,7 @@ void sendLogBuffer() {
 void logSensorData() {
   unsigned long now = micros();
   unsigned long dt = now - prevLoopEndTime;
+  unsigned long elapsed = now - startLoggingMillis;
   prevLoopEndTime = now;
 
   int raw1 = analogRead(analogPin1);  // 0..4095
@@ -200,7 +202,7 @@ void logSensorData() {
   float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
 
   // サーボ制御
-  phi += (omega + kappa_now * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
+  phi += (kappa_now * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
   float currentCos = cosf(phi);
   myServo.write(110 + 60 * currentCos);
 
@@ -239,9 +241,17 @@ void logSensorData() {
     }
   }
 
+
+  unsigned long now2 = micros();
+  unsigned long dt2 = now2 - prevLoopEndTime2;
   // 周期制御
-  if (dt < CONTROL_PERIOD_US) {
-    delayMicroseconds(CONTROL_PERIOD_US - dt);
+  if (dt2 < CONTROL_PERIOD_US) {
+    delayMicroseconds(CONTROL_PERIOD_US - dt2);
+    prevLoopEndTime2 = micros();
+    //Serial.printf("[INFO] Loop took %lu us (expected %d us)\n", dt2, CONTROL_PERIOD_US);
+  } else{
+    prevLoopEndTime2 = micros();
+    //Serial.printf("[WARN] Loop took too long: %lu us (expected %d us)\n", dt2, CONTROL_PERIOD_US);
   }
 
   // ループカウンタをインクリメント
@@ -294,6 +304,7 @@ void setup() {
 
   Serial.println("[INFO] Ready to log in RAM");
   prevLoopEndTime = micros();
+  prevLoopEndTime2 = prevLoopEndTime;
 
   // 初期状態をオフに設定
   paused = true;
