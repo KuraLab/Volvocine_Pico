@@ -48,6 +48,7 @@ bool lastButtonState = false;
 
 // START受信時のログ開始時刻
 unsigned long startLoggingMillis = 0;
+unsigned long startLoggingMicros = 0;
 
 unsigned long prevLoopEndTime = 0;
 unsigned long prevLoopEndTime2 = 0;
@@ -185,7 +186,7 @@ void sendLogBuffer() {
 void logSensorData() {
   unsigned long now = micros();
   unsigned long dt = now - prevLoopEndTime;
-  unsigned long elapsed = now - startLoggingMillis;
+  unsigned long elapsed = now - startLoggingMicros;
   prevLoopEndTime = now;
 
   int raw1 = analogRead(analogPin1);  // 0..4095
@@ -202,8 +203,8 @@ void logSensorData() {
   float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
 
   // サーボ制御
-  phi += (kappa_now * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
-  float currentCos = cosf(phi);
+  phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * flex) * (float)dt / 1e6f;
+  float currentCos = cosf((float)elapsed / 1e6f * omega + phi);
   myServo.write(110 + 60 * currentCos);
 
   // データ保存は指定された間隔でのみ実行
@@ -213,7 +214,7 @@ void logSensorData() {
     entry.micros24 = now >> 8;  // 24ビットに圧縮
 
     // analog0: phiを [0..2π) → 0..255 に圧縮
-    float phiMod = fmodf(phi, 2.0f * (float)M_PI);
+    float phiMod = fmodf((float)elapsed / 1e6f * omega + phi, 2.0f * (float)M_PI);
     if (phiMod < 0) phiMod += 2.0f * (float)M_PI;
     entry.analog0 = (uint8_t)(phiMod * (255.0f / (2.0f * (float)M_PI)));
 
@@ -323,6 +324,7 @@ void checkControlCommand() {
     if (strcmp(buf, "START") == 0 && paused == true) {
       paused = false;
       startLoggingMillis = millis(); // ログ開始時刻を記録
+      startLoggingMicros = micros(); // ログ開始時刻を記録
       Serial.println("[INFO] Received START command from server.");
     } else if (strcmp(buf, "STOP") == 0 && paused == false) {
       paused = true;
@@ -359,6 +361,7 @@ void loop() {
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
       startLoggingMillis = millis(); // ログ開始時刻を記録
+      startLoggingMicros = micros(); // ログ開始時刻を記録
     }
   }
   lastButtonState = currentButtonState;
