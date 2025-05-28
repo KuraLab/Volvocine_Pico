@@ -5,7 +5,6 @@ import os
 import numpy as np
 import matplotlib.ticker as ticker  # 目盛りのフォーマット用
 from datetime import datetime
-#import pywt  # 追加
 import matplotlib.gridspec as gridspec  # 追加
 
 def plot_chunks(file_list):
@@ -221,11 +220,11 @@ def plot_relativePhase(file_list):
 
     if not df_99.empty:
         # サブプロットを4段＋カラーバー用1列に
-        fig = plt.figure(figsize=(10, 12))
-        gs = gridspec.GridSpec(4, 2, width_ratios=[20, 1], wspace=0.3)
+        fig = plt.figure(figsize=(10, 8))
+        gs = gridspec.GridSpec(2, 2, width_ratios=[20, 1], wspace=0.3)
         # 1列目の4つのAxesをx軸共有で作成
         axs = []
-        for i in range(4):
+        for i in range(2):
             if i == 0:
                 ax = fig.add_subplot(gs[i, 0])
             else:
@@ -259,60 +258,7 @@ def plot_relativePhase(file_list):
         axs[1].legend()
         axs[1].grid(True)
 
-        # --- ここからウェーブレット変換 ---
-        # a0, a1両方のパワーを計算
-        def smooth(x, window=100):
-            return np.convolve(x, np.ones(window)/window, mode='same')
-
-        signal_a0 = smooth(df_99["a0"].values)
-        signal_a1 = smooth(df_99["a1"].values)
-        time_vals = df_99["time_pc_sec_abs"].values
-
-        # サンプリング周期の推定
-        dt = np.median(np.diff(time_vals))
-
-        widths = np.arange(1, 64)
-        frequencies = pywt.scale2frequency('morl', widths) / dt
-
-
-
-        # ウェーブレット変換
-        cwtmatr_a0, _ = pywt.cwt(signal_a0, widths, 'morl', sampling_period=dt)
-        cwtmatr_a1, _ = pywt.cwt(signal_a1, widths, 'morl', sampling_period=dt)
-        power_a0 = np.abs(cwtmatr_a0)
-        power_a1 = np.abs(cwtmatr_a1)
-
-        # a0とa1のパワーを結合してvmin/vmaxを決定
-        all_power = np.concatenate([power_a0.flatten(), power_a1.flatten()])
-        vmin = np.percentile(all_power, 1)
-        vmax = np.percentile(all_power, 90)
-
-        # imshowのextentで縦軸をfrequencyに
-        im0 = axs[2].imshow(power_a0, aspect='auto',
-                            extent=[(df_99["time_pc_sec_abs"]-min_time).min(),
-                                    (df_99["time_pc_sec_abs"]-min_time).max(),
-                                    frequencies[-1], frequencies[0]],
-                            cmap='plasma', vmin=vmin, vmax=vmax)
-        axs[2].set_ylabel("Frequency (Hz)")
-        axs[2].set_title("Wavelet Power (Agent 99 a0)")
-
-        im1 = axs[3].imshow(power_a1, aspect='auto',
-                            extent=[(df_99["time_pc_sec_abs"]-min_time).min(),
-                                    (df_99["time_pc_sec_abs"]-min_time).max(),
-                                    frequencies[-1], frequencies[0]],
-                            cmap='plasma', vmin=vmin, vmax=vmax)
-        axs[3].set_ylabel("Frequency (Hz)")
-        axs[3].set_title("Wavelet Power (Agent 99 a1)")
-        axs[3].set_xlabel("Time (s)")
-
-        axs[0].set_xlim(0, new_time_series[-1])
-        plt.tight_layout()
-
-        # カラーバー用のAxesを作成し、そこにカラーバーを描画
-        cax = fig.add_subplot(gs[2:4, 1])
-        cbar = fig.colorbar(im1, cax=cax, orientation='vertical', label='Power')
-        cbar.ax.tick_params(labelsize=10)
-
+        
         plt.tight_layout()
         plt.show()
     else:

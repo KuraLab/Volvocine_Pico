@@ -200,8 +200,8 @@ void logSensorData() {
   float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
 
   // サーボ制御
-  phi += kappa_now * cosf(phi - alpha) * flex * (float)dt / 1e6f;
-  float currentCos = cosf(startLoggingMillis * omega + phi);
+  phi += (omega + kappa_now * cosf(phi - alpha) * flex) * (float)dt / 1e6f;
+  float currentCos = cosf(phi);
   myServo.write(110 + 60 * currentCos);
 
   // データ保存は指定された間隔でのみ実行
@@ -240,9 +240,8 @@ void logSensorData() {
   }
 
   // 周期制御
-  unsigned long elapsed = micros() - now;
-  if (elapsed < CONTROL_PERIOD_US) {
-    delayMicroseconds(CONTROL_PERIOD_US - elapsed);
+  if (dt < CONTROL_PERIOD_US) {
+    delayMicroseconds(CONTROL_PERIOD_US - dt);
   }
 
   // ループカウンタをインクリメント
