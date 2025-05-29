@@ -332,7 +332,7 @@ void checkControlCommand() {
       startLoggingMicros = micros(); // ログ開始時刻を記録
       Serial.println("[INFO] Received START command from server.");
       t_delay = (rand() / (float)RAND_MAX) * wait_max;
-      delayMicroseconds((unsigned long)(t_delay * 1e6f));
+      startLoggingMicros += (unsigned long)(t_delay * 1e6f);
     } else if (strcmp(buf, "STOP") == 0 && paused == false) {
       paused = true;
       Serial.println("[INFO] Received STOP command from server.");
@@ -368,9 +368,9 @@ void loop() {
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
       startLoggingMillis = millis(); // ログ開始時刻を記録
-      startLoggingMicros = micros(); // ログ開始時刻を記録
+      startLoggingMicros = micros(); // ログ開始時刻を記録 
       t_delay = (rand() / (float)RAND_MAX) * wait_max;
-      delayMicroseconds((unsigned long)(t_delay * 1e6f));
+      startLoggingMicros += (unsigned long)(t_delay * 1e6f);
     }
   }
   lastButtonState = currentButtonState;
