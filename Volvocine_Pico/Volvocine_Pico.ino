@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <tuple> // std::tupleを使用するために必要
+#include <cstdlib>   // rand(), srand()
 #include "agent_config.h"
 #include "ServerUtils.h"
 #include "WiFiManager.h"
@@ -49,6 +50,7 @@ bool lastButtonState = false;
 // START受信時のログ開始時刻
 unsigned long startLoggingMillis = 0;
 unsigned long startLoggingMicros = 0;
+float t_delay;
 
 unsigned long prevLoopEndTime = 0;
 unsigned long prevLoopEndTime2 = 0;
@@ -59,6 +61,8 @@ float kappa_init = 0.0f;
 float kappa_now = 0.0f;
 float alpha = 0.1f;  // 位相遅れ定数
 bool bufferOverflowed = false;
+float wait_max = 2.0f * M_PI / omega;
+
 
 // agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
 int agent_id = 0;
@@ -312,6 +316,7 @@ void setup() {
   logIndex = 0;  // バッファインデックスを初期化
   sendLogBuffer();
   kappa_now = kappa_init;
+  srand(micros());
   Serial.println("[INFO] System is paused. Press the button to start.");
 }
 
@@ -326,6 +331,8 @@ void checkControlCommand() {
       startLoggingMillis = millis(); // ログ開始時刻を記録
       startLoggingMicros = micros(); // ログ開始時刻を記録
       Serial.println("[INFO] Received START command from server.");
+      t_delay = (rand() / (float)RAND_MAX) * wait_max;
+      delayMicroseconds((unsigned long)(t_delay * 1e6f));
     } else if (strcmp(buf, "STOP") == 0 && paused == false) {
       paused = true;
       Serial.println("[INFO] Received STOP command from server.");
@@ -362,6 +369,8 @@ void loop() {
     } else{
       startLoggingMillis = millis(); // ログ開始時刻を記録
       startLoggingMicros = micros(); // ログ開始時刻を記録
+      t_delay = (rand() / (float)RAND_MAX) * wait_max;
+      delayMicroseconds((unsigned long)(t_delay * 1e6f));
     }
   }
   lastButtonState = currentButtonState;
