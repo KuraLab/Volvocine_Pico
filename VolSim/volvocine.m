@@ -1,5 +1,5 @@
 clear;
-N = 5;
+N = 6;
 dt = 0.01;
 time = 20;
 %delay(1,2) = delay(1,2)*1.5;
@@ -17,7 +17,7 @@ shift = 0;
 position = [100 100 500 400];
 
 c1 = 1;      %回転方向
-c2 = 0.0;    %平進方向
+c2 = 0.1;    %平進方向
 
 efficiency = ones(1, N); % 各モジュールの発揮率 (基本は1)
 %efficiency(3) = 0;       % 例: モジュール2が故障している場合
@@ -31,7 +31,7 @@ for i = 2:steps
         for k = 1:N
             % calculateSigma関数を呼び出し (efficiencyを追加)
             Sigma = Sigma - (calculateSigma(k, j, N, c1, c2, thetas, efficiency) * ...
-                sin(q(i-1,j)-q(i-1,k)+pi/4*1.5));
+                sin(q(i-1,j)-q(i-1,k)));
         end
         Sigmas(i-1,j) = Sigma/N;
         q(i-1,j+N) = Omega(1,j) - kappa(1,j)*(Sigma/N);

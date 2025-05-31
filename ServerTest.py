@@ -150,13 +150,15 @@ def main():
                 print("[DEBUG] current_chunk_files cleared.")
             elif key == 's':
                 print("[INFO] Sending START command.")
-                for id in agent_addrs:
-                    send_control_command(sock, agent_addrs[id], "START")
+                for  i in range(1, 5):
+                    for id in agent_addrs:
+                        send_control_command(sock, agent_addrs[id], "START")
 
             elif key == 't':
                 print("[INFO] Sending STOP command.")
-                for id in agent_addrs:
-                    send_control_command(sock, agent_addrs[id], "STOP")
+                for i in range(1, 5):
+                    for id in agent_addrs:
+                        send_control_command(sock, agent_addrs[id], "STOP")
 
             elif key == 'c':
                 print("[INFO] Sending CALIBRATE command to IMU agent_id=99.")
