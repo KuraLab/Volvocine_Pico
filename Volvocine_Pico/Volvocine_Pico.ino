@@ -349,6 +349,16 @@ void loop() {
   if (!paused && (millis() - startLoggingMillis >= 20000)) {
     kappa_now = kappa;
   } 
+  if (!paused && (millis() - startLoggingMillis >= 100000)) {
+    while(millis() - startLoggingMillis <= 180000){
+      delay(1000);
+    }
+    paused = true;
+    Serial.println("[INFO] Received STOP command from server.");
+    sendLogBuffer();
+    logIndex = 0;
+    kappa_now = kappa_init;
+  } 
 
   bool currentButtonState = digitalRead(digitalInputPin);
   if (currentButtonState && !lastButtonState) {
