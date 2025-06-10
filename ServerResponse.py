@@ -2,6 +2,8 @@
 omega = 3.14 * 3  # 周波数
 kappa = 10       # フィードバックゲイン
 alpha = -3.14*0.5       # 位相遅れ定数
+servo_center = 110.0  # サーボ中心角度
+servo_amplitude = 60.0 # サーボ振幅
 
 def handle_handshake(sock, data, addr):
     """
@@ -34,7 +36,7 @@ def handle_parameter_request(sock, data, addr):
             voltage = (analog26 / 4095) * 3.3 * 2
 
             # サーバー側のパラメータを送信
-            response = f"omega:{omega:.2f},kappa:{kappa:.2f},alpha:{alpha:.2f}"
+            response = f"omega:{omega:.2f},kappa:{kappa:.2f},alpha:{alpha:.2f},center:{servo_center:.1f},amplitude:{servo_amplitude:.1f}"
             sock.sendto(response.encode('utf-8'), addr)
             print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Voltage: {voltage:.2f}: {response}")
             return agent_id

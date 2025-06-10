@@ -63,6 +63,10 @@ float alpha = 0.1f;  // 位相遅れ定数
 bool bufferOverflowed = false;
 float wait_max = 2.0f * M_PI / omega;
 
+// サーボ制御用パラメータ (サーバーから受信)
+float servoCenter = 110.0f;    // サーボ中心角度のデフォルト値
+float servoAmplitude = 60.0f; // サーボ振幅のデフォルト値
+
 
 // agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
 int agent_id = 0;
@@ -209,7 +213,7 @@ void logSensorData() {
   // サーボ制御
   phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * flex) * (float)dt / 1e6f;
   float currentCos = cosf((float)elapsed / 1e6f * omega + phi);
-  myServo.write(110 + 60 * currentCos);
+  myServo.write(servoCenter + servoAmplitude * currentCos); // 変更点: 変数を使用
 
   // データ保存は指定された間隔でのみ実行
   if (loopCounter % saveInterval == 0) {
@@ -268,7 +272,7 @@ void setup() {
   Serial.begin(115200);
   analogReadResolution(12);
   myServo.attach(22);
-  myServo.write(80);
+  myServo.write(servoCenter); // 初期位置を中心に設定
 
   // WiFi接続
   connectToWiFi(ssid, password);
@@ -301,11 +305,11 @@ void setup() {
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
-  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
+  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude); // この行はServerUtils側の修正が必要
 
   // サーボモータを真ん中に動かす
-  myServo.write(90);
-  Serial.println("[INFO] Servo moved to center position (90 degrees)");
+  myServo.write(servoCenter); // パラメータ受信後の値で中心に設定
+  Serial.println("[INFO] Servo moved to center position");
 
   Serial.println("[INFO] Ready to log in RAM");
   prevLoopEndTime = micros();
@@ -374,7 +378,8 @@ void loop() {
       kappa_now = kappa_init;
 
       // サーバーにパラメータをリクエスト
-      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
+      // requestParametersFromServer を呼び出す際に、servoCenter と servoAmplitude も渡すように変更してください。
+      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude); // この行はServerUtils側の修正が必要
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
       startLoggingMillis = millis(); // ログ開始時刻を記録
@@ -392,7 +397,8 @@ void loop() {
     }
     Serial.println("[INFO] WiFi connected.");
     
-    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha);
+    // requestParametersFromServer を呼び出す際に、servoCenter と servoAmplitude も渡すように変更してください。
+    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude); // この行はServerUtils側の修正が必要
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }
 

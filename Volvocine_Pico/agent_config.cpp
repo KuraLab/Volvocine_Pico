@@ -22,10 +22,10 @@ int readAgentIdFromFile() {
     return line.toInt(); // ファイルの値をintに変換して返す
 }
 
-void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &alpha) {
+void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &alpha, float &servoCenter, float &servoAmplitude) {
   // デバッグ情報を含むリクエスト文字列を作成
   int analogValue26 = analogRead(26);  // 26ピンのアナログ入力値を取得
-  char requestBuffer[64];
+  char requestBuffer[128]; // バッファサイズを拡張して新しいパラメータに対応
   snprintf(requestBuffer, sizeof(requestBuffer), "REQUEST_PARAMS,id:%d,analog26:%d", agent_id, analogValue26);
 
   // リクエスト送信
@@ -38,12 +38,20 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
   while (millis() - startTime < 2000) {  // 最大2秒待機
     int packetSize = udp.parsePacket();
     if (packetSize) {
-      char buffer[128];
+      char buffer[256]; // 応答バッファサイズを拡張
       int len = udp.read(buffer, sizeof(buffer) - 1);
       if (len > 0) {
         buffer[len] = '\0';  // 文字列終端を追加
-        sscanf(buffer, "omega:%f,kappa:%f,alpha:%f", &omega, &kappa, &alpha);
-        Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, alpha=%.2f\n", omega, kappa, alpha);
+        // sscanfでのパースを修正。新しいパラメータに対応。
+        // 例: "omega:3.14,kappa:10.0,alpha:-1.57,center:110.0,amplitude:60.0"
+        // より堅牢なパース方法として、strtokや手動での文字列処理を検討することもできます。
+        // ここではsscanfの書式文字列を拡張します。
+        int parsed_count = sscanf(buffer, "omega:%f,kappa:%f,alpha:%f,center:%f,amplitude:%f", &omega, &kappa, &alpha, &servoCenter, &servoAmplitude);
+        if (parsed_count == 5) { // 5つのパラメータすべてがパースできたか確認
+            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, alpha=%.2f, center=%.1f, amplitude=%.1f\n", omega, kappa, alpha, servoCenter, servoAmplitude);
+        } else {
+            Serial.printf("[WARN] Failed to parse all parameters. Received: %s\n", buffer);
+        }
         return;
       }
     }
