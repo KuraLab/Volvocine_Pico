@@ -67,6 +67,10 @@ float wait_max = 2.0f * M_PI / omega;
 float servoCenter = 110.0f;    // サーボ中心角度のデフォルト値
 float servoAmplitude = 60.0f; // サーボ振幅のデフォルト値
 
+// 停止制御用パラメータ (サーバーから受信)
+int stopAgentId = 0; // 停止対象のエージェントID (0は特殊な意味を持つ場合など)
+int stopDelaySeconds = 0; // 停止までの秒数
+
 
 // agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
 int agent_id = 0;
@@ -305,7 +309,7 @@ void setup() {
   agent_id = readAgentIdFromFile(); // ユーザ実装の想定
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
-  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude); // この行はServerUtils側の修正が必要
+  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
 
   // サーボモータを真ん中に動かす
   myServo.write(servoCenter); // パラメータ受信後の値で中心に設定
@@ -350,19 +354,39 @@ void checkControlCommand() {
 void loop() {
   checkControlCommand();
 
-  if (!paused && (millis() - startLoggingMillis >= 20000)) {
-    kappa_now = kappa;
-  } 
-  if (!paused && (millis() - startLoggingMillis >= 100000)) {
-    while(millis() - startLoggingMillis <= 180000){
-      delay(1000);
+  // サーバーからのパラメータに基づく停止処理
+  if (!paused && stopAgentId == agent_id && stopAgentId != 0 && stopDelaySeconds > 0 && (millis() - startLoggingMillis >= (unsigned long)stopDelaySeconds * 1000)) {
+    Serial.printf("[INFO] Agent %d stopping as per server: finalization phase (triggered after %d s).\\n", agent_id, stopDelaySeconds);
+    
+    // ファイナライズ期間は、ログ開始 (startLoggingMillis) から最大180秒後まで。
+    unsigned long finalizationEndTime = startLoggingMillis + 180000UL; 
+
+    // 現在時刻がファイナライズ終了時刻より前の場合のみ待機
+    if (millis() < finalizationEndTime) {
+        Serial.printf("[INFO] Entering finalization wait. Current: %lu, Target end: %lu (from startLoggingMillis: %lu)\\n", millis(), finalizationEndTime, startLoggingMillis);
+        while(millis() < finalizationEndTime){
+            delay(1000); 
+        }
+        Serial.println("[INFO] Finalization wait period finished.");
+    } else {
+        Serial.println("[INFO] Finalization period already passed or not applicable at stop trigger.");
     }
+
     paused = true;
-    Serial.println("[INFO] Received STOP command from server.");
+    Serial.println("[INFO] Operation paused. Sending final log buffer.");
     sendLogBuffer();
     logIndex = 0;
-    kappa_now = kappa_init;
-  } 
+    kappa_now = kappa_init; // kappaを初期値に戻す
+    
+    Serial.println("[INFO] Resetting stop parameters (stopAgentId, stopDelaySeconds) to prevent re-triggering.");
+    stopAgentId = 0; 
+    stopDelaySeconds = 0;
+  }
+
+  // kappaの更新ロジック (これは元のまま)
+  if (!paused && (millis() - startLoggingMillis >= 20000)) {
+    kappa_now = kappa;
+  }
 
   bool currentButtonState = digitalRead(digitalInputPin);
   if (currentButtonState && !lastButtonState) {
@@ -378,8 +402,7 @@ void loop() {
       kappa_now = kappa_init;
 
       // サーバーにパラメータをリクエスト
-      // requestParametersFromServer を呼び出す際に、servoCenter と servoAmplitude も渡すように変更してください。
-      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude); // この行はServerUtils側の修正が必要
+      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
       startLoggingMillis = millis(); // ログ開始時刻を記録
@@ -391,14 +414,13 @@ void loop() {
   lastButtonState = currentButtonState;
 
   // ポーズ中に一定間隔でパラメータをリクエスト
-  if (paused && millis() - lastRequestTime >= 30000) {
+  if (paused && millis() - lastRequestTime >= 10000) {
     while (WiFi.status() != WL_CONNECTED) {
       connectToWiFi(ssid, password);
     }
     Serial.println("[INFO] WiFi connected.");
     
-    // requestParametersFromServer を呼び出す際に、servoCenter と servoAmplitude も渡すように変更してください。
-    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude); // この行はServerUtils側の修正が必要
+    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }
 

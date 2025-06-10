@@ -22,7 +22,7 @@ int readAgentIdFromFile() {
     return line.toInt(); // ファイルの値をintに変換して返す
 }
 
-void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &alpha, float &servoCenter, float &servoAmplitude) {
+void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &alpha, float &servoCenter, float &servoAmplitude, int &stopAgentId, int &stopDelaySeconds) {
   // デバッグ情報を含むリクエスト文字列を作成
   int analogValue26 = analogRead(26);  // 26ピンのアナログ入力値を取得
   char requestBuffer[128]; // バッファサイズを拡張して新しいパラメータに対応
@@ -43,14 +43,12 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
       if (len > 0) {
         buffer[len] = '\0';  // 文字列終端を追加
         // sscanfでのパースを修正。新しいパラメータに対応。
-        // 例: "omega:3.14,kappa:10.0,alpha:-1.57,center:110.0,amplitude:60.0"
-        // より堅牢なパース方法として、strtokや手動での文字列処理を検討することもできます。
-        // ここではsscanfの書式文字列を拡張します。
-        int parsed_count = sscanf(buffer, "omega:%f,kappa:%f,alpha:%f,center:%f,amplitude:%f", &omega, &kappa, &alpha, &servoCenter, &servoAmplitude);
-        if (parsed_count == 5) { // 5つのパラメータすべてがパースできたか確認
-            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, alpha=%.2f, center=%.1f, amplitude=%.1f\n", omega, kappa, alpha, servoCenter, servoAmplitude);
+        // 例: "omega:3.14,kappa:10.0,alpha:-1.57,center:110.0,amplitude:60.0,stop_id:2,stop_delay:100"
+        int parsed_count = sscanf(buffer, "omega:%f,kappa:%f,alpha:%f,center:%f,amplitude:%f,stop_id:%d,stop_delay:%d", &omega, &kappa, &alpha, &servoCenter, &servoAmplitude, &stopAgentId, &stopDelaySeconds);
+        if (parsed_count == 7) { // 7つのパラメータすべてがパースできたか確認
+            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, alpha=%.2f, center=%.1f, amplitude=%.1f, stop_id=%d, stop_delay=%d\n", omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
         } else {
-            Serial.printf("[WARN] Failed to parse all parameters. Received: %s\n", buffer);
+            Serial.printf("[WARN] Failed to parse all parameters. Received: %s (parsed %d)\n", buffer, parsed_count);
         }
         return;
       }
