@@ -10,12 +10,16 @@ function main_plot()
     % 何秒目までプロットするか
     plot_duration = 900; % 例: 60秒までプロット
 
+    % 許容する欠損エージェント数
+    allow_missing_agents = 0; % 欠損許容数
+    do_save_figure = true;   % ← ここで保存有無を指定
+
     % 最新からn番目のファイルをプロット
-    n = 1; % ここでnを指定
-    plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration);
+    n = 19; % ここでnを指定
+    plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure);
 end
 
-function plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration)
+function plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure)
     % ディレクトリが存在するか確認
     if ~isfolder(directory)
         fprintf('[ERROR] Directory not found: %s\n', directory);
@@ -44,5 +48,5 @@ function plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, p
     fprintf('[INFO] %dth latest file found: %s\n', n, nth_file);
 
     % プロット関数を呼び出し
-    plot_relative_phase_matlab(nth_file, [], n_seconds_to_cut, plot_duration);
+    plot_relative_phase_matlab(nth_file, [], n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure);
 end

@@ -1,4 +1,4 @@
-function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration)
+function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration, allow_missing_agents, do_save_figure)
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -62,28 +62,38 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     min_time = min(df_main.time_pc_sec_abs);
     max_time = max(df_main.time_pc_sec_abs);
 
-    % 各エージェントの時間範囲を調整
+    % 各エージェントの時間範囲を取得
     agents = unique(df_main.agent_id);
+    agent_ranges = zeros(length(agents), 2);
     for i = 1:length(agents)
         agent_id = agents(i);
         sub = df_main(df_main.agent_id == agent_id, :);
-        min_time = max(min_time, min(sub.time_pc_sec_abs));
-        max_time = min(max_time, max(sub.time_pc_sec_abs));
+        agent_ranges(i, 1) = min(sub.time_pc_sec_abs);
+        agent_ranges(i, 2) = max(sub.time_pc_sec_abs);
     end
 
-    if min_time >= max_time
-        disp(['[INFO] No overlapping time range for agents. min_time=', num2str(min_time), ', max_time=', num2str(max_time)]);
-        return;
+    % --- ここから修正 ---
+    if nargin < 5 || isempty(allow_missing_agents)
+        allow_missing_agents = 0; % デフォルトは全員そろっている範囲
+    end
+    n = allow_missing_agents; % 欠損許容数
+
+    new_time_series = (min_time:0.01:max_time) - min_time; % 仮の全範囲
+
+    % 各時刻で有効なエージェント数をカウント
+    valid_counts = zeros(size(new_time_series));
+    for t_idx = 1:length(new_time_series)
+        t_abs = new_time_series(t_idx) + min_time;
+        valid_counts(t_idx) = sum(agent_ranges(:,1) <= t_abs & agent_ranges(:,2) >= t_abs);
     end
 
-    % 最初のn秒をカット
-    start_time = min_time + n_seconds;
-    if start_time >= max_time
-        disp('[INFO] Specified n_seconds exceeds the available time range.');
-        return;
-    end
+    % 「全体-n個」以上データがある時刻だけ抽出
+    min_valid = length(agents) - n;
+    valid_idx = find(valid_counts >= min_valid);
 
-    new_time_series = (start_time:0.01:max_time) - start_time; % n秒後を基準にシフト
+    % その範囲だけを使う
+    new_time_series = new_time_series(valid_idx);
+    % --- 以降、new_time_seriesを使って補間・プロット ---
 
     % 線形補間で位相データを再定義（99以外のみ）
     interpolated_data = struct();
@@ -94,8 +104,18 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         sub.a0 = correct_phase_discontinuity(sub.a0);
         [unique_times, ia] = unique(sub.time_pc_sec_abs);
         sub = sub(ia, :);
+
+        % 有効な範囲を取得
+        t_min = min(sub.time_pc_sec_abs) - min_time;
+        t_max = max(sub.time_pc_sec_abs) - min_time;
+
+        % new_time_seriesのうち有効な範囲だけ補間
+        valid_mask = (new_time_series >= t_min) & (new_time_series <= t_max);
+        interp_a0 = nan(size(new_time_series));
+        interp_a0(valid_mask) = interp1(sub.time_pc_sec_abs - min_time, sub.a0, new_time_series(valid_mask), 'linear', 'extrap');
+
         interpolated_data(agent_id).time = new_time_series;
-        interpolated_data(agent_id).a0 = interp1(sub.time_pc_sec_abs - start_time, sub.a0, new_time_series, 'linear', 'extrap');
+        interpolated_data(agent_id).a0 = interp_a0;
     end
 
     % 基準エージェントの選択
@@ -109,7 +129,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
 
     % Agent99 a0/a1プロット用の最大時刻
     if ~isempty(df_99)
-        max_time_99 = max(df_99.time_pc_sec_abs - start_time);
+        max_time_99 = max(df_99.time_pc_sec_abs - min_time);
     else
         max_time_99 = inf; % データがなければ無限大扱い
     end
@@ -162,12 +182,14 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     %legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
-    saveFigure;
+    if exist('do_save_figure','var') && do_save_figure
+        saveFigure;
+    end
     hold off;
 
     % --- Agent99 a0/a1プロット ---
     if ~isempty(df_99)
-        t99_all = df_99.time_pc_sec_abs - start_time;
+        t99_all = df_99.time_pc_sec_abs - min_time;
         a0_99_all = correct_large_jump_99(df_99.a0);
         a1_99_all = correct_large_jump_99(df_99.a1);
 
@@ -195,7 +217,9 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         xlabel('Time (s)');
         xlim([0, common_xmax]);
         tuneFigure;
-        saveFigure;
+        if exist('do_save_figure','var') && do_save_figure
+            saveFigure;
+        end
         hold off;
 
         % --- Agent99 a0/a1のウェーブレット変換プロット ---
@@ -240,7 +264,10 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         title('e2 Wavelet');
         clim([0 cmax]);
         colorbar;
-        saveFigure;
+        %tuneFigure;
+        if exist('do_save_figure','var') && do_save_figure
+            saveFigure;
+        end
     end
 
 
