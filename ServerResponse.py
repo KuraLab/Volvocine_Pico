@@ -2,10 +2,10 @@
 omega = 3.14 * 3  # 周波数
 kappa = 10       # フィードバックゲイン
 alpha = -3.14*0.5       # 位相遅れ定数
-servo_center = 110.0  # サーボ中心角度
-servo_amplitude = 60.0 # サーボ振幅
-stop_agent_id = 2      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
-stop_delay_seconds = 100 # 停止までの秒数
+servo_center = 130.0  # サーボ中心角度
+servo_amplitude = 50.0 # サーボ振幅
+stop_agent_id = 0      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
+stop_delay_seconds = 0 # 停止までの秒数
 
 def handle_handshake(sock, data, addr):
     """
