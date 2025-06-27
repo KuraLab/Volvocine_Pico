@@ -1,4 +1,4 @@
-function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration, allow_missing_agents, do_save_figure)
+function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size)
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -76,6 +76,12 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     if nargin < 5 || isempty(allow_missing_agents)
         allow_missing_agents = 0; % デフォルトは全員そろっている範囲
     end
+    if nargin < 7 || isempty(apply_filter)
+        apply_filter = false; % デフォルトはフィルタ無効
+    end
+    if nargin < 8 || isempty(filter_window_size)
+        filter_window_size = 50; % デフォルトの窓サイズ
+    end
     n = allow_missing_agents; % 欠損許容数
 
     new_time_series = (min_time:0.01:max_time) - min_time; % 仮の全範囲
@@ -102,7 +108,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         sub = df_main(df_main.agent_id == agent_id, :);
         sub = sortrows(sub, 'time_pc_sec_abs');
         sub.a0 = correct_phase_discontinuity(sub.a0);
-        [unique_times, ia] = unique(sub.time_pc_sec_abs);
+        [~, ia] = unique(sub.time_pc_sec_abs);
         sub = sub(ia, :);
 
         % 有効な範囲を取得
@@ -113,6 +119,11 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         valid_mask = (new_time_series >= t_min) & (new_time_series <= t_max);
         interp_a0 = nan(size(new_time_series));
         interp_a0(valid_mask) = interp1(sub.time_pc_sec_abs - min_time, sub.a0, new_time_series(valid_mask), 'linear', 'extrap');
+
+        % フィルタ適用（指定されている場合）
+        if apply_filter
+            interp_a0 = movmean(interp_a0, filter_window_size, 'omitnan');
+        end
 
         interpolated_data(agent_id).time = new_time_series;
         interpolated_data(agent_id).a0 = interp_a0;
@@ -146,7 +157,8 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     colors = lines(length(agents));
 
     % 基準エージェント (id1 - id1) のプロット
-    plot(new_time_series, zeros(size(new_time_series)), 'DisplayName', ['Agent ', num2str(base_agent_id), ' - Agent ', num2str(base_agent_id)], 'Color', colors(1, :));
+    %plot(new_time_series, zeros(size(new_time_series)), 'DisplayName', ['Agent ', num2str(base_agent_id), ' - Agent ', num2str(base_agent_id)], 'Color', colors(1, :));
+    plot(new_time_series, zeros(size(new_time_series)), 'DisplayName', ['Agent ', num2str(base_agent_id)], 'Color', colors(1, :));
 
     % 他のエージェントとの相対位相差をプロット
     for i = 1:length(agents)
@@ -168,7 +180,8 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         end
 
         % プロット
-        plot(interpolated_data(agent_id).time, phase_diff_with_nan, 'DisplayName', ['Agent ', num2str(agent_id), ' - Agent ', num2str(base_agent_id)], 'Color', colors(i, :));
+        %plot(interpolated_data(agent_id).time, phase_diff_with_nan, 'DisplayName', ['Agent ', num2str(agent_id), ' - Agent ', num2str(base_agent_id)], 'Color', colors(i, :));
+        plot(interpolated_data(agent_id).time, phase_diff_with_nan, 'DisplayName', ['Agent ', num2str(agent_id)], 'Color', colors(i, :));
     end
 
     % 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
@@ -194,7 +207,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         a1_99_all = correct_large_jump_99(df_99.a1);
 
         % スムージング（5点移動平均）
-        windowsize = 5;
+        windowsize = 1;
         a0_99_smooth = movmean(a0_99_all, windowsize);
         a1_99_smooth = movmean(a1_99_all, windowsize);
 
@@ -237,7 +250,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         [wt_a0, f_a0] = cwt(a0_99, fs, 'FrequencyLimits', freq_range);
         [wt_a1, f_a1] = cwt(a1_99, fs, 'FrequencyLimits', freq_range);
 
-        cmax = 4;
+        cmax = 2;
 
         figure;
         subplot(2,1,1);

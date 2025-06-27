@@ -1,7 +1,7 @@
 clear;
 N = 6;
 dt = 0.01;
-time = 20;
+time = 30;
 %delay(1,2) = delay(1,2)*1.5;
 steps = time/dt;
 q = zeros(steps,N*2);
@@ -17,7 +17,7 @@ shift = 0;
 position = [100 100 500 400];
 
 c1 = 1;      %回転方向
-c2 = 0.1;    %平進方向
+c2 = 0.0;    %平進方向
 
 efficiency = ones(1, N); % 各モジュールの発揮率 (基本は1)
 %efficiency(3) = 0;       % 例: モジュール2が故障している場合
