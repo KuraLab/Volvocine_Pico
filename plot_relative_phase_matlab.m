@@ -224,7 +224,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         %plot(t99_all, a1_99_all, 'Color', [0.85 0.325 0.098], 'DisplayName', 'Agent 99 a1 (raw)');
         plot(t99_all, a0_99_deg, 'Color', [0 0.447 0.741], 'DisplayName', 'e1');
         plot(t99_all, a1_99_deg, 'Color', [0.85 0.325 0.098], 'DisplayName', 'e2');
-        ylabel('Agent99 a0/a1');
+        ylabel('Euler angle $$e_1$$, $$e_2$$ (deg)', 'Interpreter', 'latex');
         legend('show');
         grid on;
         xlabel('Time (s)');
@@ -250,7 +250,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         [wt_a0, f_a0] = cwt(a0_99, fs, 'FrequencyLimits', freq_range);
         [wt_a1, f_a1] = cwt(a1_99, fs, 'FrequencyLimits', freq_range);
 
-        cmax = 2;
+        cmax = 3;
 
         figure;
         subplot(2,1,1);
