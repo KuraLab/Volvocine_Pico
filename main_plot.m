@@ -16,10 +16,10 @@ function main_plot()
     
     % 平均化フィルタの設定
     apply_filter = true;      % フィルタ適用の有無
-    filter_window_size = 1;  % フィルタ窓サイズ
+    filter_window_size = 10;  % フィルタ窓サイズ
 
     % 最新からn番目のファイルをプロット
-    n = 2; % ここでnを指定
+    n = 3; % ここでnを指定
     plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size);
 end
 
