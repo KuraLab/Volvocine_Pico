@@ -1,10 +1,10 @@
 # サーバー側で管理するパラメータ
 omega = 3.14 * 3  # 周波数
-kappa = 3       # フィードバックゲイン
-alpha = -3.14*0.5       # 位相遅れ定数
+kappa = 10       # フィードバックゲイン
+alpha = -3.14*0.35       # 位相遅れ定数
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 50.0 # サーボ振幅
-stop_agent_id = 3      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
+stop_agent_id = 4      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
 stop_delay_seconds = 90 # 停止までの秒数
 
 def handle_handshake(sock, data, addr):
