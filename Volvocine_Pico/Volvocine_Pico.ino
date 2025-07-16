@@ -17,8 +17,8 @@
 #endif
 
 // WiFi設定
-const char* ssid = "Buffalo-G-4510";
-const char* password = "33354682";
+const char* ssid = "Buffalo-G-7EF4";
+const char* password = "76533631";
 
 // UDP設定
 IPAddress serverIP(192, 168, 13, 98);
