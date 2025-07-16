@@ -8,18 +8,18 @@ function main_plot()
     n_seconds_to_cut = 0; % プロット時に最初のn秒をカット
 
     % 何秒目までプロットするか
-    plot_duration = 165; % 例: 60秒までプロット
+    plot_duration = 183; % 例: 60秒までプロット
 
     % 許容する欠損エージェント数
     allow_missing_agents = 1; % 欠損許容数
-    do_save_figure = false;   % ← ここで保存有無を指定
+    do_save_figure = true;   % ← ここで保存有無を指定
     
     % 平均化フィルタの設定
     apply_filter = true;      % フィルタ適用の有無
     filter_window_size = 10;  % フィルタ窓サイズ
 
     % 最新からn番目のファイルをプロット
-    n = 8; % ここでnを指定
+    n = 1; % ここでnを指定
     plot_nth_latest_file_in_merged_chunks(n, directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size);
 end
 
