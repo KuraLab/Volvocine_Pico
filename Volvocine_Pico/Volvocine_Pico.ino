@@ -384,7 +384,7 @@ void loop() {
   }
 
   // kappaの更新ロジック (これは元のまま)
-  if (!paused && (millis() - startLoggingMillis >= 20000)) {
+  if (!paused && (millis() - startLoggingMillis >= 5000)) {
     kappa_now = kappa;
   }
 
