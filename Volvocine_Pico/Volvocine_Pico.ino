@@ -62,6 +62,7 @@ float kappa_now = 0.0f;
 float alpha = 0.1f;  // 位相遅れ定数
 bool bufferOverflowed = false;
 float wait_max = 2.0f * M_PI / omega;
+float previousFlex = 0.0f; // 前回のフレックスセンサ値
 
 // サーボ制御用パラメータ (サーバーから受信)
 float servoCenter = 110.0f;    // サーボ中心角度のデフォルト値
@@ -213,9 +214,11 @@ void logSensorData() {
 
   // 正規化
   float flex = normalize((float)raw2 / 4095.0f, lowerValue, upperValue);
+  float dflex = (flex - previousFlex)/dt; // 前回との差分
+  previousFlex = flex; // 前回の値を更新
 
   // サーボ制御
-  phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * flex) * (float)dt / 1e6f;
+  phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * dflex) * (float)dt / 1e6f;
   float currentCos = cosf((float)elapsed / 1e6f * omega + phi);
   myServo.write(servoCenter + servoAmplitude * currentCos); // 変更点: 変数を使用
 
