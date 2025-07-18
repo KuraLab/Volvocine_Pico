@@ -12,7 +12,7 @@ function main_plot()
 
     % 許容する欠損エージェント数
     allow_missing_agents = 1; % 欠損許容数
-    do_save_figure = true;   % ← ここで保存有無を指定
+    do_save_figure = false;   % ← ここで保存有無を指定
     
     % 平均化フィルタの設定
     apply_filter = true;      % フィルタ適用の有無

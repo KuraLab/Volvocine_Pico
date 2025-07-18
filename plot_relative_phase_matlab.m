@@ -167,6 +167,9 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
             continue;
         end
 
+        if i == 4
+            interpolated_data(agent_id).a0 = interpolated_data(agent_id).a0 + 30*ones(size(phase_diff));
+        end
         % 相対位相差を計算
         phase_diff = mod(interpolated_data(agent_id).a0 - base_agent_a0 + 128, 256) - 128;
         phase_diff = phase_diff * (2 * pi / 256); % 縦軸のデータを 2π/256 でスケール
