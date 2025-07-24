@@ -43,6 +43,7 @@ agent_queues = {}  # agent_id -> queue.Queue
 agent_threads = {}  # agent_id -> threading.Thread
 agent_locks = {}  # agent_id -> threading.Lock
 shutdown_event = threading.Event()  # シャットダウン用イベント
+chunk_files_lock = threading.Lock()  # current_chunk_files用のロック
 
 
 # ---------------------------
@@ -111,13 +112,15 @@ def main():
                             if data:
                                 _, saved_file = build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
                                 if saved_file:
-                                    current_chunk_files.append(saved_file)
+                                    with chunk_files_lock:
+                                        current_chunk_files.append(saved_file)
                             agent_buffers[ag_id] = ([], [], [])
-                merged_path = merge_and_save_chunks_by_date(current_chunk_files)
+                with chunk_files_lock:
+                    merged_path = merge_and_save_chunks_by_date(current_chunk_files.copy())
+                    current_chunk_files.clear()
                 print("[INFO] Merged and saved chunks by date.")
                 if merged_path:
                     plot_chunks(merged_path)
-                current_chunk_files.clear()
                 print("[DEBUG] current_chunk_files cleared.")
             elif key == 's':
                 print("[INFO] Sending START command.")
@@ -155,14 +158,15 @@ def main():
             if data:
                 _, saved_file = build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
                 if saved_file:
-                    current_chunk_files.append(saved_file)
+                    with chunk_files_lock:
+                        current_chunk_files.append(saved_file)
 
-        if current_chunk_files:
-            merged_path = merge_and_save_chunks_by_date(current_chunk_files)
-            if merged_path:
-                plot_chunks(merged_path)
-        
-        current_chunk_files.clear()
+        with chunk_files_lock:
+            if current_chunk_files:
+                merged_path = merge_and_save_chunks_by_date(current_chunk_files.copy())
+                if merged_path:
+                    plot_chunks(merged_path)
+            current_chunk_files.clear()
         print("[DEBUG] current_chunk_files cleared.")
         print("[INFO] Exit complete.")
 
@@ -229,10 +233,8 @@ def agent_worker(agent_id):
             if data_item is None:  # シャットダウンシグナル
                 break
                 
-            packet_data, recv_time, addr, sock = data_item
-            
             # データ処理
-            process_agent_packet(agent_id, packet_data, recv_time, addr, sock)
+            process_agent_packet(agent_id, data_item)
             
             agent_queues[agent_id].task_done()
             
@@ -246,9 +248,9 @@ def agent_worker(agent_id):
     
     print(f"[INFO] Worker thread for agent {agent_id} stopped")
 
-def process_agent_packet(agent_id, packet_data, recv_time, addr, sock):
+def process_agent_packet(agent_id, data_item):
     """エージェントのパケットを処理"""
-    data, recv_time, addr, sock = packet_data
+    data, recv_time, addr, sock = data_item
     
     # データ検証
     if len(data) < 5:
@@ -309,7 +311,8 @@ def check_chunk_timeout(agent_id):
                 if chunk_data:
                     _, saved_file = build_dataframe_for_chunk(agent_id, chunk_data, send_list, recv_list)
                     if saved_file:
-                        current_chunk_files.append(saved_file)
+                        with chunk_files_lock:
+                            current_chunk_files.append(saved_file)
                 agent_buffers[agent_id] = ([], [], [])
 
 def ensure_agent_thread(agent_id):
