@@ -24,6 +24,11 @@ RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 6 bytes
 SAVE_FOLDER = "saved_chunks"  # 保存用フォルダ名
 MERGED_BASE_FOLDER = "merged_chunks_organized"  # マージファイル保存用ベースフォルダ
 
+# ログレベル設定
+DEBUG_LOGS = False  # Trueにするとデバッグログが表示される
+TIMEOUT_LOGS = False  # Trueにするとタイムアウトログが詳細表示される
+# 必要に応じて上記の設定をTrueに変更してください
+
 # 保存用フォルダを作成（存在しない場合のみ）
 if not os.path.exists(SAVE_FOLDER):
     os.makedirs(SAVE_FOLDER)
@@ -223,7 +228,8 @@ def merge_and_save_chunks_by_date(chunk_files):
 # ---------------------------
 def agent_worker(agent_id):
     """エージェント専用のワーカースレッド"""
-    print(f"[INFO] Started worker thread for agent {agent_id}")
+    if DEBUG_LOGS:
+        print(f"[DEBUG] Started worker thread for agent {agent_id}")
     
     while not shutdown_event.is_set():
         try:
@@ -246,7 +252,8 @@ def agent_worker(agent_id):
             print(f"[ERROR] Error in agent {agent_id} worker: {e}")
             continue
     
-    print(f"[INFO] Worker thread for agent {agent_id} stopped")
+    if DEBUG_LOGS:
+        print(f"[DEBUG] Worker thread for agent {agent_id} stopped")
 
 def process_agent_packet(agent_id, data_item):
     """エージェントのパケットを処理"""
@@ -272,8 +279,9 @@ def process_agent_packet(agent_id, data_item):
         chunk_data, send_list, recv_list = agent_buffers[agent_id]
         
         offset_sec = recv_time - ((((send_micros >> 8) % 16777216) << 8) / 1e6)
-        print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, "
-              f"recv_time={recv_time:.6f}, offset_sec={offset_sec:.6f}")
+        if DEBUG_LOGS:
+            print(f"[DEBUG] Agent={agent_id}, send_micros={send_micros}, "
+                  f"recv_time={recv_time:.6f}, offset_sec={offset_sec:.6f}")
         
         for i in range(len(raw) // RECORD_SIZE):
             record = raw[i*RECORD_SIZE:(i+1)*RECORD_SIZE]
@@ -306,9 +314,12 @@ def check_chunk_timeout(agent_id):
     with agent_locks[agent_id]:
         if agent_id in agent_lastrecv_time:
             if (current_time - agent_lastrecv_time[agent_id]) > CHUNK_TIMEOUT:
-                print(f"[INFO] Agent {agent_id} chunk timeout.")
+                # タイムアウト時の処理を実行
                 chunk_data, send_list, recv_list = agent_buffers[agent_id]
                 if chunk_data:
+                    # データがある場合のみログ出力（設定に応じて）
+                    if TIMEOUT_LOGS:
+                        print(f"[DEBUG] Agent {agent_id} chunk timeout - saving {len(chunk_data)} records.")
                     _, saved_file = build_dataframe_for_chunk(agent_id, chunk_data, send_list, recv_list)
                     if saved_file:
                         with chunk_files_lock:
@@ -326,7 +337,8 @@ def ensure_agent_thread(agent_id):
         thread.start()
         agent_threads[agent_id] = thread
         
-        print(f"[INFO] Created worker thread for agent {agent_id}")
+        if DEBUG_LOGS:
+            print(f"[DEBUG] Created worker thread for agent {agent_id}")
 
 def shutdown_all_threads():
     """すべてのエージェントスレッドを終了"""
