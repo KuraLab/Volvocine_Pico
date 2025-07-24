@@ -20,10 +20,14 @@ STRUCT_FORMAT = "<6B"  # micros24 (3バイト), a0, a1, a2
 RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 6 bytes
 
 SAVE_FOLDER = "saved_chunks"  # 保存用フォルダ名
+MERGED_BASE_FOLDER = "merged_chunks_organized"  # マージファイル保存用ベースフォルダ
 
 # 保存用フォルダを作成（存在しない場合のみ）
 if not os.path.exists(SAVE_FOLDER):
     os.makedirs(SAVE_FOLDER)
+
+if not os.path.exists(MERGED_BASE_FOLDER):
+    os.makedirs(MERGED_BASE_FOLDER)
 
 agent_buffers = {}  # agent_id -> (chunk_data, send_micros_list, recv_time_list)
 agent_lastrecv_time = {}
@@ -139,9 +143,10 @@ def main():
                         if saved_file:
                             current_chunk_files.append(saved_file)  # 保存されたファイルを追跡
                     agent_buffers[ag_id] = ([], [], [])
-                merged_path = merge_and_save_chunks(current_chunk_files)
-                print("[INFO] Merged and saved chunks.")
-                plot_chunks(merged_path)
+                merged_path = merge_and_save_chunks_by_date(current_chunk_files)  # 新しい関数を使用
+                print("[INFO] Merged and saved chunks by date.")
+                if merged_path:
+                    plot_chunks(merged_path)
                 current_chunk_files.clear()
                 print("[DEBUG] current_chunk_files cleared.")
             elif key == 's':
@@ -172,13 +177,66 @@ def main():
 
         for ag_id, (data, send_list, recv_list) in agent_buffers.items():
             if data:
-                build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
+                _, saved_file = build_dataframe_for_chunk(ag_id, data, send_list, recv_list)
+                if saved_file:
+                    current_chunk_files.append(saved_file)
 
-        plot_chunks(current_chunk_files)
-        merge_and_save_chunks(current_chunk_files)
+        if current_chunk_files:
+            merged_path = merge_and_save_chunks_by_date(current_chunk_files)  # 新しい関数を使用
+            if merged_path:
+                plot_chunks(merged_path)
+        
         current_chunk_files.clear()
         print("[DEBUG] current_chunk_files cleared.")
         print("[INFO] Exit complete.")
+
+def get_date_folder():
+    """現在の日付に基づいてフォルダパスを取得・作成"""
+    from datetime import datetime
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    date_folder = os.path.join(MERGED_BASE_FOLDER, today)
+    
+    # 日付フォルダを作成（存在しない場合のみ）
+    if not os.path.exists(date_folder):
+        os.makedirs(date_folder)
+        print(f"[INFO] Created date folder: {date_folder}")
+    
+    return date_folder
+
+def merge_and_save_chunks_by_date(chunk_files):
+    """日付ごとのフォルダにマージファイルを保存"""
+    if not chunk_files:
+        print("[WARN] No chunk files to merge.")
+        return None
+    
+    try:
+        # 日付フォルダを取得
+        date_folder = get_date_folder()
+        
+        # ChunkProcessorのmerge_and_save_chunksを呼び出し、
+        # 保存先を日付フォルダに変更
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        merged_filename = f"merged_{timestamp}.csv"
+        merged_path = os.path.join(date_folder, merged_filename)
+        
+        # 元のmerge_and_save_chunks関数を使用し、結果を日付フォルダに移動
+        temp_merged_path = merge_and_save_chunks(chunk_files)
+        
+        if temp_merged_path and os.path.exists(temp_merged_path):
+            # ファイルを日付フォルダに移動
+            import shutil
+            shutil.move(temp_merged_path, merged_path)
+            print(f"[INFO] Moved merged file to: {merged_path}")
+            return merged_path
+        else:
+            print("[WARN] merge_and_save_chunks returned no valid file.")
+            return None
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to merge and save chunks by date: {e}")
+        return None
 
 if __name__ == "__main__":
     main()

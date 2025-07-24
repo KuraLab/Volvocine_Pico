@@ -19,7 +19,7 @@ function main_plot()
 
     % 平均化フィルタの設定
     apply_filter = true;      % フィルタ適用の有無
-    filter_window_size = 10;  % フィルタ窓サイズ
+    filter_window_size = 1;  % フィルタ窓サイズ
 
     % 最新からn番目のファイルをプロット
     n = 10; % ここでnを指定
