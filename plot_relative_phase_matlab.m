@@ -167,9 +167,9 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
             continue;
         end
 
-        if i == 4
-            interpolated_data(agent_id).a0 = interpolated_data(agent_id).a0 + 30*ones(size(phase_diff));
-        end
+        %if i == 4
+        %    interpolated_data(agent_id).a0 = interpolated_data(agent_id).a0 + 30*ones(size(phase_diff));
+        %end
         % 相対位相差を計算
         phase_diff = mod(interpolated_data(agent_id).a0 - base_agent_a0 + 128, 256) - 128;
         phase_diff = phase_diff * (2 * pi / 256); % 縦軸のデータを 2π/256 でスケール
@@ -191,7 +191,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     ylim([-pi, pi]);
     yticks(-pi:pi/2:pi);
     yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlim([0 common_xmax]);
+    xlim([n_seconds common_xmax]);
 
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('Relative Phase (rad)', 'Interpreter', 'latex');
@@ -231,7 +231,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         legend('show');
         grid on;
         xlabel('Time (s)');
-        xlim([0, common_xmax]);
+        xlim([n_seconds, common_xmax]);
         tuneFigure;
         if exist('do_save_figure','var') && do_save_figure
             saveFigure;

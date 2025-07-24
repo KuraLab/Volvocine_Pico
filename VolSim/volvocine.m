@@ -1,15 +1,15 @@
 clear;
 N = 6;
 dt = 0.01;
-time = 30;
+time = 300;
 %delay(1,2) = delay(1,2)*1.5;
 steps = time/dt;
 q = zeros(steps,N*2);
 Order = zeros(steps,1);
 Theta = zeros(steps,1);
 Omega = 2*pi*ones(1,N);
-%Omega(1,2) = 2.2*pi;
-kappa = 5*ones(1,N);
+Omega(1,2) = 2.1*pi;
+kappa = 10*ones(1,N);
 %kappa(1,2) = 1.5;
 Sigmas = zeros(steps,N);
 thetas = 0:2*pi/N:2*pi-2*pi/N;
