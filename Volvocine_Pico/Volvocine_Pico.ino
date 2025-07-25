@@ -16,13 +16,17 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
+int agent_id = readAgentIdFromFile(); // ユーザ実装の想定
+
 // WiFi設定
 const char* ssid = "Buffalo-G-7EF4";
 const char* password = "76533631";
 
 // UDP設定
 IPAddress serverIP(192, 168, 13, 98);
-unsigned int serverPort = 5000;
+unsigned int serverPort = 5000; // 最初はメインポートに接続
+unsigned int agentPort = 5000 + agent_id; // エージェント専用ポート
 WiFiUDP udp;
 
 // ピン設定
@@ -71,10 +75,6 @@ float servoAmplitude = 60.0f; // サーボ振幅のデフォルト値
 // 停止制御用パラメータ (サーバーから受信)
 int stopAgentId = 0; // 停止対象のエージェントID (0は特殊な意味を持つ場合など)
 int stopDelaySeconds = 0; // 停止までの秒数
-
-
-// agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
-int agent_id = 0;
 
 // データ保存間隔を設定 (例: 5ループごとに保存)
 const int saveInterval = 5;
@@ -308,11 +308,14 @@ void setup() {
     }
   }
 
-  // agent_id 読み込み
-  agent_id = readAgentIdFromFile(); // ユーザ実装の想定
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
+  // 最初はメインポート（5000）でパラメータリクエスト
   requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
+
+  // パラメータ取得後、専用ポートに切り替え
+  serverPort = agentPort;
+  Serial.printf("[INFO] Switched to agent-specific port: %d\n", serverPort);
 
   // サーボモータを真ん中に動かす
   myServo.write(servoCenter); // パラメータ受信後の値で中心に設定
@@ -404,8 +407,11 @@ void loop() {
       logIndex = 0;
       kappa_now = kappa_init;
 
-      // サーバーにパラメータをリクエスト
+      // サーバーにパラメータをリクエスト（一時的にメインポートを使用）
+      unsigned int tempPort = serverPort;
+      serverPort = 5000; // メインポートに一時切り替え
       requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
+      serverPort = tempPort; // 専用ポートに戻す
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
       startLoggingMillis = millis(); // ログ開始時刻を記録
@@ -423,7 +429,11 @@ void loop() {
     }
     Serial.println("[INFO] WiFi connected.");
     
+    // パラメータリクエスト時は一時的にメインポートを使用
+    unsigned int tempPort = serverPort;
+    serverPort = 5000; // メインポートに一時切り替え
     requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds);
+    serverPort = tempPort; // 専用ポートに戻す
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }
 

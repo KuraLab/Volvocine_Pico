@@ -47,8 +47,10 @@ agent_addrs = {}  # agent_id -> addr
 agent_queues = {}  # agent_id -> queue.Queue
 agent_threads = {}  # agent_id -> threading.Thread
 agent_locks = {}  # agent_id -> threading.Lock
+agent_sockets = {}  # agent_id -> socket object
 shutdown_event = threading.Event()  # シャットダウン用イベント
 chunk_files_lock = threading.Lock()  # current_chunk_files用のロック
+main_socket = None  # メインソケット（グローバルで管理）
 
 
 # ---------------------------
@@ -61,47 +63,113 @@ def is_valid_log_packet(data):
 def send_control_command(sock, addr, cmd):
     sock.sendto(cmd.encode(), addr)
 
+def create_agent_socket(agent_id):
+    """エージェント専用のソケットを作成"""
+    try:
+        agent_port = UDP_PORT + agent_id
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(("0.0.0.0", agent_port))
+        sock.settimeout(SOCKET_TIMEOUT)
+        agent_sockets[agent_id] = sock
+        if DEBUG_LOGS:
+            print(f"[DEBUG] Created socket for agent {agent_id} on port {agent_port}")
+        return sock
+    except Exception as e:
+        print(f"[ERROR] Failed to create socket for agent {agent_id}: {e}")
+        return None
+
+def agent_communication_worker(agent_id):
+    """エージェント専用の通信ワーカー"""
+    sock = create_agent_socket(agent_id)
+    if sock is None:
+        return
+        
+    if DEBUG_LOGS:
+        print(f"[DEBUG] Started communication worker for agent {agent_id}")
+    
+    while not shutdown_event.is_set():
+        try:
+            data, addr = sock.recvfrom(BUFFER_SIZE)
+            recv_time = time.time()
+            
+            # パラメータリクエストの処理
+            if data.startswith(b"REQUEST_PARAMS"):
+                returned_agent_id = handle_parameter_request(sock, data, addr)
+                agent_addrs[returned_agent_id] = addr
+                continue
+
+            # ハンドシェイクメッセージの処理
+            if data.startswith(b"HELLO"):
+                handle_handshake(sock, data, addr)
+                continue
+
+            if not is_valid_log_packet(data):
+                if DEBUG_LOGS:
+                    print(f"[DEBUG] Ignored dummy or malformed packet from {addr}, length={len(data)}")
+                continue
+            elif len(data) < 5:
+                print(f"[WARN] Short packet from {addr}")
+                continue
+
+            # データをキューに追加
+            packet_data = (data, recv_time, addr, sock)
+            agent_queues[agent_id].put(packet_data)
+            
+        except socket.timeout:
+            continue
+        except Exception as e:
+            if not shutdown_event.is_set():
+                print(f"[ERROR] Communication error for agent {agent_id}: {e}")
+            continue
+    
+    # ソケットを閉じる
+    try:
+        sock.close()
+        if DEBUG_LOGS:
+            print(f"[DEBUG] Closed socket for agent {agent_id}")
+    except:
+        pass
+
 # ---------------------------
 # メイン受信ループ
 # ---------------------------
 def main():
-    print(f"[INFO] Start listening UDP:{UDP_PORT}")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("0.0.0.0", UDP_PORT))
-    sock.settimeout(SOCKET_TIMEOUT)
+    print(f"[INFO] Start listening UDP base port: {UDP_PORT}")
+    global main_socket
+    
+    # メインソケット（ポート5000）も作成して、初期接続やブロードキャスト用に使用
+    main_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    main_socket.bind(("0.0.0.0", UDP_PORT))
+    main_socket.settimeout(SOCKET_TIMEOUT)
 
     try:
         while True:
             try:
-                data, addr = sock.recvfrom(BUFFER_SIZE)
-                recv_time = time.time()
+                # メインソケットでの通信を確認（初期接続用）
+                try:
+                    data, addr = main_socket.recvfrom(BUFFER_SIZE)
+                    recv_time = time.time()
 
-                # パラメータリクエストの処理
-                if data.startswith(b"REQUEST_PARAMS"):  # パラメータリクエストの識別文字列
-                    agent_id = handle_parameter_request(sock, data, addr)  # ←引数を3つに修正
-                    agent_addrs[agent_id] = addr  # ★ここで登録
-                    continue
+                    # パラメータリクエストの処理
+                    if data.startswith(b"REQUEST_PARAMS"):
+                        agent_id = handle_parameter_request(main_socket, data, addr)
+                        agent_addrs[agent_id] = addr
+                        # エージェント専用スレッドを開始
+                        ensure_agent_thread(agent_id)
+                        continue
 
-                # ハンドシェイクメッセージの処理
-                if data.startswith(b"HELLO"):  # バイト列で比較
-                    handle_handshake(sock, data, addr)
-                    continue
+                    # ハンドシェイクメッセージの処理
+                    if data.startswith(b"HELLO"):
+                        handle_handshake(main_socket, data, addr)
+                        continue
 
-                if not is_valid_log_packet(data):
-                    print(f"[INFO] Ignored dummy or malformed packet from {addr}, length={len(data)}")
-                    continue
-                elif len(data) < 5:
-                    print(f"[WARN] Short packet from {addr}")
-                    continue
-
-                agent_id = data[0]
-                
-                # エージェント用のスレッドとキューを確保
-                ensure_agent_thread(agent_id)
-                
-                # データをエージェント専用キューに追加
-                packet_data = (data, recv_time, addr, sock)
-                agent_queues[agent_id].put(packet_data)
+                    # 通常のデータパケットの場合、該当エージェントのスレッドを確保
+                    if is_valid_log_packet(data) and len(data) >= 5:
+                        agent_id = data[0]
+                        ensure_agent_thread(agent_id)
+                        
+                except socket.timeout:
+                    pass
 
             except socket.timeout:
                 pass
@@ -129,20 +197,31 @@ def main():
                 print("[DEBUG] current_chunk_files cleared.")
             elif key == 's':
                 print("[INFO] Sending START command.")
-                for  i in range(1, 5):
-                    for id in agent_addrs:
-                        send_control_command(sock, agent_addrs[id], "START")
+                for i in range(1, 5):
+                    for agent_id in agent_addrs:
+                        if agent_id in agent_sockets:
+                            send_control_command(agent_sockets[agent_id], agent_addrs[agent_id], "START")
+                        else:
+                            # メインソケットを使用
+                            send_control_command(main_socket, agent_addrs[agent_id], "START")
 
             elif key == 't':
                 print("[INFO] Sending STOP command.")
                 for i in range(1, 5):
-                    for id in agent_addrs:
-                        send_control_command(sock, agent_addrs[id], "STOP")
+                    for agent_id in agent_addrs:
+                        if agent_id in agent_sockets:
+                            send_control_command(agent_sockets[agent_id], agent_addrs[agent_id], "STOP")
+                        else:
+                            # メインソケットを使用
+                            send_control_command(main_socket, agent_addrs[agent_id], "STOP")
 
             elif key == 'c':
                 print("[INFO] Sending CALIBRATE command to IMU agent_id=99.")
                 if 99 in agent_addrs:
-                    send_control_command(sock, agent_addrs[99], "CALIBRATE")
+                    if 99 in agent_sockets:
+                        send_control_command(agent_sockets[99], agent_addrs[99], "CALIBRATE")
+                    else:
+                        send_control_command(main_socket, agent_addrs[99], "CALIBRATE")
                 else:
                     print("[WARN] IMU agent_id=99 not found.")
 
@@ -155,8 +234,20 @@ def main():
         # すべてのエージェントスレッドを終了
         shutdown_all_threads()
         
-        sock.close()
-        print("[INFO] Socket closed.")
+        # すべてのソケットを閉じる
+        if main_socket:
+            main_socket.close()
+            print("[INFO] Main socket closed.")
+        
+        for agent_id, sock in agent_sockets.items():
+            try:
+                sock.close()
+                if DEBUG_LOGS:
+                    print(f"[DEBUG] Agent {agent_id} socket closed.")
+            except:
+                pass
+        
+        print("[INFO] All sockets closed.")
 
         # 残りのデータを処理
         for ag_id, (data, send_list, recv_list) in agent_buffers.items():
@@ -332,13 +423,19 @@ def ensure_agent_thread(agent_id):
         agent_queues[agent_id] = queue.Queue()
         agent_locks[agent_id] = threading.Lock()
         
-        # ワーカースレッドを開始
-        thread = threading.Thread(target=agent_worker, args=(agent_id,), daemon=True)
-        thread.start()
-        agent_threads[agent_id] = thread
+        # データ処理ワーカースレッドを開始
+        data_thread = threading.Thread(target=agent_worker, args=(agent_id,), daemon=True)
+        data_thread.start()
+        
+        # 通信ワーカースレッドを開始
+        comm_thread = threading.Thread(target=agent_communication_worker, args=(agent_id,), daemon=True)
+        comm_thread.start()
+        
+        # スレッドを辞書に保存（タプルで管理）
+        agent_threads[agent_id] = (data_thread, comm_thread)
         
         if DEBUG_LOGS:
-            print(f"[DEBUG] Created worker thread for agent {agent_id}")
+            print(f"[DEBUG] Created worker threads for agent {agent_id}")
 
 def shutdown_all_threads():
     """すべてのエージェントスレッドを終了"""
@@ -350,10 +447,18 @@ def shutdown_all_threads():
         agent_queues[agent_id].put(None)
     
     # すべてのスレッドの終了を待機
-    for agent_id, thread in agent_threads.items():
-        thread.join(timeout=2.0)
-        if thread.is_alive():
-            print(f"[WARN] Agent {agent_id} thread did not stop gracefully")
+    for agent_id, threads in agent_threads.items():
+        if isinstance(threads, tuple):
+            data_thread, comm_thread = threads
+            data_thread.join(timeout=2.0)
+            comm_thread.join(timeout=2.0)
+            if data_thread.is_alive() or comm_thread.is_alive():
+                print(f"[WARN] Agent {agent_id} threads did not stop gracefully")
+        else:
+            # 後方互換性のため
+            threads.join(timeout=2.0)
+            if threads.is_alive():
+                print(f"[WARN] Agent {agent_id} thread did not stop gracefully")
 
 # ---------------------------
 
