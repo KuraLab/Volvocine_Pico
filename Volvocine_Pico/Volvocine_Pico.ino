@@ -17,7 +17,7 @@
 #endif
 
 // agent_id: 不変なのでRAMで持つだけでOK (送信時にのみ使用)
-int agent_id = readAgentIdFromFile(); // ユーザ実装の想定
+int agent_id;
 
 // WiFi設定
 const char* ssid = "Buffalo-G-7EF4";
@@ -26,7 +26,7 @@ const char* password = "76533631";
 // UDP設定
 IPAddress serverIP(192, 168, 13, 98);
 unsigned int serverPort = 5000; // 最初はメインポートに接続
-unsigned int agentPort = 5000 + agent_id; // エージェント専用ポート
+unsigned int agentPort; // エージェント専用ポート
 WiFiUDP udp;
 
 // ピン設定
@@ -37,12 +37,14 @@ const int analogPin2 = 28;
 Servo myServo;
 
 // 1レコード6バイトの圧縮構造体 (RAM保持用)
-struct __attribute__((packed)) CompressedLogData {
+#pragma pack(push, 1)
+struct CompressedLogData {
   uint32_t micros24 : 24;  // 3バイト: (micros >> 8)
   uint8_t  analog0;        // 1バイト
   uint8_t  analog1;        // 1バイト
   uint8_t  analog2;        // 1バイト
 };
+#pragma pack(pop)
 
 #define CONTROL_PERIOD_US 2000 // 制御周期 (μs)
 #define LOG_BUFFER_SIZE   28000
@@ -280,6 +282,9 @@ void setup() {
   analogReadResolution(12);
   myServo.attach(22);
   myServo.write(servoCenter); // 初期位置を中心に設定
+
+  agent_id = readAgentIdFromFile(); // ユーザ実装の想定
+  agentPort = 5000 + agent_id; // エージェント専用ポート
 
   // WiFi接続
   connectToWiFi(ssid, password);
