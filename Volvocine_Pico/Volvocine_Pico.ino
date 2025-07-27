@@ -220,7 +220,7 @@ void logSensorData() {
   previousFlex = flex; // 前回の値を更新
 
   // サーボ制御
-  phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * dflex) * (float)dt / 1e6f;
+  phi += (kappa_now * cosf((float)elapsed / 1e6f * omega + phi - alpha) * flex) * (float)dt / 1e6f;
   float currentCos = cosf((float)elapsed / 1e6f * omega + phi);
   myServo.write(servoCenter + servoAmplitude * currentCos); // 変更点: 変数を使用
 
