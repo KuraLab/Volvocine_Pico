@@ -84,12 +84,14 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     end
     n = allow_missing_agents; % 欠損許容数
 
-    new_time_series = (min_time:0.01:max_time) - min_time; % 仮の全範囲
+    % n_secondsを基準時刻として設定
+    start_time_abs = min_time + n_seconds;
+    new_time_series = (start_time_abs:0.01:max_time) - start_time_abs; % n_secondsを0とする時間軸
 
     % 各時刻で有効なエージェント数をカウント
     valid_counts = zeros(size(new_time_series));
     for t_idx = 1:length(new_time_series)
-        t_abs = new_time_series(t_idx) + min_time;
+        t_abs = new_time_series(t_idx) + start_time_abs;
         valid_counts(t_idx) = sum(agent_ranges(:,1) <= t_abs & agent_ranges(:,2) >= t_abs);
     end
 
@@ -112,13 +114,13 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         sub = sub(ia, :);
 
         % 有効な範囲を取得
-        t_min = min(sub.time_pc_sec_abs) - min_time;
-        t_max = max(sub.time_pc_sec_abs) - min_time;
+        t_min = min(sub.time_pc_sec_abs) - start_time_abs;
+        t_max = max(sub.time_pc_sec_abs) - start_time_abs;
 
         % new_time_seriesのうち有効な範囲だけ補間
         valid_mask = (new_time_series >= t_min) & (new_time_series <= t_max);
         interp_a0 = nan(size(new_time_series));
-        interp_a0(valid_mask) = interp1(sub.time_pc_sec_abs - min_time, sub.a0, new_time_series(valid_mask), 'linear', 'extrap');
+        interp_a0(valid_mask) = interp1(sub.time_pc_sec_abs - start_time_abs, sub.a0, new_time_series(valid_mask), 'linear', 'extrap');
 
         % フィルタ適用（指定されている場合）
         if apply_filter
@@ -140,7 +142,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
 
     % Agent99 a0/a1プロット用の最大時刻
     if ~isempty(df_99)
-        max_time_99 = max(df_99.time_pc_sec_abs - min_time);
+        max_time_99 = max(df_99.time_pc_sec_abs - start_time_abs);
     else
         max_time_99 = inf; % データがなければ無限大扱い
     end
@@ -149,7 +151,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     max_time_phase = max(new_time_series); % ここもデータの最大値
 
     % 両方の最大値の小さい方を採用
-    common_xmax = min([max_time_phase, max_time_99,plot_duration]);
+    common_xmax = min([max_time_phase, max_time_99, plot_duration - n_seconds]);
 
     % --- 相対位相プロット ---
     figure;
@@ -191,10 +193,10 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     ylim([-pi, pi]);
     yticks(-pi:pi/2:pi);
     yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlim([n_seconds common_xmax]);
+    xlim([0 common_xmax]);
 
     xlabel('Time (s)', 'Interpreter', 'latex');
-    ylabel('Relative Phase (rad)', 'Interpreter', 'latex');
+    ylabel('$$\phi_j - \phi_1$$', 'Interpreter', 'latex');
     %legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
@@ -205,7 +207,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
 
     % --- Agent99 a0/a1プロット ---
     if ~isempty(df_99)
-        t99_all = df_99.time_pc_sec_abs - min_time;
+        t99_all = df_99.time_pc_sec_abs - start_time_abs;
         a0_99_all = correct_large_jump_99(df_99.a0);
         a1_99_all = correct_large_jump_99(df_99.a1);
 
@@ -231,7 +233,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
         legend('show');
         grid on;
         xlabel('Time (s)');
-        xlim([n_seconds, common_xmax]);
+        xlim([0, common_xmax]);
         tuneFigure;
         if exist('do_save_figure','var') && do_save_figure
             saveFigure;

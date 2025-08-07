@@ -8,14 +8,14 @@ function main_plot()
     base_directory = 'merged_chunks_organized'; % 日付別に整理されたディレクトリ
     
     % 最初のn秒をカットする設定
-    n_seconds_to_cut = 0; % プロット時に最初のn秒をカット
+    n_seconds_to_cut = 5; % プロット時に最初のn秒をカット
 
     % 何秒目までプロットするか
-    plot_duration = 183; % 例: 183秒までプロット
+    plot_duration = 80; % 例: 183秒までプロット
 
     % 許容する欠損エージェント数
     allow_missing_agents = 1; % 欠損許容数
-    do_save_figure = false;   % ← ここで保存有無を指定
+    do_save_figure = true;   % ← ここで保存有無を指定
 
     % 平均化フィルタの設定
     apply_filter = true;      % フィルタ適用の有無
