@@ -2,7 +2,7 @@
 
 function main_plot()
     % 実験日付の設定（YYYY-MM-DD形式）
-    experiment_date = '2025-07-31'; % ← ここで解析したい実験日を指定
+    experiment_date = '2025-08-07'; % ← ここで解析したい実験日を指定
     
     % ディレクトリの設定
     base_directory = 'merged_chunks_organized'; % 日付別に整理されたディレクトリ
@@ -15,7 +15,7 @@ function main_plot()
 
     % 許容する欠損エージェント数
     allow_missing_agents = 1; % 欠損許容数
-    do_save_figure = true;   % ← ここで保存有無を指定
+    do_save_figure = false;   % ← ここで保存有無を指定
 
     % 平均化フィルタの設定
     apply_filter = true;      % フィルタ適用の有無
