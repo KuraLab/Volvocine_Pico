@@ -2,7 +2,7 @@
 
 function main_plot()
     % 実験日付の設定（YYYY-MM-DD形式）
-    experiment_date = '2025-08-07'; % ← ここで解析したい実験日を指定
+    experiment_date = '2025-07-31'; % ← ここで解析したい実験日を指定
     
     % ディレクトリの設定
     base_directory = 'merged_chunks_organized'; % 日付別に整理されたディレクトリ
