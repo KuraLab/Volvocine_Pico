@@ -191,16 +191,20 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
 
     % 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
     ylim([-pi, pi]);
-    yticks(-pi:pi/2:pi);
-    yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+    yticks(-pi:pi:pi);
+    %yticks(-pi:pi/2:pi);
+    yticklabels({'$-\pi$', '0', '$\pi$'});
+    %yticklabels({'$-\pi$', '$-\frac{\pi}{2}$', '0', '$\frac{\pi}{2}$', '$\pi$'});
+    set(gca, 'TickLabelInterpreter', 'latex');
+
     xlim([0 common_xmax]);
 
     xlabel('Time (s)', 'Interpreter', 'latex');
     ylabel('$$\phi_j - \phi_1$$', 'Interpreter', 'latex');
-    %legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
-    set(findall(gcf,'-property','FontSize'),'FontSize',25);
+    set(findall(gcf,'-property','FontSize'),'FontSize',28);
+    legend({'Module 1', 'Module 2', 'Module 3', 'Module 4', 'Module 5', 'Module 6'}, 'Location', 'southeast', 'Interpreter', 'latex','NumColumns', 3);
     if exist('do_save_figure','var') && do_save_figure
         saveFigure;
     end
@@ -208,47 +212,70 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
 
     % --- Agent99 a0/a1プロットは不要のため削除 ---
 
-    % --- Agent99 e2（a1）のウェーブレット変換プロットのみ ---
+    % --- Agent99 e1（a0）と e2（a1）のウェーブレット変換を別ウィンドウで表示 ---
     if ~isempty(df_99)
         % 元データの準備
-        t99_all = df_99.time_pc_sec_abs - start_time_abs;
-        a1_99_all = correct_large_jump_99(df_99.a1);
+        t99_all   = df_99.time_pc_sec_abs - start_time_abs;
+        a0_99_all = correct_large_jump_99(df_99.a0); % e1
+        a1_99_all = correct_large_jump_99(df_99.a1); % e2
 
         % スムージング（移動平均）
         windowsize = 1; % 必要に応じて調整
+        a0_99_smooth = movmean(a0_99_all, windowsize);
         a1_99_smooth = movmean(a1_99_all, windowsize);
 
         % uint8 → 角度（-180〜180度）へ変換
         decode_angle = @(u) (double(u) * 360.0 / 255.0) - 180.0;
+        a0_99_deg_all = decode_angle(a0_99_smooth);
         a1_99_deg_all = decode_angle(a1_99_smooth);
 
         % 表示区間 [0, common_xmax] に制限
         idx = t99_all >= 0 & t99_all <= common_xmax;
-        t99 = t99_all(idx);
+        t99      = t99_all(idx);
+        a0_99_deg = a0_99_deg_all(idx);
         a1_99_deg = a1_99_deg_all(idx);
 
         % CWT パラメータ
-        fs = 100;                     % サンプリング周波数 [Hz]
-        freq_range = [0.2 10];        % 表示する周波数範囲 [Hz]
+        fs = 100;              % サンプリング周波数 [Hz]
+        freq_range = [0.1 10]; % 表示する周波数範囲 [Hz]
 
-        % ウェーブレット変換（e2 のみ）
-        [wt_a1, f_a1] = cwt(a1_99_deg, fs, 'FrequencyLimits', freq_range);
+        % ウェーブレット変換（e1 と e2）
+        [wt_a0, f_a0] = cwt(a0_99_deg, fs, 'FrequencyLimits', freq_range); % e1
+        [wt_a1, f_a1] = cwt(a1_99_deg, fs, 'FrequencyLimits', freq_range); % e2
 
         % カラースケール最大値
-        cmax = 6;
+        cmax = 3;
 
-        % プロット（単一図）
+        % プロット（e1: 別ウィンドウ）
         figure;
-        surf(t99, f_a1, abs(wt_a1), 'EdgeColor', 'none');
+        surf(t99, f_a0, abs(wt_a0), 'EdgeColor', 'none');
         set(gca, 'YScale', 'log');
         axis tight; view(0, 90);
         xlim([0, common_xmax]);
+        ylim([0.2, 10]); % 周波数範囲を設定
         xlabel('Time (s)');
         ylabel('Freq [Hz]');
         clim([0 cmax]);
         colorbar;
         tuneFigure
-        set(findall(gcf,'-property','FontSize'),'FontSize',25);
+        set(findall(gcf,'-property','FontSize'),'FontSize',27);
+        if exist('do_save_figure','var') && do_save_figure
+            saveFigure;
+        end
+
+        % プロット（e2: 別ウィンドウ）
+        figure;
+        surf(t99, f_a1, abs(wt_a1), 'EdgeColor', 'none');
+        set(gca, 'YScale', 'log');
+        axis tight; view(0, 90);
+        xlim([0, common_xmax]);
+        ylim([0.2, 10]); % 周波数範囲を設定
+        xlabel('Time (s)');
+        ylabel('Freq [Hz]');
+        clim([0 cmax]);
+        colorbar;
+        tuneFigure
+        set(findall(gcf,'-property','FontSize'),'FontSize',27);
         if exist('do_save_figure','var') && do_save_figure
             saveFigure;
         end

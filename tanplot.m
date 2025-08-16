@@ -6,8 +6,8 @@ phase2 = [-0.129 -0.091 -0.032 -0.195 -0.099 -0.101 -0.054 -0.196 -0.307 -0.306 
 % プロット
 figure;
 plot(alpha, abs(phase2), '-o', 'LineWidth', 2);
-xlabel('\alpha');
-ylabel('\phi_2 - \phi_1');
+xlabel('$$\tau$$', 'Interpreter', 'latex');
+ylabel('$$\phi_2 - \phi_1$$', 'Interpreter', 'latex');
 xlim([-pi pi])
 ylim([-pi pi])
 

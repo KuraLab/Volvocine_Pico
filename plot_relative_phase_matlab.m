@@ -200,6 +200,7 @@ function plot_relative_phase_matlab(file_list, base_agent_id, n_seconds, plot_du
     %legend('show', 'Location', 'best', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
+    set(findall(gcf,'-property','FontSize'),'FontSize',25);
     if exist('do_save_figure','var') && do_save_figure
         saveFigure;
     end

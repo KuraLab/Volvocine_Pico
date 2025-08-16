@@ -2,19 +2,19 @@
 
 function main_plot_2modules()
     % 実験日付の設定（YYYY-MM-DD形式）
-    experiment_date = '2025-08-07'; % ← ここで解析したい実験日を指定
+    experiment_date = '2025-05-30'; % ← ここで解析したい実験日を指定
     
     % ディレクトリの設定
     base_directory = 'merged_chunks_organized'; % 日付別に整理されたディレクトリ
     
     % 最初のn秒をカットする設定
-    n_seconds_to_cut = 5; % プロット時に最初のn秒をカット
+    n_seconds_to_cut = 20; % プロット時に最初のn秒をカット
 
     % 何秒目までプロットするか
-    plot_duration = 20; % 例: 183秒までプロット
+    plot_duration = 50;
 
     % 許容する欠損エージェント数
-    allow_missing_agents = 1; % 欠損許容数
+    allow_missing_agents = 1; % 欠損許容数y
     do_save_figure = true;   % ← ここで保存有無を指定
 
     % 平均化フィルタの設定
@@ -22,7 +22,7 @@ function main_plot_2modules()
     filter_window_size = 1;  % フィルタ窓サイズ
 
     % 最新からn番目のファイルをプロット
-    n = 2; % ここでnを指定
+    n = 24; % ここでnを指定
     plot_nth_latest_file_by_date(experiment_date, n, base_directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size);
 end
 
