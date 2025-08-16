@@ -191,8 +191,10 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
 
     % 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
     ylim([-pi, pi]);
-    yticks(-pi:pi/2:pi);
-    yticklabels({'$-\pi$', '$-\frac{\pi}{2}$', '0', '$\frac{\pi}{2}$', '$\pi$'});
+    yticks(-pi:pi:pi);
+    %yticks(-pi:pi/2:pi);
+    yticklabels({'$-\pi$', '0', '$\pi$'});
+    %yticklabels({'$-\pi$', '$-\frac{\pi}{2}$', '0', '$\frac{\pi}{2}$', '$\pi$'});
     set(gca, 'TickLabelInterpreter', 'latex');
 
     xlim([0 common_xmax]);
@@ -201,8 +203,8 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
     ylabel('$$\phi_j - \phi_1$$', 'Interpreter', 'latex');
     grid on;
     tuneFigure;
-    set(findall(gcf,'-property','FontSize'),'FontSize',27);
-    legend({'Module 1', 'Module 2', 'Module 3', 'Module 4', 'Module 5', 'Module 6'}, 'Location', 'southeast', 'Interpreter', 'latex','NumColumns', 3, 'FontSize', 18);
+    set(findall(gcf,'-property','FontSize'),'FontSize',28);
+    legend({'Module 1', 'Module 2', 'Module 3', 'Module 4', 'Module 5', 'Module 6'}, 'Location', 'southeast', 'Interpreter', 'latex','NumColumns', 3);
     if exist('do_save_figure','var') && do_save_figure
         saveFigure;
     end
