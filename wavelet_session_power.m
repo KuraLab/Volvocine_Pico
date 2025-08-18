@@ -245,6 +245,7 @@ if ~isempty(perFileTable)
             for fIdx = 1:size(featList,1)
                 col = featList{fIdx,1};
                 fnameBase = featList{fIdx,3};
+                normRecords = {};  % 正規性検定結果格納 (feature, N, u, n, p, reject)
                 if ~ismember(col, M.Properties.VariableNames), continue; end
                 % 値存在チェック
                 if all(isnan(M.(col))), continue; end
@@ -356,34 +357,65 @@ if ~isempty(perFileTable)
                     if ~any(mask0) || ~any(mask1), continue; end
                     v0 = M.(col)(mask0); v1 = M.(col)(mask1);
                     if numel(v0) > 1 && numel(v1) > 1
-                        [~,p] = ttest2(v0, v1,'Vartype','unequal');
+                        % --- 正規性検定 (Lilliefors) ---
+                        warnState = warning('off','stats:lillietest:OutOfRangePLower');
+                        try
+                            [h0,p0] = lillietest(v0);  % h=1 → 非正規
+                        catch
+                            h0 = NaN; p0 = NaN;
+                        end
+                        try
+                            [h1,p1] = lillietest(v1);
+                        catch
+                            h1 = NaN; p1 = NaN;
+                        end
+                        warning(warnState.state, 'stats:lillietest:OutOfRangePLower');
+                        % 記録 (表示用に p をそのまま保存)
+                        normRecords(end+1,:) = {col, nVal, 0, numel(v0), p0, h0}; %#ok<AGROW>
+                        normRecords(end+1,:) = {col, nVal, 1, numel(v1), p1, h1}; %#ok<AGROW>
+
+                        % --- 検定切替: どちらか非正規なら ranksum ---
+                        if h0==0 && h1==0
+                            [~,p] = ttest2(v0, v1,'Vartype','unequal');
+                            testUsed = 'Welch-t';
+                        else
+                            p = ranksum(v0, v1);  % Mann-Whitney U
+                            testUsed = 'ranksum';
+                        end
                         star = sigStar(p);
                         x0 = nIdx - sep; x1 = nIdx + sep;
                         plot([x0 x0 x1 x1],[yBase yBase+yH yBase+yH yBase],'k','LineWidth',1.5);
                         text(nIdx, yBase + yH*0.5 + starYOffset, star, ...
-                            'HorizontalAlignment','center','FontWeight','bold','FontSize',16);
+                             'HorizontalAlignment','center','FontWeight','bold','FontSize',16);
+                        fprintf('[STAT] N=%d %s p=%.4g (h0=%d h1=%d)\n', nVal, testUsed, p, h0, h1);
                     end
                 end
-
-                % 凡例
-                % 既存 boxplot 線を凡例から除外
-                set(findobj(ax,'Type','Line'),'HandleVisibility','off');
-                % ダミー (NaN,NaN) で凡例用ハンドル作成
-                hU0 = plot(nan,nan,'s','MarkerFaceColor',[0.2 0.4 0.85], ...
-                    'MarkerEdgeColor','none','MarkerSize',10,'DisplayName','Baseline (u = 0)','HandleVisibility','on');
-                hU1 = plot(nan,nan,'s','MarkerFaceColor',[0.9 0.35 0.15], ...
-                    'MarkerEdgeColor','none','MarkerSize',10,'DisplayName','Proposed','HandleVisibility','on');
-                legend([hU0 hU1],'Location','northoutside', 'Interpreter', 'latex');
-                set(gca,'TickLabelInterpreter','latex');
-
-                % 余白圧縮
-                ti = ax.TightInset;
-                ax.Position = [ti(1)+0.01 ti(2)+0.01 1 - ti(1) - ti(3) - 0.02 1 - ti(2) - ti(4) - 0.02];
-
-                % 保存しない。必要なら手動で [File] -> [Save] してください。
-                drawnow;  % 即時描画
-                fprintf('[INFO] showed grouped boxplot %s (no file saved)\n', fnameBase);
-                saveFigure;
+                % === 正規性検定結果を表示 & 保存 ===
+                if ~isempty(normRecords)
+                    normTable = cell2table(normRecords, ...
+                        'VariableNames',{'feature','N','u','n','p_lillie','reject_nonNormal'});
+                    % p=0.001 で reject=1 (下限制限) を文字列置換
+                    showTable = normTable;
+                    maskLow = showTable.p_lillie==0.001 & showTable.reject_nonNormal==1;
+                    pStr = cell(height(showTable),1);
+                    for ii=1:height(showTable)
+                        if maskLow(ii)
+                            pStr{ii} = '<0.001';
+                        else
+                            pStr{ii} = sprintf('%.4f', showTable.p_lillie(ii));
+                        end
+                    end
+                    showTable.p_display = pStr;
+                    disp(showTable(:, {'feature','N','u','n','p_display','reject_nonNormal'}));
+                    normCSV = fullfile(resultsDir, sprintf('normality_%s_%s_%g_%gHz.csv', ...
+                        dateStr, col, fmin, fmax));
+                    try
+                        writetable(normTable, normCSV);
+                        fprintf('[INFO] normality table saved: %s\n', normCSV);
+                    catch ME
+                        fprintf('[WARN] normality save failed (%s)\n', ME.message);
+                    end
+                end
             end
         end
     end
