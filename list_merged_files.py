@@ -6,7 +6,8 @@ import pandas as pd  # agent_id 集計用
 from pathlib import Path
 
 # 期待される agent_id ユニーク数 (セッションラベル -> 数)
-EXPECTED_AGENT_COUNTS = {"S1": 10, "S2": 4, "S3": 5, "S4": 6, "S5": 7, "S6": 4}
+#EXPECTED_AGENT_COUNTS = {"S1": 10, "S2": 4, "S3": 5, "S4": 6, "S5": 7, "S6": 4}
+EXPECTED_AGENT_COUNTS = {"S1": 10, "S2": 5, "S3": 6, "S4": 7, "S5": 7, "S6": 4}
 APPLY_AGENT_FILTER_DEFAULT = True  # 常にフィルタ適用
 REQUIRED_AGENT_ID = 99  # この agent_id が含まれないファイルは除外
 
@@ -14,8 +15,10 @@ REQUIRED_AGENT_ID = 99  # この agent_id が含まれないファイルは除�
 # 実行: python list_merged_files.py 2025-08-15
 # 出力: セッション境界 / セッションごとの kept/dropped 統計
 
-DEFAULT_DATE = "2025-08-15"
-DEFAULT_SESSION_STARTS = ["16:40", "20:00", "20:49", "21:47", "22:22"]
+#DEFAULT_DATE = "2025-08-15"
+DEFAULT_DATE = "2025-08-18"
+#DEFAULT_SESSION_STARTS = ["16:40", "20:00", "20:49", "21:47", "22:22"]
+DEFAULT_SESSION_STARTS = ["15:20", "16:00", "16:38", "21:47", "22:22"]
 FILENAME_PATTERN = re.compile(r"merged_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.csv")
 
 # -------------------------------------------------------------
