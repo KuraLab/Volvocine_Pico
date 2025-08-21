@@ -1,32 +1,42 @@
 % filepath: main_plot_2modules.m
 
 function main_plot_2modules()
-    % 実験日付の設定（YYYY-MM-DD形式）
-    experiment_date = '2025-08-15'; % ← ここで解析したい実験日を指定
-    
-    % ディレクトリの設定
-    base_directory = 'merged_chunks_organized'; % 日付別に整理されたディレクトリ
-    
-    % 最初のn秒をカットする設定
-    n_seconds_to_cut = 0; % プロット時に最初のn秒をカット
+    % 実験日付
+    experiment_date = '2025-08-18';
 
-    % 何秒目までプロットするか
-    plot_duration = 50;
+    base_directory = 'merged_chunks_organized';
 
-    % 許容する欠損エージェント数
-    allow_missing_agents = 1; % 欠損許容数y
-    do_save_figure = false;   % ← ここで保存有無を指定
+    % 最初の n 秒除外
+    n_seconds_to_cut = 4.9;
 
-    % 平均化フィルタの設定
-    apply_filter = true;      % フィルタ適用の有無
-    filter_window_size = 1;  % フィルタ窓サイズ
+    % プロット終了時刻
+    plot_duration = 34.9;
 
-    % 最新からn番目のファイルをプロット
-    n = 3; % ここでnを指定
-    plot_nth_latest_file_by_date(experiment_date, n, base_directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size);
+    % 欠損許容
+    allow_missing_agents = 0;
+    do_save_figure = true;
+
+    % 平滑化
+    apply_filter = true;
+    filter_window_size = 1;
+
+    % 追加: 並び替え設定
+    % agents 昇順 = [3 7 9 12] のとき [1 3 2 4] -> [3 9 7 12]
+    order_index = [1 3 4 2 5 6];   % 未指定なら [] でも可
+    base_agent_id = [];        % 基準を自動(最小ID)にするなら []
+
+    % 最新から n 番目
+    n = 37;
+
+    plot_nth_latest_file_by_date( ...
+        experiment_date, n, base_directory, ...
+        n_seconds_to_cut, plot_duration, ...
+        allow_missing_agents, do_save_figure, ...
+        apply_filter, filter_window_size, ...
+        order_index, base_agent_id);
 end
 
-function plot_nth_latest_file_by_date(experiment_date, n, base_directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size)
+function plot_nth_latest_file_by_date(experiment_date, n, base_directory, n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size, order_index, base_agent_id)
     % 日付フォルダのパスを構築
     date_directory = fullfile(base_directory, experiment_date);
     
@@ -66,8 +76,15 @@ function plot_nth_latest_file_by_date(experiment_date, n, base_directory, n_seco
     nth_file = fullfile(date_directory, csv_files(n).name);
     fprintf('[INFO] Selected file (%s, %dth latest): %s\n', experiment_date, n, csv_files(n).name);
 
-    % プロット関数を呼び出し
-    plot_relative_phase_matlab_2modules(nth_file, [], n_seconds_to_cut, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size);
+    % 呼び出しを order_index / base_agent_id 対応版へ
+    if ~exist('order_index','var'); order_index = []; end
+    if ~exist('base_agent_id','var'); base_agent_id = []; end
+    plot_relative_phase_matlab_2modules( ...
+        nth_file, base_agent_id, ...
+        n_seconds_to_cut, plot_duration, ...
+        allow_missing_agents, do_save_figure, ...
+        apply_filter, filter_window_size, ...
+        order_index);
 end
 
 function list_available_dates(base_directory)

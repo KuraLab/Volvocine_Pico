@@ -1,4 +1,8 @@
-function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size)
+function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds, plot_duration, allow_missing_agents, do_save_figure, apply_filter, filter_window_size, order_index)
+% order_index : 出現 agent_id を昇順に並べた配列 agents に対するインデックス並び
+%               例) agents = [3 7 9 12]; order_index = [1 3 2 4] -> 表示順 [3 9 7 12]
+%               未指定なら元の昇順。インデックスは 1..numel(agents)
+
     % ファイルリストが空かどうかチェック
     if isempty(file_list)
         disp('[INFO] No files provided to plot.');
@@ -63,7 +67,9 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
     max_time = max(df_main.time_pc_sec_abs);
 
     % 各エージェントの時間範囲を取得
-    agents = unique(df_main.agent_id);
+    % エージェント ID を昇順取得し行ベクトル化
+    agents = unique(df_main.agent_id,'sorted').';  % 行ベクトル強制
+
     agent_ranges = zeros(length(agents), 2);
     for i = 1:length(agents)
         agent_id = agents(i);
@@ -71,6 +77,46 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
         agent_ranges(i, 1) = min(sub.time_pc_sec_abs);
         agent_ranges(i, 2) = max(sub.time_pc_sec_abs);
     end
+
+    % ---- 追加: 表示順制御 (order_index) ----
+    if nargin < 9 || isempty(order_index)
+        order_index = 1:numel(agents);
+    else
+        order_index = order_index(:).';                 % 行ベクトル化
+        valid_mask = order_index >= 1 & order_index <= numel(agents);
+        if any(~valid_mask)
+            warning('無効な order_index を無視: %s', mat2str(order_index(~valid_mask)));
+            order_index = order_index(valid_mask);
+        end
+        % 重複除去
+        [~, first_pos] = unique(order_index,'stable');
+        if numel(first_pos) ~= numel(order_index)
+            warning('order_index の重複を除去しました。');
+            order_index = order_index(sort(first_pos));
+        end
+        if isempty(order_index)
+            error('有効な order_index がありません。');
+        end
+    end
+    display_agents = agents(order_index);              % 指定順
+    display_agents = display_agents(:).';              % 念のため行ベクトル
+
+    % 基準エージェント
+    if nargin < 2 || isempty(base_agent_id)
+        base_agent_id = min(agents);
+    end
+    if ~ismember(base_agent_id, agents)
+        error('[ERROR] Base agent ID %d not found in data.', base_agent_id);
+    end
+    % 先頭へ（存在しない場合は追加）
+    display_agents(display_agents == base_agent_id) = [];
+    display_agents = [base_agent_id display_agents];
+
+    % デバッグ表示（必要なら）
+    % fprintf('[DEBUG] agents (asc): %s\n', mat2str(agents));
+    % fprintf('[DEBUG] order_index : %s\n', mat2str(order_index));
+    % fprintf('[DEBUG] display_agents(final): %s\n', mat2str(display_agents));
+    % ---- 追加ここまで ----
 
     % --- ここから修正 ---
     if nargin < 5 || isempty(allow_missing_agents)
@@ -103,7 +149,7 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
     new_time_series = new_time_series(valid_idx);
     % --- 以降、new_time_seriesを使って補間・プロット ---
 
-    % 線形補間で位相データを再定義（99以外のみ）
+    % 線形補間（全 agents 対象: 基準計算のため）
     interpolated_data = struct();
     for i = 1:length(agents)
         agent_id = agents(i);
@@ -112,32 +158,19 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
         sub.a0 = correct_phase_discontinuity(sub.a0);
         [~, ia] = unique(sub.time_pc_sec_abs);
         sub = sub(ia, :);
-
-        % 有効な範囲を取得
         t_min = min(sub.time_pc_sec_abs) - start_time_abs;
         t_max = max(sub.time_pc_sec_abs) - start_time_abs;
-
-        % new_time_seriesのうち有効な範囲だけ補間
         valid_mask = (new_time_series >= t_min) & (new_time_series <= t_max);
         interp_a0 = nan(size(new_time_series));
         interp_a0(valid_mask) = interp1(sub.time_pc_sec_abs - start_time_abs, sub.a0, new_time_series(valid_mask), 'linear', 'extrap');
-
-        % フィルタ適用（指定されている場合）
         if apply_filter
             interp_a0 = movmean(interp_a0, filter_window_size, 'omitnan');
         end
-
         interpolated_data(agent_id).time = new_time_series;
-        interpolated_data(agent_id).a0 = interp_a0;
+        interpolated_data(agent_id).a0   = interp_a0;
     end
 
-    % 基準エージェントの選択
-    if nargin < 2 || isempty(base_agent_id)
-        base_agent_id = min(agents); % デフォルトで最小のエージェントIDを基準にする
-    end
-    if ~ismember(base_agent_id, agents)
-        error('[ERROR] Base agent ID not found in the data.');
-    end
+    % 基準エージェント位相
     base_agent_a0 = interpolated_data(base_agent_id).a0;
 
     % Agent99 a0/a1プロット用の最大時刻
@@ -154,57 +187,49 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
     common_xmax = min([max_time_phase, max_time_99, plot_duration - n_seconds]);
 
     % --- 相対位相プロット ---
-    figure;
-    hold on;
-    colors = lines(length(agents));
+    figure; hold on;
+    colors = lines(length(display_agents));
 
-    % 基準エージェント (id1 - id1) のプロット
-    %plot(new_time_series, zeros(size(new_time_series)), 'DisplayName', ['Agent ', num2str(base_agent_id), ' - Agent ', num2str(base_agent_id)], 'Color', colors(1, :));
-    plot(new_time_series, zeros(size(new_time_series)), 'DisplayName', ['Agent ', num2str(base_agent_id)], 'Color', colors(1, :));
+    % 基準ライン
+    h_base = plot(new_time_series, zeros(size(new_time_series)), ...
+        'DisplayName', sprintf('Agent %d', base_agent_id), ...
+        'Color', colors(1,:));
+    legend_handles = h_base;
+    legend_labels  = {sprintf('Agent %d', base_agent_id)};
 
-    % 他のエージェントとの相対位相差をプロット
-    for i = 1:length(agents)
-        agent_id = agents(i);
-        if agent_id == base_agent_id
-            continue;
-        end
-
-        %if i == 4
-        %    interpolated_data(agent_id).a0 = interpolated_data(agent_id).a0 + 30*ones(size(phase_diff));
-        %end
-        % 相対位相差を計算
+    % 他エージェント
+    for k = 2:length(display_agents)
+        agent_id = display_agents(k);
         phase_diff = mod(interpolated_data(agent_id).a0 - base_agent_a0 + 128, 256) - 128;
-        phase_diff = phase_diff * (2 * pi / 256); % 縦軸のデータを 2π/256 でスケール
+        phase_diff = phase_diff * (2*pi/256);
 
-        % NaNを挿入
+        % ジャンプ除去
         phase_diff_with_nan = phase_diff;
         for j = 2:length(phase_diff)
-            if abs(phase_diff(j) - phase_diff(j - 1)) > pi % 128に相当するスケール
+            if abs(phase_diff(j) - phase_diff(j-1)) > pi
                 phase_diff_with_nan(j) = NaN;
             end
         end
 
-        % プロット
-        %plot(interpolated_data(agent_id).time, phase_diff_with_nan, 'DisplayName', ['Agent ', num2str(agent_id), ' - Agent ', num2str(base_agent_id)], 'Color', colors(i, :));
-        plot(interpolated_data(agent_id).time, phase_diff_with_nan, 'DisplayName', ['Agent ', num2str(agent_id)], 'Color', colors(i, :));
+        h = plot(interpolated_data(agent_id).time, phase_diff_with_nan, ...
+            'DisplayName', sprintf('Agent %d', agent_id), ...
+            'Color', colors(k,:));
+        legend_handles(end+1) = h; %#ok<AGROW>
+        legend_labels{end+1}  = sprintf('Agent %d', agent_id); %#ok<AGROW>
     end
 
-    % 縦軸の目盛りをπ単位で設定し、範囲を -π から π に制限
     ylim([-pi, pi]);
     yticks(-pi:pi:pi);
-    %yticks(-pi:pi/2:pi);
-    yticklabels({'$-\pi$', '0', '$\pi$'});
-    %yticklabels({'$-\pi$', '$-\frac{\pi}{2}$', '0', '$\frac{\pi}{2}$', '$\pi$'});
-    set(gca, 'TickLabelInterpreter', 'latex');
-
+    yticklabels({'$-\pi$','0','$\pi$'});
+    set(gca,'TickLabelInterpreter','latex');
     xlim([0 common_xmax]);
-
-    xlabel('Time (s)', 'Interpreter', 'latex');
-    ylabel('$$\phi_j - \phi_1$$', 'Interpreter', 'latex');
+    xlabel('Time (s)', 'Interpreter','latex');
+    ylabel('$$\phi_j - \phi_1$$','Interpreter','latex');
     grid on;
     tuneFigure;
     set(findall(gcf,'-property','FontSize'),'FontSize',28);
-    legend({'Module 1', 'Module 2', 'Module 3', 'Module 4', 'Module 5', 'Module 6'}, 'Location', 'southeast', 'Interpreter', 'latex','NumColumns', 3);
+    ncol = min(3, numel(legend_labels));
+    legend({'Module 1', 'Module 2', 'Module 3', 'Module 4', 'Module 5', 'Module 6'}, 'Location', 'northoutside', 'Interpreter', 'latex','NumColumns', ncol);
     if exist('do_save_figure','var') && do_save_figure
         saveFigure;
     end
