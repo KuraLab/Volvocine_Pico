@@ -2,31 +2,31 @@
 
 function main_plot_2modules()
     % 実験日付
-    experiment_date = '2025-08-18';
+    experiment_date = '2025-07-18';
 
     base_directory = 'merged_chunks_organized';
 
     % 最初の n 秒除外
-    n_seconds_to_cut = 4.9;
+    n_seconds_to_cut = 5;
 
     % プロット終了時刻
-    plot_duration = 34.9;
+    plot_duration = 105;
 
     % 欠損許容
-    allow_missing_agents = 0;
+    allow_missing_agents = 1;
     do_save_figure = true;
 
     % 平滑化
     apply_filter = true;
-    filter_window_size = 1;
+    filter_window_size = 10;
 
     % 追加: 並び替え設定
     % agents 昇順 = [3 7 9 12] のとき [1 3 2 4] -> [3 9 7 12]
-    order_index = [1 3 4 2 5 6];   % 未指定なら [] でも可
+    order_index = [3 2 5 4 6 1];   % 未指定なら [] でも可
     base_agent_id = [];        % 基準を自動(最小ID)にするなら []
 
     % 最新から n 番目
-    n = 37;
+    n = 1;
 
     plot_nth_latest_file_by_date( ...
         experiment_date, n, base_directory, ...

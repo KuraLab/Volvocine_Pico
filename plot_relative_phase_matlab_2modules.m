@@ -101,16 +101,17 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
     display_agents = agents(order_index);              % 指定順
     display_agents = display_agents(:).';              % 念のため行ベクトル
 
-    % 基準エージェント
-    if nargin < 2 || isempty(base_agent_id)
+    % 基準エージェント: order_index 指定時はその先頭を優先して基準にする
+    if ~isempty(order_index)
+        base_agent_id = agents(order_index(1));
+    elseif nargin < 2 || isempty(base_agent_id)
         base_agent_id = min(agents);
     end
     if ~ismember(base_agent_id, agents)
         error('[ERROR] Base agent ID %d not found in data.', base_agent_id);
     end
-    % 先頭へ（存在しない場合は追加）
-    display_agents(display_agents == base_agent_id) = [];
-    display_agents = [base_agent_id display_agents];
+    % 表示順は order_index のまま。基準は先頭に移動しない
+    plot_agents = display_agents(display_agents ~= base_agent_id); % 基準は基準線で表示
 
     % デバッグ表示（必要なら）
     % fprintf('[DEBUG] agents (asc): %s\n', mat2str(agents));
@@ -199,6 +200,7 @@ function plot_relative_phase_matlab_2modules(file_list, base_agent_id, n_seconds
 
     % 他エージェント
     for k = 2:length(display_agents)
+
         agent_id = display_agents(k);
         phase_diff = mod(interpolated_data(agent_id).a0 - base_agent_a0 + 128, 256) - 128;
         phase_diff = phase_diff * (2*pi/256);
