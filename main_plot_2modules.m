@@ -2,7 +2,7 @@
 
 function main_plot_2modules()
     % 実験日付
-    experiment_date = '2025-07-18';
+    experiment_date = '2025-08-18';
 
     base_directory = 'merged_chunks_organized';
 
@@ -21,8 +21,8 @@ function main_plot_2modules()
     filter_window_size = 10;
 
     % 追加: 並び替え設定
-    % agents 昇順 = [3 7 9 12] のとき [1 3 2 4] -> [3 9 7 12]
-    order_index = [3 2 5 4 6 1];   % 未指定なら [] でも可
+    % agents 昇順 = エージェント番号が[3 7 9 12] のとき [1 3 2 4] -> [3 9 7 12]
+    order_index = [1 2 3 4 5 6];   % 未指定なら [] でも可
     base_agent_id = [];        % 基準を自動(最小ID)にするなら []
 
     % 最新から n 番目
