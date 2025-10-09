@@ -1,11 +1,22 @@
 # サーバー側で管理するパラメータ
-omega = 3.14 * 2.5  # 周波数
+# エージェントIDごとのomega値を配列で管理
+omega_values = {
+    6: 3.14 * 2.5,   # エージェント1の周波数
+}
+default_omega = 3.14 * 2.5  # デフォルト周波数（未定義IDの場合）
+
 kappa = 5       # フィードバックゲイン
 alpha = -3.14*0.6
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 60.0 # サーボ振幅
 stop_agent_id = 4      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
 stop_delay_seconds = 30000 # 停止までの秒数
+
+def get_omega_for_agent(agent_id):
+    """
+    エージェントIDに応じたomega値を取得する関数
+    """
+    return omega_values.get(agent_id, default_omega)
 
 def handle_handshake(sock, data, addr):
     """
@@ -37,10 +48,13 @@ def handle_parameter_request(sock, data, addr):
             # analog26 を電圧値に変換
             voltage = (analog26 / 4095) * 3.3 * 2
 
+            # エージェントIDに応じたomega値を取得
+            omega = get_omega_for_agent(agent_id)
+
             # サーバー側のパラメータを送信
             response = f"omega:{omega:.2f},kappa:{kappa:.2f},alpha:{alpha:.2f},center:{servo_center:.1f},amplitude:{servo_amplitude:.1f},stop_id:{stop_agent_id},stop_delay:{stop_delay_seconds}"
             sock.sendto(response.encode('utf-8'), addr)
-            print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Voltage: {voltage:.2f}: {response}")
+            print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Omega: {omega:.2f}, Voltage: {voltage:.2f}: {response}")
             return agent_id
 
         except (IndexError, ValueError) as e:
