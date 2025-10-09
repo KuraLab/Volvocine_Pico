@@ -2,7 +2,7 @@
 
 function main_plot_2modules()
     % 実験日付
-    experiment_date = '2025-08-18';
+    experiment_date = '2025-10-09';
 
     base_directory = 'merged_chunks_organized';
 
