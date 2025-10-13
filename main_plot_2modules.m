@@ -7,14 +7,14 @@ function main_plot_2modules()
     base_directory = 'merged_chunks_organized';
 
     % 最初の n 秒除外
-    n_seconds_to_cut = 5;
+    n_seconds_to_cut = 0;
 
     % プロット終了時刻
     plot_duration = 105;
 
     % 欠損許容
     allow_missing_agents = 1;
-    do_save_figure = true;
+    do_save_figure = false;
 
     % 平滑化
     apply_filter = true;
