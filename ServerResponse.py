@@ -5,7 +5,7 @@ omega_values = {
 }
 default_omega = 3.14 * 2.5  # デフォルト周波数（未定義IDの場合）
 
-kappa = 5       # フィードバックゲイン
+kappa = 10       # フィードバックゲイン
 alpha = -3.14*0.6
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 60.0 # サーボ振幅
