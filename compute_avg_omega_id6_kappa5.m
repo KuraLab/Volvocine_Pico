@@ -1,4 +1,4 @@
-function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, agent_id, export_outputs)
+function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, agent_id, export_outputs, make_plot)
 % Compute average angular velocity for a given agent (default id=6)
 % between [t_start, t_end] seconds for all CSV logs in folder_path.
 % Time is set relative to the first timestamp in each file (experiment time 0).
@@ -22,6 +22,9 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
     end
     if nargin < 5 || isempty(export_outputs)
         export_outputs = false; % only save when true
+    end
+    if nargin < 6 || isempty(make_plot)
+        make_plot = true; % draw figure by default
     end
 
     if ~isfolder(folder_path)
@@ -49,14 +52,30 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
             T = readtable(fpath);
         catch ME
             warning('Failed to read %s: %s', fpath, ME.message);
-            results(end+1) = struct('file', files(i).name, 'mean_omega_rad_s', NaN, 'mean_omega_deg_s', NaN, 'duration_used_s', 0, 'status', 'read_error'); %#ok<AGROW>
+            results(end+1) = struct('file', files(i).name, ...
+                                    'agent_id', agent_id, ...
+                                    'mean_omega_rad_s', NaN, ...
+                                    'mean_omega_deg_s', NaN, ...
+                                    'base_agent_id', NaN, ...
+                                    'base_mean_omega_rad_s', NaN, ...
+                                    'ratio_to_base', NaN, ...
+                                    'duration_used_s', 0, ...
+                                    'status', 'read_error'); %#ok<AGROW>
             continue;
         end
 
         required = {'agent_id','chunk_id','time_pc_sec_abs','a0'};
         if ~all(ismember(required, T.Properties.VariableNames))
             warning('Skipping %s: missing required columns %s', files(i).name, strjoin(required, ', '));
-            results(end+1) = struct('file', files(i).name, 'mean_omega_rad_s', NaN, 'mean_omega_deg_s', NaN, 'duration_used_s', 0, 'status', 'missing_columns'); %#ok<AGROW>
+            results(end+1) = struct('file', files(i).name, ...
+                                    'agent_id', agent_id, ...
+                                    'mean_omega_rad_s', NaN, ...
+                                    'mean_omega_deg_s', NaN, ...
+                                    'base_agent_id', NaN, ...
+                                    'base_mean_omega_rad_s', NaN, ...
+                                    'ratio_to_base', NaN, ...
+                                    'duration_used_s', 0, ...
+                                    'status', 'missing_columns'); %#ok<AGROW>
             continue;
         end
 
@@ -134,35 +153,32 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
     catch
     end
 
-    % Plot bar chart of ratio (omega_target / omega_base)
-    okMask = strcmp(resultsTable.status, 'ok');
-    files_ok = resultsTable.file(okMask);
-    ratio_ok = resultsTable.ratio_to_base(okMask);
-
-    figure('Color','w');
-    if ~isempty(ratio_ok)
-        % Create short labels from filenames (HHMMSS)
-        shortLabels = files_ok;
-        try
-            shortLabels = regexprep(files_ok, '^merged_(\d{8})_(\d{6})\.csv$', '$2');
-        catch
+    % Plot line of ratio (omega_target / omega_base)
+    if make_plot
+        ratio_all = resultsTable.ratio_to_base;
+        figure('Color','w');
+        if ~isempty(ratio_all)
+            % X-axis: 1.0 .. 4.0 by 0.1 when count is 31; else fallback to linspace
+            if numel(ratio_all) == 31
+                x = 1.0:0.1:4.0;
+            else
+                x = linspace(1.0, 4.0, numel(ratio_all));
+            end
+            plot(x, ratio_all, '-o', 'Color', [0.2 0.4 0.8], 'LineWidth', 1.5, 'MarkerFaceColor', [0.2 0.4 0.8]);
+            grid on;
+            xlabel('X');
+            ylabel('Ratio: \\omega_{agent} / \\omega_{base}');
+            title(sprintf('Agent %d ratio to base (min agent id) in [%g, %g] s across %d files', agent_id, t_start, t_end, numel(ratio_all)));
+            xlim([min(x) max(x)]);
+            xticks(x);
+        else
+            text(0.5, 0.5, 'No valid results', 'HorizontalAlignment','center');
+            axis off;
         end
-        x = 1:numel(ratio_ok);
-        plot(x, ratio_ok, '-o', 'Color', [0.2 0.4 0.8], 'LineWidth', 1.5, 'MarkerFaceColor', [0.2 0.4 0.8]);
-        grid on;
-        xlabel('File index');
-        ylabel('Ratio: \omega_{agent} / \omega_{base}');
-        title(sprintf('Agent %d ratio to base (min agent id) in [%g, %g] s across %d files', agent_id, t_start, t_end, numel(ratio_ok)));
-        xticks(x);
-        xticklabels(shortLabels);
-        xtickangle(60);
-    else
-        text(0.5, 0.5, 'No valid results', 'HorizontalAlignment','center');
-        axis off;
     end
 
     % Save outputs (only when export_outputs is true)
-    if export_outputs
+    if export_outputs && make_plot
         outDir = fullfile(pwd, 'exports');
         if ~isfolder(outDir)
             try
