@@ -3,7 +3,7 @@
 
 try
     % Set last argument to true to export PNG/CSV, false to skip saving
-    resultsTable = compute_avg_omega_id6_kappa5(fullfile(pwd,'ArnoldPlot','kappa15'), 15, 60, 6, false);
+    resultsTable = compute_avg_omega_id6_kappa5(fullfile(pwd,'ArnoldPlot','kappa5'), 15, 60, 6, false);
     disp('--- Results (first few rows) ---');
     n = min(5, height(resultsTable));
     if n > 0
