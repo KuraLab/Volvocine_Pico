@@ -22,7 +22,7 @@ end
 [~, order] = sort(kvals);  % NaNs will go to the end
 dirs = dirs(order);
 
-t_start = 15; t_end = 60; agent_id = 6;
+t_start = 30; t_end = 60;  % agent_id will be set dynamically per kappa folder
 
 figure('Color','w'); hold on;
 colors = lines(max(1, 1+numel(dirs)));
@@ -31,14 +31,46 @@ labels = strings(0);
 % Add kappa0 reference curve: y = x / 2.5 over [1.0:0.1:4.0]
 x_ref = 1.0:0.1:4.0;
 y_ref = x_ref ./ 2.5;
-h_ref = plot(x_ref, y_ref, '-o', 'LineWidth', 1.5,'MarkerSize', 4, 'MarkerFaceColor', 'auto');
+%h_ref = plot(x_ref, y_ref, '-o', 'LineWidth', 1.5,'MarkerSize', 4, 'MarkerFaceColor', 'auto');
 %plotHandles(end+1) = h_ref; 
-labels(end+1) = "kappa0"; 
+%labels(end+1) = "kappa0"; 
 
 for i = 1:numel(dirs)
     folder_path = fullfile(baseDir, dirs(i).name);
+    % Determine dynamic agent_id: max id in this folder excluding 99
+    dyn_agent_id = NaN;
     try
-        T = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, agent_id, false, false);
+        csvs = dir(fullfile(folder_path, '*.csv'));
+        ids_all = [];
+        for j = 1:numel(csvs)
+            f = fullfile(csvs(j).folder, csvs(j).name);
+            try
+                TT = readtable(f);
+                if any(strcmp('agent_id', TT.Properties.VariableNames))
+                    ids = unique(TT.agent_id);
+                    ids = ids(ids ~= 99);
+                    if ~isempty(ids)
+                        ids_all = [ids_all; ids]; %#ok<AGROW>
+                    end
+                end
+            catch
+                % skip file
+            end
+        end
+        if ~isempty(ids_all)
+            dyn_agent_id = max(ids_all);
+        end
+    catch
+        % fallback
+    end
+
+    if isnan(dyn_agent_id)
+        warning('No valid agent_id found in %s (excluding 99). Skipped.', dirs(i).name);
+        continue;
+    end
+
+    try
+        T = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, dyn_agent_id, false, false);
     catch ME
         warning('Failed on %s: %s', dirs(i).name, ME.message);
         continue;
@@ -52,15 +84,20 @@ for i = 1:numel(dirs)
     else
         x = linspace(1.0, 4.0, numel(ratio_all));
     end
-    plot(x, ratio_all, '-o', 'Color', colors(mod(i,size(colors,1))+1,:), ...
+    plot(x, ratio_all, '-o', 'Color', colors(mod(i-1,size(colors,1))+1,:), ...
         'LineWidth', 1.5, 'MarkerSize', 4, 'MarkerFaceColor', 'auto');
-    labels(end+1) = string(dirs(i).name); %#ok<SAGROW>
+    labels(end+1) = string(sprintf('%s', dirs(i).name)); %#ok<SAGROW>
 end
 
 
 
 grid on; hold off;
-xlabel('X');
-ylabel('Ratio: \omega_{agent} / \omega_{base}');
-title(sprintf('Overlay ratios across kappa folders (agent %d, [%g, %g] s)', agent_id, t_start, t_end));
+xlabel('$$\omega_2/\pi$$');
+ylabel('$$\bar{\dot{\phi_2}} / \bar{\dot{\phi_1}}$$');
+ylim([0, 2]);
+% Set x-axis ticks at 0.5 intervals over [1, 4]
+xlim([1, 4]);
+xticks(1:0.5:4);
 legend(labels, 'Interpreter', 'none', 'Location', 'bestoutside');
+tuneFigure;
+saveFigure;
