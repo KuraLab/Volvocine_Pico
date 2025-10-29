@@ -186,11 +186,7 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
             grid on;
             xlabel('X');
             ylabel('Ratio: \\omega_{agent} / \\omega_{base}');
-            if strcmpi(agent_mode, 'per_file_max_vs_min')
-                title(sprintf('Per-file max/min ratio in [%g, %g] s across %d files', t_start, t_end, numel(ratio_all)));
-            else
-                title(sprintf('Agent %d ratio to base (min agent id) in [%g, %g] s across %d files', agent_id, t_start, t_end, numel(ratio_all)));
-            end
+            % No title per user preference
             xlim([min(x) max(x)]);
             xticks(x);
         else
