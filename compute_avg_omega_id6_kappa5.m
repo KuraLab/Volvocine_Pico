@@ -1,4 +1,4 @@
-function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, agent_id, export_outputs, make_plot)
+function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, agent_id, export_outputs, make_plot, agent_mode)
 % Compute average angular velocity for a given agent (default id=6)
 % between [t_start, t_end] seconds for all CSV logs in folder_path.
 % Time is set relative to the first timestamp in each file (experiment time 0).
@@ -7,6 +7,8 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
 % Usage:
 %   resultsTable = compute_avg_omega_id6_kappa5();
 %   resultsTable = compute_avg_omega_id6_kappa5('ArnoldPlot/kappa5', 10, 50, 6);
+%   % Per-file: ratio = omega(max agent in file) / omega(min agent in file)
+%   resultsTable = compute_avg_omega_id6_kappa5('ArnoldPlot/kappa5', 10, 50, NaN, false, false, 'per_file_max_vs_min');
 
     if nargin < 1 || isempty(folder_path)
         folder_path = fullfile(pwd, 'ArnoldPlot', 'kappa5');
@@ -25,6 +27,9 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
     end
     if nargin < 6 || isempty(make_plot)
         make_plot = true; % draw figure by default
+    end
+    if nargin < 7 || isempty(agent_mode)
+        agent_mode = 'fixed'; % 'fixed' or 'per_file_max_vs_min'
     end
 
     if ~isfolder(folder_path)
@@ -79,18 +84,40 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
             continue;
         end
 
+        % Determine target and base agent IDs per file
+        agents_in_file = unique(T.agent_id);
+        agents_in_file = agents_in_file(agents_in_file ~= 99);
+
+        if strcmpi(agent_mode, 'per_file_max_vs_min')
+            if isempty(agents_in_file)
+                target_id = agent_id; % fallback to provided id
+                base_id   = agent_id; % same fallback
+            else
+                base_id   = min(agents_in_file);
+                target_id = max(agents_in_file);
+            end
+        else
+            % fixed target; base is smallest id in file
+            target_id = agent_id;
+            if isempty(agents_in_file)
+                base_id = agent_id; % fallback
+            else
+                base_id = min(agents_in_file);
+            end
+        end
+
         % Compute target agent mean omega
         [ok_t, mean_omega, mean_omega_deg, dur_used, status_t] = ...
-            compute_agent_mean_omega(T, agent_id, t_start, t_end, threshold_sec, jump_sec, T_OVERFLOW);
+            compute_agent_mean_omega(T, target_id, t_start, t_end, threshold_sec, jump_sec, T_OVERFLOW);
         if ~ok_t
             if ~strcmp(status_t, 'no_agent_data')
-                warning('Agent %d in %s: %s', agent_id, files(i).name, status_t);
+                warning('Agent %d in %s: %s', target_id, files(i).name, status_t);
             end
             results(end+1) = struct('file', files(i).name, ...
-                                    'agent_id', agent_id, ...
+                                    'agent_id', target_id, ...
                                     'mean_omega_rad_s', NaN, ...
                                     'mean_omega_deg_s', NaN, ...
-                                    'base_agent_id', NaN, ...
+                                    'base_agent_id', base_id, ...
                                     'base_mean_omega_rad_s', NaN, ...
                                     'ratio_to_base', NaN, ...
                                     'duration_used_s', dur_used, ...
@@ -98,21 +125,12 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
             continue;
         end
 
-        % Determine baseline as smallest agent id in file (excluding 99)
-        agents_in_file = unique(T.agent_id);
-        agents_in_file = agents_in_file(agents_in_file ~= 99);
-        if isempty(agents_in_file)
-            base_id = agent_id; % fallback
-        else
-            base_id = min(agents_in_file);
-        end
-
         [ok_b, base_mean_omega, ~, ~, status_b] = ...
             compute_agent_mean_omega(T, base_id, t_start, t_end, threshold_sec, jump_sec, T_OVERFLOW);
         if ~ok_b
             warning('Base agent %d in %s: %s', base_id, files(i).name, status_b);
             results(end+1) = struct('file', files(i).name, ...
-                                    'agent_id', agent_id, ...
+                                    'agent_id', target_id, ...
                                     'mean_omega_rad_s', mean_omega, ...
                                     'mean_omega_deg_s', mean_omega_deg, ...
                                     'base_agent_id', base_id, ...
@@ -129,8 +147,8 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
             ratio_val = mean_omega / base_mean_omega;
         end
 
-        results(end+1) = struct('file', files(i).name, ...
-                                'agent_id', agent_id, ...
+    results(end+1) = struct('file', files(i).name, ...
+                'agent_id', target_id, ...
                                 'mean_omega_rad_s', mean_omega, ...
                                 'mean_omega_deg_s', mean_omega_deg, ...
                                 'base_agent_id', base_id, ...
@@ -168,7 +186,11 @@ function resultsTable = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end
             grid on;
             xlabel('X');
             ylabel('Ratio: \\omega_{agent} / \\omega_{base}');
-            title(sprintf('Agent %d ratio to base (min agent id) in [%g, %g] s across %d files', agent_id, t_start, t_end, numel(ratio_all)));
+            if strcmpi(agent_mode, 'per_file_max_vs_min')
+                title(sprintf('Per-file max/min ratio in [%g, %g] s across %d files', t_start, t_end, numel(ratio_all)));
+            else
+                title(sprintf('Agent %d ratio to base (min agent id) in [%g, %g] s across %d files', agent_id, t_start, t_end, numel(ratio_all)));
+            end
             xlim([min(x) max(x)]);
             xticks(x);
         else

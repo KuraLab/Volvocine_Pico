@@ -37,40 +37,9 @@ y_ref = x_ref ./ 2.5;
 
 for i = 1:numel(dirs)
     folder_path = fullfile(baseDir, dirs(i).name);
-    % Determine dynamic agent_id: max id in this folder excluding 99
-    dyn_agent_id = NaN;
     try
-        csvs = dir(fullfile(folder_path, '*.csv'));
-        ids_all = [];
-        for j = 1:numel(csvs)
-            f = fullfile(csvs(j).folder, csvs(j).name);
-            try
-                TT = readtable(f);
-                if any(strcmp('agent_id', TT.Properties.VariableNames))
-                    ids = unique(TT.agent_id);
-                    ids = ids(ids ~= 99);
-                    if ~isempty(ids)
-                        ids_all = [ids_all; ids]; %#ok<AGROW>
-                    end
-                end
-            catch
-                % skip file
-            end
-        end
-        if ~isempty(ids_all)
-            dyn_agent_id = max(ids_all);
-        end
-    catch
-        % fallback
-    end
-
-    if isnan(dyn_agent_id)
-        warning('No valid agent_id found in %s (excluding 99). Skipped.', dirs(i).name);
-        continue;
-    end
-
-    try
-        T = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, dyn_agent_id, false, false);
+        % Per-file ratio: omega(max agent) / omega(min agent)
+        T = compute_avg_omega_id6_kappa5(folder_path, t_start, t_end, NaN, false, false, 'per_file_max_vs_min');
     catch ME
         warning('Failed on %s: %s', dirs(i).name, ME.message);
         continue;
