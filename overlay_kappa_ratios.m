@@ -1,8 +1,8 @@
 % Overlay ratio curves across multiple kappa directories under ArnoldPlot
 % X-axis: 1.0:0.1:4.0 when N=31, else linspace fallback per series
 
-baseDir = fullfile(pwd, 'SoftConnectKappa');
-dirs = dir(fullfile(baseDir, 'Omega*'));
+baseDir = fullfile(pwd, 'OptimumAlpha');
+dirs = dir(fullfile(baseDir, 'Alpha*'));
 dirs = dirs([dirs.isdir]);
 if isempty(dirs)
     error('No kappa* directories found under %s', baseDir);
@@ -22,7 +22,7 @@ end
 [~, order] = sort(kvals);  % NaNs will go to the end
 dirs = dirs(order);
 
-t_start = 5; t_end = 60;  % agent_id will be set dynamically per kappa folder
+t_start = 10; t_end = 60;  % agent_id will be set dynamically per kappa folder
 
 figure('Color','w'); hold on;
 colors = lines(max(1, 1+numel(dirs)));
