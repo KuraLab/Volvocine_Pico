@@ -6,7 +6,7 @@ omega_values = {
 default_omega = 3.14 * 2.5  # デフォルト周波数（未定義IDの場合）
 
 kappa =5       # フィードバックゲイン
-alpha = 3.14*0.6
+alpha = -3.14*0.8
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 60.0 # サーボ振幅
 stop_agent_id = 4      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
