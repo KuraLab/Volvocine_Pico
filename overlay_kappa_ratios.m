@@ -1,8 +1,8 @@
 % Overlay ratio curves across multiple kappa directories under ArnoldPlot
 % X-axis: 1.0:0.1:4.0 when N=31, else linspace fallback per series
 
-baseDir = fullfile(pwd, 'OptimumAlpha');
-dirs = dir(fullfile(baseDir, 'Alpha*'));
+baseDir = fullfile(pwd, 'SoftConnect');
+dirs = dir(fullfile(baseDir, 'Spring*'));
 dirs = dirs([dirs.isdir]);
 if isempty(dirs)
     error('No kappa* directories found under %s', baseDir);
@@ -69,4 +69,4 @@ xlim([1, 4]);
 xticks(1:0.5:4);
 legend(labels, 'Interpreter', 'none', 'Location', 'bestoutside');
 tuneFigure;
-%saveFigure;
+saveFigure;
