@@ -26,7 +26,7 @@ function main_plot_2modules()
     base_agent_id = [];        % 基準を自動(最小ID)にするなら []
 
     % 最新から n 番目
-    n = 1;
+    n = 34;
 
     plot_nth_latest_file_by_date( ...
         experiment_date, n, base_directory, ...
