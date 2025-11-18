@@ -1,4 +1,4 @@
-function plot_phase_evolution_omega250(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure)
+function plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure)
 % Overlay phase-relationship time evolutions from all files in a directory
 %
 % Usage:
@@ -9,12 +9,12 @@ function plot_phase_evolution_omega250(dirpath, n_seconds_to_cut, plot_duration,
 %   dirpath = 'EstimateF/omega250'
 %   n_seconds_to_cut = 0
 %   plot_duration = 105
-%   apply_filter = true
+save%   apply_filter = true
 %   filter_window_size = 10
 %   do_save_figure = false
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','omega240');
+        dirpath = fullfile('EstimateF','omega250');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;
@@ -124,7 +124,7 @@ function plot_phase_evolution_omega250(dirpath, n_seconds_to_cut, plot_duration,
     for p = 1:n_plots
         ag = other_agents(p);
         subplot(n_plots,1,p); hold on;
-        title(sprintf('Agent %d - Agent %d', ag, base_agent));
+%        title(sprintf('Agent %d - Agent %d', ag, base_agent));
         ylabel('Relative phase (rad)');
         ylim([-pi, pi]);
         yticks([-pi,0,pi]);
@@ -155,7 +155,8 @@ function plot_phase_evolution_omega250(dirpath, n_seconds_to_cut, plot_duration,
     % no legend requested — overlays only
 
     tuneFigure();
-    set(findall(gcf,'-property','FontSize'),'FontSize',20);
+    %set(findall(gcf,'-property','FontSize'),'FontSize',20);
+    %saveFigure;
 
     if do_save_figure
         saveFigure();
