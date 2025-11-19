@@ -116,8 +116,8 @@ save%   apply_filter = true
 
     % Prepare figure with one subplot per other agent
     n_plots = numel(other_agents);
-    figure('Units','normalized','Position',[0.05 0.05 0.9 0.85]);
-
+    %figure('Units','normalized','Position',[0.05 0.05 0.9 0.85]);
+    figure;
     colors = lines(numel(file_list));
     max_plot_time = min(plot_duration - n_seconds_to_cut, 60);
 
@@ -125,7 +125,7 @@ save%   apply_filter = true
         ag = other_agents(p);
         subplot(n_plots,1,p); hold on;
 %        title(sprintf('Agent %d - Agent %d', ag, base_agent));
-        ylabel('Relative phase (rad)');
+        ylabel('$$\phi_2 - \phi_1$$','Interpreter','latex');
         ylim([-pi, pi]);
         yticks([-pi,0,pi]);
         yticklabels({'-\pi','0','\pi'});
@@ -156,7 +156,7 @@ save%   apply_filter = true
 
     tuneFigure();
     %set(findall(gcf,'-property','FontSize'),'FontSize',20);
-    %saveFigure;
+    saveFigure;
 
     if do_save_figure
         saveFigure();
