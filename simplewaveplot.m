@@ -2,7 +2,7 @@
 phi = linspace(-pi, pi, 1000);
 
 % 関数値
-y = 1.0*sin(phi) + 1.0*sin(2*phi);
+y = 0.3*sin(phi) + 0.9*sin(2*phi);
 
 % プロット
 figure;
