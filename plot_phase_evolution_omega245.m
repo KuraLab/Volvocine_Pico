@@ -15,7 +15,7 @@ save%   apply_filter = true
 %   base_phase_weight = 1   (set to 2 to view \theta_1 - 2\theta_2, etc.)
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','doublecheck/Spring1/');
+        dirpath = fullfile('EstimateF','255');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;
@@ -33,7 +33,7 @@ save%   apply_filter = true
         do_save_figure = false;
     end
     if nargin < 7 || isempty(base_phase_weight)
-        base_phase_weight = 0.5;
+        base_phase_weight = 1;
     end
 
     if ~isfolder(dirpath)
