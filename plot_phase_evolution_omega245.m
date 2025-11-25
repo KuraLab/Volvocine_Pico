@@ -15,7 +15,7 @@ save%   apply_filter = true
 %   base_phase_weight = 1   (set to 2 to view \theta_1 - 2\theta_2, etc.)
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring2/260');
+        dirpath = fullfile('EstimateF','Spring2/265');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;
