@@ -1,4 +1,4 @@
-function plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure)
+function plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure, n_sync, m_sync)
 % Overlay phase-relationship time evolutions from all files in a directory
 %
 % Usage:
@@ -14,7 +14,7 @@ save%   apply_filter = true
 %   do_save_figure = false
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring2/270');
+        dirpath = fullfile('EstimateF','Spring2/265');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;
@@ -29,7 +29,13 @@ save%   apply_filter = true
         filter_window_size = 1;
     end
     if nargin < 6 || isempty(do_save_figure)
-        do_save_figure = true;
+        do_save_figure = false;
+    end
+    if nargin < 7 || isempty(n_sync)
+        n_sync = 2; % default: check 2:1 synchronization
+    end
+    if nargin < 8 || isempty(m_sync)
+        m_sync = 1;
     end
 
     if ~isfolder(dirpath)
@@ -111,7 +117,7 @@ save%   apply_filter = true
     for f = 1:numel(file_tables)
         phase_series_by_file{f} = compute_phase_series_for_file( ...
             file_tables{f}, base_agent, n_seconds_to_cut, plot_duration, ...
-            allow_missing_agents, apply_filter, filter_window_size, max_agent_id);
+            allow_missing_agents, apply_filter, filter_window_size, max_agent_id, n_sync, m_sync);
     end
 
     % Prepare figure with one subplot per other agent
@@ -121,8 +127,8 @@ save%   apply_filter = true
     colors = lines(numel(file_list));
     max_plot_time = min(plot_duration - n_seconds_to_cut, 60);
 
-    % Display label for modified phase-combination: 2*phi2 - phi1
-    y_label_str = '$$2\phi_2 - \phi_{\mathrm{1}}$$';
+    % Display label for modified phase-combination using n:m notation
+    y_label_str = sprintf('$$%d\\phi_{j} - %d\\phi_{\\mathrm{1}}$$', n_sync, m_sync);
 
     for p = 1:n_plots
         ag = other_agents(p);
@@ -164,7 +170,7 @@ save%   apply_filter = true
     end
 end
 
-function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_seconds_to_cut, plot_duration, allow_missing_agents, apply_filter, filter_window_size, max_agent_id)
+function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_seconds_to_cut, plot_duration, allow_missing_agents, apply_filter, filter_window_size, max_agent_id, n_sync, m_sync)
     if nargin < 5 || isempty(allow_missing_agents)
         allow_missing_agents = 1;
     end
@@ -172,10 +178,16 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
         apply_filter = true;
     end
     if nargin < 7 || isempty(filter_window_size)
-        filter_window_size = 10;
+        filter_window_size = 1;
     end
     if nargin < 8 || isempty(max_agent_id)
         max_agent_id = max(df_all.agent_id);
+    end
+    if nargin < 9 || isempty(n_sync)
+        n_sync = 2;
+    end
+    if nargin < 10 || isempty(m_sync)
+        m_sync = 1;
     end
 
     series_struct = repmat(struct('time', [], 'phase', []), 1, max_agent_id);
@@ -255,8 +267,8 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
 
     for i = 1:length(agents)
         agent_id = agents(i);
-        % Use 2*phi_agent - phi_base instead of phi_agent - 0.5*phi_base
-        phase_raw = 2 * interpolated_data(agent_id).a0 - base_agent_a0;
+        % Use n_sync*phi_agent - m_sync*phi_base for n:m synchronization checks
+        phase_raw = n_sync * interpolated_data(agent_id).a0 - m_sync * base_agent_a0;
     phase_diff = mod(phase_raw + 128, 256) - 128;
         phase_diff = phase_diff * (2*pi/256);
         phase_diff_with_nan = phase_diff;
