@@ -14,10 +14,10 @@ save%   apply_filter = true
 %   do_save_figure = false
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring2/265');
+        dirpath = fullfile('EstimateF','Spring2/240');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
-        n_seconds_to_cut = 0;
+        n_seconds_to_cut = 0;0
     end
     if nargin < 3 || isempty(plot_duration)
         plot_duration = 105;
@@ -32,7 +32,7 @@ save%   apply_filter = true
         do_save_figure = false;
     end
     if nargin < 7 || isempty(n_sync)
-        n_sync = 2; % default: check 2:1 synchronization
+        n_sync = 1; % default: check 2:1 synchronization
     end
     if nargin < 8 || isempty(m_sync)
         m_sync = 1;
