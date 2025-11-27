@@ -2,8 +2,8 @@
 phi = linspace(-pi, pi, 1000);
 
 % 関数値
-domega = 0.01*pi*(15);
-y = domega + 0.01*pi*(-3*sin(phi) - 10*sin(2*phi)+0.01);
+domega = 0.01*pi*5;
+y = domega + 0.01*pi*(-10*sin(phi) - 3*sin(2*phi)+0.01);
 
 % プロット
 figure;
@@ -123,4 +123,4 @@ for j = 1:numel(mid_phi)
 end
 
 tuneFigure;
-saveFigure;
+%saveFigure;
