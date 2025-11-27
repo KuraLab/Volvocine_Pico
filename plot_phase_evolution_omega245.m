@@ -14,8 +14,7 @@ save%   apply_filter = true
 %   do_save_figure = false
 
     if nargin < 1 || isempty(dirpath)
-        %dirpath = fullfile('EstimateF','245');
-        dirpath = fullfile('EstimateF','doublecheck/Spring1');
+        dirpath = fullfile('EstimateF','Spring2/270');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;
@@ -30,7 +29,7 @@ save%   apply_filter = true
         filter_window_size = 1;
     end
     if nargin < 6 || isempty(do_save_figure)
-        do_save_figure = false;
+        do_save_figure = true;
     end
 
     if ~isfolder(dirpath)
