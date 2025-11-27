@@ -6,10 +6,10 @@
 omega = pi*[2.50; 1.27];   % natural frequencies of the oscillators
 K0 = 2;               % zeroth-harmonic coupling strength
 K = -0.0;                % first-harmonic coupling strength
-K2 =-0.5;              % second-harmonic coupling strength
+K2 =-0.6;              % second-harmonic coupling strength
 K3 = 0.0;              % second-harmonic coupling strength
 
-tspan = [0 200];         % simulation time span
+tspan = [0 60];         % simulation time span
 tEval = linspace(tspan(1), tspan(2), 5000); % desired output times for smooth curves
 numRuns = 10;
 initialDiffs = (2*pi).*rand(1, numRuns) - pi; % random initial phase differences
