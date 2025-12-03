@@ -14,7 +14,7 @@ save%   apply_filter = true
 %   do_save_figure = false
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring3/250');
+        dirpath = fullfile('EstimateF','Spring3/255');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;0
