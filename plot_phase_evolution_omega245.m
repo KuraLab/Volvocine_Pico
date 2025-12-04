@@ -1,4 +1,4 @@
-function plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure, n_sync, m_sync)
+function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure, n_sync, m_sync, sample_window)
 % Overlay phase-relationship time evolutions from all files in a directory
 %
 % Usage:
@@ -12,9 +12,10 @@ function plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration,
 save%   apply_filter = true
 %   filter_window_size = 10
 %   do_save_figure = false
+%   sample_window = [50, 60]
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring2/225');
+        dirpath = fullfile('EstimateF','Spring1/240');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;0
@@ -37,6 +38,17 @@ save%   apply_filter = true
     if nargin < 8 || isempty(m_sync)
         m_sync = 1;
     end
+    if nargin < 9 || isempty(sample_window)
+        sample_window = [50, 60];
+    end
+
+    if numel(sample_window) ~= 2
+        error('sample_window must contain exactly two elements [t_start, t_end].');
+    end
+    sample_window = sort(sample_window(:)).';
+    if sample_window(2) <= sample_window(1)
+        error('sample_window end must be greater than start.');
+    end
 
     if ~isfolder(dirpath)
         error('Directory not found: %s', dirpath);
@@ -54,6 +66,7 @@ save%   apply_filter = true
     T_TOL = 5.0;             % 許容誤差（秒）
     threshold_sec = T_OVERFLOW - T_TOL;
     jump_sec = T_OVERFLOW;
+    CLUSTER_VAR_THRESHOLD = 0.35;
 
     % Read all files and collect agent sets
     file_tables = cell(size(file_list));
@@ -123,7 +136,7 @@ save%   apply_filter = true
     % Prepare figure with one subplot per other agent
     n_plots = numel(other_agents);
     %figure('Units','normalized','Position',[0.05 0.05 0.9 0.85]);
-    figure;
+    figure('Visible','on');
     colors = lines(numel(file_list));
     max_plot_time = min(plot_duration - n_seconds_to_cut, 60);
 
@@ -165,8 +178,102 @@ save%   apply_filter = true
 
     tuneFigure();
 
+    cluster_info = cluster_phase_window_means(phase_series_by_file, other_agents, sample_window, CLUSTER_VAR_THRESHOLD);
+
     if do_save_figure
         saveFigure();
+    end
+
+    if nargout >= 1
+        varargout{1} = cluster_info;
+    end
+    if nargout >= 2
+        varargout{2} = phase_series_by_file;
+    end
+end
+
+function cluster_info = cluster_phase_window_means(phase_series_by_file, other_agents, sample_window, cluster_var_threshold)
+    window_start = sample_window(1);
+    window_end = sample_window(2);
+    all_samples = [];
+
+    for f = 1:numel(phase_series_by_file)
+        series_struct = phase_series_by_file{f};
+        if isempty(series_struct)
+            continue;
+        end
+        for ag = other_agents(:).'
+            if ag > numel(series_struct)
+                continue;
+            end
+            times = series_struct(ag).time;
+            phases = series_struct(ag).phase;
+            if isempty(times) || isempty(phases)
+                continue;
+            end
+            mask = (times >= window_start) & (times <= window_end);
+            if ~any(mask)
+                continue;
+            end
+            window_phases = phases(mask);
+            window_phases = window_phases(~isnan(window_phases));
+            if isempty(window_phases)
+                continue;
+            end
+            agent_mean = atan2(mean(sin(window_phases)), mean(cos(window_phases)));
+            all_samples(end+1) = agent_mean; %#ok<AGROW>
+        end
+    end
+
+    cluster_info = struct('cluster_id', {}, 'n_clusters', {}, 'mean', {}, 'stderr', {}, 'count', {}, 'circ_var', {}, 'nsamples_total', {});
+
+    if isempty(all_samples)
+        fprintf('[INFO] No valid phase samples found between %.2f and %.2f seconds.\n', window_start, window_end);
+        return;
+    end
+
+    Nsamples = numel(all_samples);
+    R = abs(mean(exp(1i * all_samples(:))));
+    circ_var = 1 - R;
+
+    if circ_var > cluster_var_threshold && Nsamples >= 6
+        k = 2;
+        pts = [cos(all_samples(:)), sin(all_samples(:))];
+        try
+            opts = statset('MaxIter',500);
+            [idx, ~] = kmeans(pts, k, 'Replicates', 5, 'Options', opts);
+        catch
+            idx = ones(size(all_samples(:)));
+            k = 1;
+        end
+    else
+        k = 1;
+        idx = ones(size(all_samples(:)));
+    end
+
+    fprintf('[INFO] Phase clusters over %.2f-%.2f s (Nsamples=%d, circVar=%.3f):\n', ...
+        window_start, window_end, Nsamples, circ_var);
+
+    for c = 1:k
+        mask = idx == c;
+        ths = all_samples(mask);
+        if isempty(ths)
+            continue;
+        end
+        mmean = atan2(mean(sin(ths)), mean(cos(ths)));
+        Rcl = abs(mean(exp(1i * ths)));
+        circ_std = sqrt(max(0, -2 * log(max(Rcl, eps))));
+        stderr = circ_std / sqrt(max(1, numel(ths)));
+        fprintf('  Cluster %d/%d: mean = %.3f rad (%.2f deg), stderr = %.3f (n=%d)\n', ...
+            c, k, mmean, mmean * 180/pi, stderr, numel(ths));
+        cluster_info(end+1) = struct( ...
+            'cluster_id', c, ...
+            'n_clusters', k, ...
+            'mean', mmean, ...
+            'stderr', stderr, ...
+            'count', numel(ths), ...
+            'circ_var', circ_var, ...
+            'nsamples_total', Nsamples); %#ok<AGROW>
     end
 end
 
