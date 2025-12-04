@@ -15,7 +15,11 @@ save%   apply_filter = true
 %   sample_window = [50, 60]
 
     if nargin < 1 || isempty(dirpath)
+<<<<<<< HEAD
         dirpath = fullfile('EstimateF','Spring1/240');
+=======
+        dirpath = fullfile('EstimateF','Spring3/270');
+>>>>>>> d4f99f6fa289750f79f04ca1bb466c6f07548d78
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;0
