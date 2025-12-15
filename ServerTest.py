@@ -18,6 +18,7 @@ BUFFER_SIZE = 1024
 SOCKET_TIMEOUT = 1.0
 CHUNK_TIMEOUT = 5.0
 
+
 STRUCT_FORMAT = "<6B"  # micros24 (3バイト), a0, a1, a2
 RECORD_SIZE = struct.calcsize(STRUCT_FORMAT)  # 6 bytes
 
