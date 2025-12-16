@@ -15,7 +15,7 @@ save%   apply_filter = true
 %   sample_window = [50, 60]
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring5/245');
+        dirpath = fullfile('EstimateF','Spring5/240');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;0
