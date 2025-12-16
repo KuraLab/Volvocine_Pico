@@ -284,12 +284,7 @@ function [freq_vals, mean_vals, stderr_vals] = collect_phase_points_for_root(roo
         if circ_var > cluster_var_threshold && Nsamples >= 6
             k = 2;
             pts = [cos(all_samples(:)), sin(all_samples(:))];
-            try
-                opts = statset('MaxIter',500);
-                [idx, ~] = kmeans(pts, k, 'Replicates', 5, 'Options', opts);
-            catch
-                idx = ones(size(all_samples(:)));
-            end
+            idx = run_kmeans_with_fallback(pts, k);
 
             offsets = linspace(-0.12, 0.12, k);
             for c = 1:k
@@ -322,6 +317,93 @@ function [freq_vals, mean_vals, stderr_vals] = collect_phase_points_for_root(roo
     freq_vals = freq_vals(:).';
     mean_vals = mean_vals(:).';
     stderr_vals = stderr_vals(:).';
+end
+
+function idx = run_kmeans_with_fallback(points, k)
+    if isempty(points)
+        idx = [];
+        return;
+    end
+
+    if exist('kmeans','file') == 2
+        try
+            if exist('statset','file') == 2
+                opts = statset('MaxIter',500);
+                idx = kmeans(points, k, 'Replicates', 5, 'Options', opts);
+            else
+                idx = kmeans(points, k, 'Replicates', 5, 'MaxIter', 500);
+            end
+            return;
+        catch
+            % fall through to the lightweight implementation below
+        end
+    end
+
+    idx = simple_kmeans(points, k, 500, 5);
+end
+
+function idx = simple_kmeans(points, k, max_iter, replicates)
+    if nargin < 3 || isempty(max_iter)
+        max_iter = 200;
+    end
+    if nargin < 4 || isempty(replicates)
+        replicates = 3;
+    end
+
+    n = size(points, 1);
+    if n == 0
+        idx = [];
+        return;
+    end
+
+    k = min(k, n);
+    best_idx = ones(n,1);
+    best_score = inf;
+
+    for rep = 1:replicates
+        perm = randperm(n, k);
+        centers = points(perm, :);
+        assign = zeros(n,1);
+
+        for it = 1:max_iter
+            dist = zeros(n, k);
+            for j = 1:k
+                diffv = points - centers(j, :);
+                dist(:, j) = sum(diffv.^2, 2);
+            end
+            [~, new_assign] = min(dist, [], 2);
+            if all(new_assign == assign)
+                assign = new_assign;
+                break;
+            end
+            assign = new_assign;
+            for j = 1:k
+                mask = assign == j;
+                if any(mask)
+                    centers(j, :) = mean(points(mask, :), 1);
+                else
+                    centers(j, :) = points(randi(n), :);
+                end
+            end
+        end
+
+        score = 0;
+        for j = 1:k
+            mask = assign == j;
+            if ~any(mask)
+                continue;
+            end
+            diffv = points(mask, :) - centers(j, :);
+            score = score + sum(diffv(:).^2);
+        end
+
+        if score < best_score
+            best_score = score;
+            best_idx = assign;
+        end
+    end
+
+    idx = best_idx;
 end
 
 % ----------------------- helper functions (copied/adapted) -----------------
