@@ -15,7 +15,8 @@ save%   apply_filter = true
 %   sample_window = [50, 60]
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring5/270');
+        %dirpath = fullfile('EstimateF','Spring5/270');
+        dirpath = fullfile('EstimateF','Doublecheck/Spring5');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;0
@@ -30,10 +31,10 @@ save%   apply_filter = true
         filter_window_size = 1;
     end
     if nargin < 6 || isempty(do_save_figure)
-        do_save_figure = false;
+        do_save_figure = true;
     end
     if nargin < 7 || isempty(n_sync)
-        n_sync = 1; % default: check 2:1 synchronization
+        n_sync = 2; % default: check 2:1 synchronization
     end
     if nargin < 8 || isempty(m_sync)
         m_sync = 1;
@@ -100,60 +101,84 @@ save%   apply_filter = true
     file_tables = file_tables(valid_idx);
     file_list = file_list(valid_idx);
     agent_sets = agent_sets(valid_idx);
-
     if isempty(file_tables)
         error('No valid data files to plot.');
     end
 
-    % Determine agents common to all files (prefer intersection)
+    % Determine agents common to all files; if none, fall back to per-file reference
     common_agents = agent_sets{1};
     for i = 2:numel(agent_sets)
         common_agents = intersect(common_agents, agent_sets{i});
     end
-    if isempty(common_agents)
-        % fallback: use agents from first file
-        common_agents = agent_sets{1};
-        warning('No common agents across files; using agents from first file.');
+
+    use_dynamic_reference = isempty(common_agents);
+    if use_dynamic_reference
+        common_agents = unique(cat(1, agent_sets{:}));
+        fprintf('[INFO] No common agents across files; using per-file reference agents.\n');
     end
 
-    % Decide base agent
-    base_agent = min(common_agents);
-    other_agents = setdiff(common_agents, base_agent);
-    if isempty(other_agents)
+    base_agent_per_file = zeros(numel(agent_sets),1);
+    if use_dynamic_reference
+        for i = 1:numel(agent_sets)
+            base_agent_per_file(i) = min(agent_sets{i});
+        end
+        ref_agent_for_label = mode(base_agent_per_file);
+        agents_to_plot = setdiff(common_agents, ref_agent_for_label, 'stable');
+        if isempty(agents_to_plot)
+            agents_to_plot = common_agents;
+        end
+    else
+        base_agent = min(common_agents);
+        base_agent_per_file(:) = base_agent;
+        agents_to_plot = setdiff(common_agents, base_agent, 'stable');
+    end
+
+    if isempty(agents_to_plot)
         error('Not enough agents to compute relative phases (need at least 2).');
     end
 
     % Prepare per-file phase series using original pipeline
     allow_missing_agents = 1;
-    max_agent_id = max(common_agents);
+    max_agent_id = max(cellfun(@max, agent_sets));
     phase_series_by_file = cell(numel(file_tables), 1);
     for f = 1:numel(file_tables)
         phase_series_by_file{f} = compute_phase_series_for_file( ...
-            file_tables{f}, base_agent, n_seconds_to_cut, plot_duration, ...
+            file_tables{f}, base_agent_per_file(f), n_seconds_to_cut, plot_duration, ...
             allow_missing_agents, apply_filter, filter_window_size, max_agent_id, n_sync, m_sync);
     end
 
-    % Prepare figure with one subplot per other agent
-    n_plots = numel(other_agents);
-    %figure('Units','normalized','Position',[0.05 0.05 0.9 0.85]);
+    % Prepare single axes and overlay all agents
     figure('Visible','on');
+    ax = axes('Parent', gcf);
+    hold(ax,'on');
     colors = lines(numel(file_list));
+    line_styles = {'-','--',':','-.'};
     max_plot_time = min(plot_duration - n_seconds_to_cut, 60);
+    line_handles = gobjects(numel(file_list),1);
+    legend_labels = cell(numel(file_list),1);
+    for f = 1:numel(file_list)
+        [~, legend_labels{f}] = fileparts(file_list{f});
+    end
+
+    if use_dynamic_reference
+        ref_label = '\mathrm{ref}';
+    else
+        ref_label = sprintf('%d', base_agent);
+    end
 
     % Display label for modified phase-combination using n:m notation
-    y_label_str = sprintf('$$%d\\phi_{j} - %d\\phi_{\\mathrm{1}}$$', n_sync, m_sync);
+    y_label_str = sprintf('$$%d\\phi_{2} - %d\\phi_{1}$$', n_sync, m_sync);
 
-    for p = 1:n_plots
-        ag = other_agents(p);
-        subplot(n_plots,1,p); hold on;
-%        title(sprintf('Agent %d - Agent %d', ag, base_agent));
-        ylabel(y_label_str,'Interpreter','latex');
-        ylim([-pi, pi]);
-        yticks([-pi,0,pi]);
-        yticklabels({'-\pi','0','\pi'});
-        set(gca,'TickLabelInterpreter','latex');
-        yline(0, 'Color', [0.3 0.3 0.3], 'LineStyle', '--', 'LineWidth', 0.8);
+    ylabel(ax, y_label_str,'Interpreter','latex');
+    ylim(ax, [-pi, pi]);
+    yticks(ax, [-pi,0,pi]);
+    yticklabels(ax, {'-\pi','0','\pi'});
+    set(ax,'TickLabelInterpreter','latex');
+    yline(ax, 0, 'Color', [0.3 0.3 0.3], 'LineStyle', '--', 'LineWidth', 0.8);
 
+    for p = 1:numel(agents_to_plot)
+        ag = agents_to_plot(p);
+        ls = line_styles{ mod(p-1, numel(line_styles)) + 1 };
         for f = 1:numel(file_list)
             series_struct = phase_series_by_file{f};
             if ag > numel(series_struct)
@@ -162,23 +187,30 @@ save%   apply_filter = true
             if isempty(series_struct(ag).time) || isempty(series_struct(ag).phase)
                 continue;
             end
-            plot(series_struct(ag).time, series_struct(ag).phase, ...
-                'Color', colors(f,:), 'LineWidth', 0.8);
+            h = plot(ax, series_struct(ag).time, series_struct(ag).phase, ...
+                'Color', colors(f,:), 'LineWidth', 0.8, 'LineStyle', ls);
+            if ~isgraphics(line_handles(f))
+                line_handles(f) = h;
+            end
         end
-
-        xlim([0, max_plot_time]);
-        if p == n_plots
-            xlabel('Time (s)','Interpreter','latex');
-        end
-        grid on;
-        hold off;
     end
 
-    % no legend requested — overlays only
+    xlim(ax, [0, max_plot_time]);
+    xlabel(ax, 'Time (s)','Interpreter','latex');
+    grid(ax, 'on');
+    hold(ax,'off');
+
+    valid_handles = isgraphics(line_handles);
+    if any(valid_handles)
+        legend(ax, line_handles(valid_handles), legend_labels(valid_handles), ...
+            'Location','eastoutside','Interpreter','latex');
+    end
+
+    % legend placed outside plot area for readability
 
     tuneFigure();
 
-    cluster_info = cluster_phase_window_means(phase_series_by_file, other_agents, sample_window, CLUSTER_VAR_THRESHOLD);
+    cluster_info = cluster_phase_window_means(phase_series_by_file, agents_to_plot, sample_window, CLUSTER_VAR_THRESHOLD);
 
     if do_save_figure
         saveFigure();
@@ -192,7 +224,7 @@ save%   apply_filter = true
     end
 end
 
-function cluster_info = cluster_phase_window_means(phase_series_by_file, other_agents, sample_window, cluster_var_threshold)
+function cluster_info = cluster_phase_window_means(phase_series_by_file, agents_to_plot, sample_window, cluster_var_threshold)
     window_start = sample_window(1);
     window_end = sample_window(2);
     all_samples = [];
@@ -202,7 +234,7 @@ function cluster_info = cluster_phase_window_means(phase_series_by_file, other_a
         if isempty(series_struct)
             continue;
         end
-        for ag = other_agents(:).'
+        for ag = agents_to_plot(:).'
             if ag > numel(series_struct)
                 continue;
             end

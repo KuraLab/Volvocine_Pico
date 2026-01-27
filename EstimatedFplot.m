@@ -10,10 +10,51 @@ phi2_a = [-0.790055, -0.666673, -0.453907, -0.283704, ...
 phi2_b = [-1.36336, -1.58014, -2.01999, -2.26026, ...
           -3.07159,  2.32331,  1.86263,  1.56455];
 
+% 位相差の符号が反転していたため補正（全データの符号をひっくり返す）
+phi2_a = -phi2_a;
+phi2_b = -phi2_b;
+
 phi2_all  = [phi2_a, phi2_b];
 freq2_all = [freq2,   freq2];
 freq2_all_norm = (freq2_all - 250) / 100;
 
+%% ============================
+%  Spring 3 データ
+%% ============================
+freq3 = [230 235 240 245 250 255 260 265];
+freq3_norm = (freq3 - 250) / 100;
+
+phi3_a = [-0.861, -0.637, -0.475, -0.282, ...
+           0.000,  0.246,  0.474,  0.669];
+
+phi3_b = [-1.226, -2.133, -2.612, -2.787, ...
+          -2.946,  2.254,  1.356,  1.114];
+
+phi3_a = -phi3_a;
+phi3_b = -phi3_b;
+
+phi3_all  = [phi3_a, phi3_b];
+freq3_all = [freq3,   freq3];
+freq3_all_norm = (freq3_all - 250) / 100;
+
+%% ============================
+%  Spring 5 データ
+%% ============================
+freq5 = [235 240 245 250 255 260 265 270];
+freq5_norm = (freq5 - 250) / 100;
+
+phi5_a = [-0.969, -0.687, -0.389, -0.090, ...
+           0.439,  0.672,  0.871,  1.257];
+
+phi5_b = [-1.934, -2.789, -3.038, 3.035, ...
+          2.688,  2.226,  2.178,  1.957];
+
+phi5_a = -phi5_a;
+phi5_b = -phi5_b;
+
+phi5_all  = [phi5_a, phi5_b];
+freq5_all = [freq5,   freq5];
+freq5_all_norm = (freq5_all - 250) / 100;
 
 %% ============================
 %  Spring 1 データ（手書きから読み取り）
@@ -37,6 +78,7 @@ phi1_all  = [...
    -0.195281, 3.0993,  1.18133, -1.402885, ...
     0.015736,-2.91941, 0.976656,-1.793484, ...
     0.266414, 0.463211];
+phi1_all = -phi1_all;
 freq1_norm = (freq1_all - 250) / 100;
 
 freq1_counts = [2, 4, 4, 4, 2];
@@ -198,9 +240,9 @@ scatter(phi5_a, freq5_norm, 70, 'o', 'filled', ...
     'MarkerFaceAlpha',0.8, 'MarkerFaceColor',c5, 'MarkerEdgeColor',c5, 'DisplayName','Stable equilibrium'); hold on;
 scatter(phi5_b, freq5_norm, 70, 's', 'filled', ...
     'MarkerFaceAlpha',0.8, 'MarkerFaceColor',c5, 'MarkerEdgeColor',c5, 'DisplayName','Unstable equilibrium');
-plot(phi_fit, freq_fit5_norm, 'LineWidth',2, 'Color',c5, 'DisplayName','Spring 5 fit');
+plot(phi_fit, freq_fit5_norm, 'LineWidth',2, 'Color',c5, 'DisplayName','Rigid fit');
 apply_axis_format(gca, freq5_all_norm);
-legend({'Stable equilibrium','Unstable equilibrium','Spring 5 fit'}, 'Location','best');
+legend({'Stable equilibrium','Unstable equilibrium','Rigid fit'}, 'Location','best');
 xlabel('$$\psi$$','Interpreter','latex');
 ylabel('$$f(\psi)/\pi$$','Interpreter','latex');
 set(gca,'FontSize',14,'LineWidth',1.2,'Box','on');
@@ -210,9 +252,9 @@ saveFigure;
 % ---- Spring 1 ----
 figure;
 scatter(phi1_stable, freq1_stable_norm, 70, 'o', 'filled', ...
-    'MarkerFaceAlpha',0.8, 'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Spring 1 stable'); hold on;
+    'MarkerFaceAlpha',0.8, 'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Stable equilibrium'); hold on;
 scatter(phi1_unstable, freq1_unstable_norm, 70, 's', 'filled', ...
-    'MarkerFaceAlpha',0.8, 'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Spring 1 unstable');
+    'MarkerFaceAlpha',0.8, 'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Unstable equilibrium');
 plot(phi_fit, freq_fit1_norm, 'LineWidth',2, 'Color',c1, 'DisplayName','Spring 1 fit');
 apply_axis_format(gca, [freq1_stable_norm, freq1_unstable_norm]);
 legend({'Spring 1 stable','Spring 1 unstable','Spring 1 fit'}, 'Location','best');
@@ -230,34 +272,34 @@ figure;
 
 % Spring 1
 scatter(phi1_stable, freq1_stable_norm, 60, 'o', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Spring 1 stable'); hold on;
+    'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Stable fixed point'); hold on;
 scatter(phi1_unstable, freq1_unstable_norm, 60, 's', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Spring 1 unstable');
-plot(phi_fit, freq_fit1_norm, 'LineWidth',2, 'Color',c1, 'DisplayName','Spring 1 fit');
+    'MarkerFaceColor',c1, 'MarkerEdgeColor',c1, 'DisplayName','Unstable fixed point');
+h1 = plot(phi_fit, freq_fit1_norm, 'LineWidth',2, 'Color',c1, 'DisplayName','Spring 1 fit');
 
 % Spring 2
 scatter(phi2_a, freq2_norm, 60, 'o', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c2, 'MarkerEdgeColor',c2, 'DisplayName','Spring 2 stable');
+    'MarkerFaceColor',c2, 'MarkerEdgeColor',c2, 'DisplayName','Stable fixed point');
 scatter(phi2_b, freq2_norm, 60, 's', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c2, 'MarkerEdgeColor',c2, 'DisplayName','Spring 2 unstable');
-plot(phi_fit, freq_fit2_norm, 'LineWidth',2, 'Color',c2, 'DisplayName','Spring 2 fit');
+    'MarkerFaceColor',c2, 'MarkerEdgeColor',c2, 'DisplayName','Unstable fixed point');
+h2 = plot(phi_fit, freq_fit2_norm, 'LineWidth',2, 'Color',c2, 'DisplayName','Spring 2 fit');
 
 % Spring 3
 scatter(phi3_a, freq3_norm, 60, 'o', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c3, 'MarkerEdgeColor',c3, 'DisplayName','Spring 3 stable');
+    'MarkerFaceColor',c3, 'MarkerEdgeColor',c3, 'DisplayName','Stable fixed point');
 scatter(phi3_b, freq3_norm, 60, 's', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c3, 'MarkerEdgeColor',c3, 'DisplayName','Spring 3 unstable');
-plot(phi_fit, freq_fit3_norm, 'LineWidth',2, 'Color',c3, 'DisplayName','Spring 3 fit');
+    'MarkerFaceColor',c3, 'MarkerEdgeColor',c3, 'DisplayName','Unstable fixed point');
+h3 = plot(phi_fit, freq_fit3_norm, 'LineWidth',2, 'Color',c3, 'DisplayName','Spring 3 fit');
 
 % Spring 5
 scatter(phi5_a, freq5_norm, 60, 'o', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c5, 'MarkerEdgeColor',c5, 'DisplayName','Spring 5 stable');
+    'MarkerFaceColor',c5, 'MarkerEdgeColor',c5, 'DisplayName','Stable fixed point');
 scatter(phi5_b, freq5_norm, 60, 's', 'filled', 'MarkerFaceAlpha',0.75, ...
-    'MarkerFaceColor',c5, 'MarkerEdgeColor',c5, 'DisplayName','Spring 5 unstable');
-plot(phi_fit, freq_fit5_norm, 'LineWidth',2, 'Color',c5, 'DisplayName','Spring 5 fit');
+    'MarkerFaceColor',c5, 'MarkerEdgeColor',c5, 'DisplayName','Unstable fixed point');
+h5 = plot(phi_fit, freq_fit5_norm, 'LineWidth',2, 'Color',c5, 'DisplayName','Spring 5 fit');
 
 apply_axis_format(gca, [freq1_stable_norm, freq1_unstable_norm, freq2_all_norm, freq3_all_norm, freq5_all_norm]);
-legend('Location','best');
+legend([h1, h2, h3, h5], {'Spring 1 fit','Spring 2 fit','Spring 3 fit','Spring 5 fit'}, 'Location','best');
 xlabel('$$\psi$$','Interpreter','latex');
 ylabel('$$f(\psi)/\pi$$','Interpreter','latex');
 set(gca,'FontSize',14,'LineWidth',1.2,'Box','on');
