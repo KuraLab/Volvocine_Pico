@@ -6,7 +6,7 @@ import numpy as np
 
 def main():
     here = Path(__file__).resolve().parent
-    csv_path = here / "data1.csv"
+    csv_path = here / "data6.csv"
 
     if not csv_path.exists():
         raise FileNotFoundError(f"CSVが見つかりません: {csv_path}")
