@@ -6,7 +6,7 @@ import numpy as np
 
 def main():
     here = Path(__file__).resolve().parent
-    csv_path = here / "data6.csv"
+    csv_path = here / "data1.csv"
 
     if not csv_path.exists():
         raise FileNotFoundError(f"CSVが見つかりません: {csv_path}")
@@ -43,6 +43,18 @@ def main():
     print("\n=== 消費電力 ===")
     for name, (a, b) in fits.items():
         print(f"{name}: {a:.6e} W ({a:.2f} W)")
+    
+    # 消費電力の変化率を計算
+    if "water" in fits and "air" in fits:
+        power_water = fits["water"][0]
+        power_air = fits["air"][0]
+        power_change = ((power_air - power_water) / power_water) * 100
+        print(f"\n消費電力の変化: {power_change:+.2f} % (water → air)")
+    
+    # 全時間の電圧の平均を計算
+    v_avg_all = df["V"].mean()
+    print("\n=== 電圧の平均（全時間） ===")
+    print(f"{v_avg_all:.6e} V ({v_avg_all:.2f} V)")
 
     plots = [
         ("current.png", "A", "Current [A]"),
