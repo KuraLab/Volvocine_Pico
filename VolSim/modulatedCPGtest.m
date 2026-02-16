@@ -2,13 +2,7 @@
 % Simulation: master oscillator with step-like (0/1) output forcing a slave oscillator
 % Master: dtheta_m/dt = Omega_m
 % Master output s(t) = 1 (on) or 0 (off) — step waveform depending on time/phase
-% Slave (second-order default here): d^2 theta_s/dt^2 = (omega_s - dtheta_s/dt) + k * sin(theta_s + alpha) * s(t)
-%   Here we add a linear term (omega_s - dtheta_s/dt) that pulls the velocity back to omega_s,
-%   so that on average dtheta_s/dt ≈ omega_s and the system does not diverge.
-%
-% You can switch where the feedback is applied:
-%   feedbackMode = 'acceleration'  -> feedback acts on d^2 theta_s/dt^2 (second-order model)
-%   feedbackMode = 'velocity'      -> feedback acts directly on dtheta_s/dt (first-order model)
+% Slave (first-order): dtheta_s/dt = omega_s + k * sin(theta_s + alpha) * s(t)
 %
 % Usage:
 % Open this file in the MATLAB command window and simply run it.
@@ -16,23 +10,17 @@
 
 clear; close all;
 % Parameters for master and slaves
-Omega_m1 = 1.5*pi*0.5;   % Master angular frequency (rad/s) in first half
-Omega_m2 = 1.5*pi*1.0;   % Master angular frequency (rad/s) in second half
-numSlaves = 50;                              % Number of slaves
-omega_s_vec = linspace(1.5*pi*0.4, 1.5*pi*1.1, numSlaves);  % Intrinsic slave frequencies
-k_base = 5;            % Base feedback strength (mean over slaves)
+Omega_m1 = 1.5*pi*1.0;   % Master angular frequency (rad/s) in first half
+Omega_m2 = 1.5*pi*0.5;   % Master angular frequency (rad/s) in second half
+numSlaves = 40;                              % Number of slaves
+omega_s_vec = linspace(1.5*pi*0.5, 1.5*pi*1.0, numSlaves);  % Intrinsic slave frequencies
+k_base = 1.0;            % Base feedback strength (mean over slaves)
 k_vec = k_base * ones(size(omega_s_vec));  % Same k for all slaves
 alpha = 0.0*pi;          % Phase offset
 duty = 0.68;              % Master duty ratio (0~1). 0.5 means 50% duty
 
-% Choose where the feedback term acts: 'acceleration' or 'velocity'
-feedbackMode = getenv('FEEDBACK_MODE');
-if isempty(feedbackMode)
-    feedbackMode = 'velocity';  % default to velocity feedback
-end
-
 % --- Time discretization (Euler method) ---
-tmax = 30;               % Simulation time (s)
+tmax = 60;               % Simulation time (s)
 dt   = 0.001;            % Time step (s)
 t    = 0:dt:tmax;        % Uniform time grid
 if size(t,1) == 1
@@ -44,7 +32,7 @@ fb_ma_T = 0.00001;                          % window length in time [s]
 fb_ma_N = max(1, round(fb_ma_T/dt));        % window length in steps
 
 % Moving-average settings for master input s(t)
-s_ma_T = 0.5;                              % window length in time [s]
+s_ma_T = 0.001;                              % window length in time [s]
 s_ma_N = max(1, round(s_ma_T/dt));          % window length in steps
 
 % Initial conditions
@@ -95,34 +83,20 @@ for n = 1:N-1
     dtheta_m = Omega_m;
 
     % --- Feedback term with moving average ---
-    fb_pre = sin(theta_s(n,:) + alpha) * s_t_in;
+    fb_pre = (sin(theta_s(n,:) + alpha) + 0*sin(2*theta_s(n,:) + pi/2)) * s_t_in;
     fb_raw(n,:) = k_vec .* fb_pre;
     i0 = max(1, n - fb_ma_N + 1);
     fb_ma(n,:) = mean(fb_raw(i0:n,:), 1);   % smoothed feedback term
 
-    if strcmp(feedbackMode,'acceleration')
-        % Slave: second-order equation
-        %   v_s = dtheta_s/dt
-        %   dv_s/dt = fb_ma(n)
-        dv_s = fb_ma(n,:);
+    % Slave: first-order phase equation with feedback on velocity
+    dtheta_s = omega_s_vec + fb_raw(n,:);
 
-        % Forward Euler update (second-order)
-        theta_m(n+1) = theta_m(n) + dt * dtheta_m;
-        v_s(n+1,:)     = v_s(n,:)     + dt * dv_s;
-        theta_s(n+1,:) = theta_s(n,:) + dt * v_s(n,:);  % Use v_s(n,:) (explicit Euler)
+    % Forward Euler update (first-order)
+    theta_m(n+1) = theta_m(n) + dt * dtheta_m;
+    theta_s(n+1,:) = theta_s(n,:) + dt * dtheta_s;
 
-    else  % 'velocity' mode
-        % Slave: first-order phase equation with smoothed feedback on velocity
-        %   dtheta_s/dt = omega_s_vec + fb_ma(n,:)
-        dtheta_s = omega_s_vec + fb_raw(n,:);
-
-        % Forward Euler update (first-order)
-        theta_m(n+1) = theta_m(n) + dt * dtheta_m;
-        theta_s(n+1,:) = theta_s(n,:) + dt * dtheta_s;
-
-        % Define an effective angular velocity for plotting
-        v_s(n+1,:) = dtheta_s;   % instantaneous omega_s(t) in this mode
-    end
+    % Define an effective angular velocity for plotting
+    v_s(n+1,:) = dtheta_s;   % instantaneous omega_s(t)
 end
 
 % Set the last sample of svec equal to the last computed value
@@ -162,7 +136,7 @@ for j = 1:numSlaves
 end
 
 % Visualization: master output and slave phases
-figure('Name','Forced Multi-Slave Synchronization (Euler, selectable feedback)','NumberTitle','off','Position',[200 200 900 850]);
+figure('Name','Forced Multi-Slave Synchronization (Euler, velocity feedback)','NumberTitle','off','Position',[200 200 900 850]);
 
 % Top: master output s(t)
 subplot(2,1,1);
