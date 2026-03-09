@@ -1,31 +1,34 @@
-function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N)
+function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N, varargin)
 % Overlay 3D phase-phase-a2 trajectories from all CSV files in a directory.
 %
 % x = phase of agent 1
 % y = phase of agent 2
 % z = a2 of z_agent_id
 % plotted as a simple 3D point cloud
-% Optionally, the aggregated point cloud can be fitted by a double Fourier
-% series using fitDoubleFourierScatter(phi1, phi2, z, M, N).
+% In addition to a2 itself, the function also analyzes sin(phi2) * a2_norm
+% using the same Fourier fitting workflow, where a2_norm is normalized by
+% a percentile-range scaling.
 %
 % Usage:
 %   plot_phase_pair_a2_3d_all_files()
 %   plot_phase_pair_a2_3d_all_files(dirpath)
 %   plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices)
 %   plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N)
+%   plot_phase_pair_a2_3d_all_files(..., M, N, [m_phi2, n_phi1])
 %
 % Defaults:
-%   dirpath = 'EstimateF/Spring3/250'
+%   dirpath = 'EstimateF/Spring5/250'
 %   phase_agent_ids = first two non-99 agents found in the first valid CSV
 %   z_agent_id = phase_agent_ids(2)
 %   analysis_duration_sec = 15
 %   analysis_start_sec = 5
 %   file_indices = []  % [] means all CSV files in name-sorted order
-%   M, N = 3           % default Fourier orders for automatic fitting
+%   M, N = 10          % default Fourier orders for automatic fitting
+%   gamma_ratio = [2 1] for psi = 2*phi2 - phi1
 %
 % Output:
 %   out: struct with figure handle, used/skipped files, plotting settings,
-%        aggregated point cloud, and optional Fourier-fit result.
+%        aggregated point cloud, and Fourier-fit results.
 
     if nargin < 1 || isempty(dirpath)
         dirpath = fullfile('EstimateF', 'Spring5', '250');
@@ -46,10 +49,20 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 10;
+        M = 5;
     end
     if nargin < 8 || isempty(N)
-        N = 10;
+        N = 5;
+    end
+
+    gamma_ratio = [1 1];
+
+    % Ignore legacy weighted-fit arguments if they are still passed.
+    if ~isempty(varargin)
+        first_extra = varargin{1};
+        if isnumeric(first_extra) && numel(first_extra) == 2 && all(isfinite(first_extra(:)))
+            gamma_ratio = double(first_extra(:).');
+        end
     end
 
     sample_dt = 0.01;
@@ -61,6 +74,7 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     end
     validateattributes(M, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'M');
     validateattributes(N, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'N');
+    validateattributes(gamma_ratio, {'numeric'}, {'vector', 'numel', 2, 'integer', 'positive', 'finite'}, mfilename, 'gamma_ratio');
     if ~isfolder(dirpath)
         error('Directory not found: %s', dirpath);
     end
@@ -89,6 +103,9 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     fig = figure('Color', 'w');
     ax = axes('Parent', fig);
     hold(ax, 'on');
+    fig_sin_phi2_a2 = figure('Color', 'w');
+    ax_sin_phi2_a2 = axes('Parent', fig_sin_phi2_a2);
+    hold(ax_sin_phi2_a2, 'on');
     point_color = [0.0, 0.4470, 0.7410];
     marker_size = 10;
     marker_alpha = 0.18;
@@ -100,6 +117,8 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     phi1_all = [];
     phi2_all = [];
     a2_all = [];
+    a2_normalized_all = [];
+    sin_phi2_a2_all = [];
     time_all = [];
     file_id_all = [];
 
@@ -123,9 +142,16 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
             'filled', 'MarkerFaceColor', point_color, 'MarkerEdgeColor', 'none', ...
             'MarkerFaceAlpha', marker_alpha, 'MarkerEdgeAlpha', marker_alpha);
 
+        sin_phi2_a2 = -sin(point_data.phase2+0.6*pi) .* point_data.a2_normalized;
+        scatter3(ax_sin_phi2_a2, point_data.phase1, point_data.phase2, sin_phi2_a2, marker_size, ...
+            'filled', 'MarkerFaceColor', point_color, 'MarkerEdgeColor', 'none', ...
+            'MarkerFaceAlpha', marker_alpha, 'MarkerEdgeAlpha', marker_alpha);
+
         phi1_all = [phi1_all; point_data.phase1(:)]; %#ok<AGROW>
         phi2_all = [phi2_all; point_data.phase2(:)]; %#ok<AGROW>
         a2_all = [a2_all; point_data.a2(:)]; %#ok<AGROW>
+        a2_normalized_all = [a2_normalized_all; point_data.a2_normalized(:)]; %#ok<AGROW>
+        sin_phi2_a2_all = [sin_phi2_a2_all; sin_phi2_a2(:)]; %#ok<AGROW>
         time_all = [time_all; point_data.time(:)]; %#ok<AGROW>
         file_id_all = [file_id_all; i * ones(numel(point_data.time), 1)]; %#ok<AGROW>
 
@@ -152,7 +178,24 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     view(ax, 3);
     box(ax, 'on');
 
+    xlim(ax_sin_phi2_a2, [0, 2*pi]);
+    ylim(ax_sin_phi2_a2, [0, 2*pi]);
+    xticks(ax_sin_phi2_a2, [0, pi/2, pi, 3*pi/2, 2*pi]);
+    yticks(ax_sin_phi2_a2, [0, pi/2, pi, 3*pi/2, 2*pi]);
+    xticklabels(ax_sin_phi2_a2, {'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    yticklabels(ax_sin_phi2_a2, {'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    xlabel(ax_sin_phi2_a2, sprintf('Agent %d phase (rad)', phase_agent_ids(1)));
+    ylabel(ax_sin_phi2_a2, sprintf('Agent %d phase (rad)', phase_agent_ids(2)));
+    zlabel(ax_sin_phi2_a2, sprintf('sin(phi2) * a2_{norm}(agent %d)', z_agent_id));
+    title(ax_sin_phi2_a2, sprintf('Overlayed 3D point cloud: agents [%d, %d], z=sin(phi2) * a2_{norm}(agent %d)', ...
+        phase_agent_ids(1), phase_agent_ids(2), z_agent_id));
+    grid(ax_sin_phi2_a2, 'on');
+    view(ax_sin_phi2_a2, 3);
+    box(ax_sin_phi2_a2, 'on');
+
     sgtitle(fig, sprintf('%s: %d/%d files overlaid, window %.0f-%.0fs', ...
+        dirpath, numel(used_files), numel(csv_paths), analysis_start_sec, analysis_start_sec + analysis_duration_sec));
+    sgtitle(fig_sin_phi2_a2, sprintf('%s: %d/%d files overlaid, window %.0f-%.0fs', ...
         dirpath, numel(used_files), numel(csv_paths), analysis_start_sec, analysis_start_sec + analysis_duration_sec));
 
     out = struct();
@@ -162,7 +205,10 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     out.analysis_duration_sec = analysis_duration_sec;
     out.analysis_start_sec = analysis_start_sec;
     out.file_indices = file_indices;
+    out.fit_mode = 'unweighted';
+    out.gamma_ratio = gamma_ratio;
     out.figure = fig;
+    out.figure_sin_phi2_a2 = fig_sin_phi2_a2;
     out.used_files = used_files;
     out.skipped_files = skipped_files;
     out.per_file = per_file;
@@ -172,13 +218,26 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
         'phi1', phi1_all, ...
         'phi2', phi2_all, ...
         'a2', a2_all, ...
+        'a2_normalized', a2_normalized_all, ...
+        'sin_phi2_a2', sin_phi2_a2_all, ...
         'time', time_all, ...
         'file_index', file_id_all);
 
     out.fourier_fit = fitDoubleFourierScatter( ...
-        out.point_cloud.phi1, out.point_cloud.phi2, out.point_cloud.a2, M, N);
+        out.point_cloud.phi1, out.point_cloud.phi2, out.point_cloud.a2, M, N, ...
+        sprintf('a2(agent %d)', z_agent_id), 'full', gamma_ratio);
     out.fourier_fit.M = M;
     out.fourier_fit.N = N;
+    out.fourier_fit.fit_mode = 'unweighted';
+    out.fourier_fit.gamma_ratio = gamma_ratio;
+
+    out.fourier_fit_sin_phi2_a2 = fitDoubleFourierScatter( ...
+        out.point_cloud.phi1, out.point_cloud.phi2, out.point_cloud.sin_phi2_a2, M, N, ...
+        sprintf('sin(phi2) * a2_norm(agent %d)', z_agent_id), 'mixed-only', gamma_ratio);
+    out.fourier_fit_sin_phi2_a2.M = M;
+    out.fourier_fit_sin_phi2_a2.N = N;
+    out.fourier_fit_sin_phi2_a2.fit_mode = 'unweighted';
+    out.fourier_fit_sin_phi2_a2.gamma_ratio = gamma_ratio;
 end
 
 function csv_paths = list_csv_paths(dirpath, file_indices)
@@ -312,6 +371,7 @@ function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, 
     point_data.phase1 = mod(a0_1, 256) * (2*pi/256);
     point_data.phase2 = mod(a0_2, 256) * (2*pi/256);
     point_data.a2 = a2_z;
+    point_data.a2_normalized = normalize_by_percentile_range(a2_z, 1, 99);
 
     meta = struct();
     meta.file_path = csv_path;
@@ -320,6 +380,30 @@ function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, 
     meta.n_points = numel(point_data.time);
     meta.phase_agent_ids = phase_agent_ids;
     meta.z_agent_id = z_agent_id;
+end
+
+function xNorm = normalize_by_percentile_range(x, lowPct, highPct)
+    x = double(x(:));
+    valid = isfinite(x);
+    xNorm = nan(size(x));
+
+    if nnz(valid) < 5
+        xNorm(valid) = x(valid);
+        return;
+    end
+
+    xValid = x(valid);
+    pLow = prctile(xValid, lowPct);
+    pHigh = prctile(xValid, highPct);
+    denom = pHigh - pLow;
+    center = 0.5 * (pLow + pHigh);
+
+    if ~isfinite(denom) || denom <= 0
+        xNorm(valid) = xValid - center;
+        return;
+    end
+
+    xNorm(valid) = (xValid - center) / denom;
 end
 
 function series = get_agent_series(T, agent_id)
