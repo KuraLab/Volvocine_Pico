@@ -15,11 +15,11 @@ save%   apply_filter = true
 %   sample_window = [50, 60]
 
     if nargin < 1 || isempty(dirpath)
-        %dirpath = fullfile('EstimateF','Spring5/270');
-        dirpath = fullfile('EstimateF','Doublecheck/Spring5');
+        dirpath = fullfile('EstimateF','Spring5/250');
+        %dirpath = fullfile('EstimateF','Doublecheck/Spring5');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
-        n_seconds_to_cut = 0;0
+        n_seconds_to_cut = 0;
     end
     if nargin < 3 || isempty(plot_duration)
         plot_duration = 105;
@@ -31,10 +31,10 @@ save%   apply_filter = true
         filter_window_size = 1;
     end
     if nargin < 6 || isempty(do_save_figure)
-        do_save_figure = true;
+        do_save_figure = false;
     end
     if nargin < 7 || isempty(n_sync)
-        n_sync = 2; % default: check 2:1 synchronization
+        n_sync = 1; % default: check 2:1 synchronization
     end
     if nargin < 8 || isempty(m_sync)
         m_sync = 1;
@@ -202,8 +202,8 @@ save%   apply_filter = true
 
     valid_handles = isgraphics(line_handles);
     if any(valid_handles)
-        legend(ax, line_handles(valid_handles), legend_labels(valid_handles), ...
-            'Location','eastoutside','Interpreter','latex');
+        %legend(ax, line_handles(valid_handles), legend_labels(valid_handles), ...
+        %    'Location','eastoutside','Interpreter','latex');
     end
 
     % legend placed outside plot area for readability
