@@ -31,7 +31,7 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
 %        aggregated point cloud, and Fourier-fit results.
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF', 'Spring5', '250');
+        dirpath = fullfile('EstimateQ', 'Spring1', '250');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -40,7 +40,7 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
         z_agent_id = [];
     end
     if nargin < 4 || isempty(analysis_duration_sec)
-        analysis_duration_sec = 15;
+        analysis_duration_sec = 80;
     end
     if nargin < 5 || isempty(analysis_start_sec)
         analysis_start_sec = 5;

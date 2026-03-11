@@ -3,9 +3,9 @@
 omega_values = {
     4: 3.14 * 2.50   # エージェント1の周波数
 }
-default_omega = 3.14 * 4.0  # デフォルト周波数（未定義IDの場合）
+default_omega = 3.14 * 2.4  # デフォルト周波数（未定義IDの場合）
 
-kappa =5       # フィードバックゲイン
+kappa =0       # フィードバックゲイン
 alpha = -3.14*0.6
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 65.0 # サーボ振幅
