@@ -1,10 +1,11 @@
-function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode, gamma_ratio)
+function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode, gamma_ratio, gamma_settings)
 % fitDoubleFourierScatter Fit a real double Fourier series to scattered data.
 %
 %   result = fitDoubleFourierScatter(phi1, phi2, z, M, N)
 %   result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name)
 %   result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode)
 %   result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode, gamma_ratio)
+%   result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode, gamma_ratio, gamma_settings)
 %
 % Inputs:
 %   phi1, phi2 : angle variables (radians). They are normalized to [0, 2*pi).
@@ -16,7 +17,20 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 %       'mixed-only' -> show only the mixed-term block on m=1:M, n=1:N
 %   gamma_ratio: two-element integer vector [m_phi2, n_phi1] defining
 %       psi = m_phi2 * phi2 - n_phi1 * phi1 for the reconstructed
-%       one-variable resonant interaction Gamma(psi). Default: [2 1]
+%       one-variable resonant interaction Gamma(psi). The ratio is reduced
+%       to lowest terms internally, so [1 1] and [2 2] are treated as the
+%       same resonance. Default: [2 1]
+%   gamma_settings: optional struct with fields
+%       enabled   : whether Gamma(psi) is reconstructed/plotted (default true)
+%       component : 'full', 'symmetric', or 'antisymmetric' (default 'full')
+%       overlay_full : when true, overlay the full reconstructed Gamma(psi)
+%           together with the selected component on the same axes
+%           (default false)
+%       show_surface_overlay : whether to create the 3D scatter + fitted
+%           surface overlay figure (default true)
+%       resonant_only_bar_plot : whether the contribution bar plot should
+%           show only the mixed resonant terms satisfying gamma_ratio
+%           (default false)
 %
 % The fitted model uses the real trigonometric basis
 %   1
@@ -44,6 +58,7 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 %   result.phi1_harmonic_summary
 %   result.phi2_harmonic_summary
 %   result.mixed_pair_summary
+%   result.mixed_pair_summary_resonant
 %   result.term_rms_contribution
 %   result.term_energy_contribution
 %   result.term_contribution_ratio
@@ -59,6 +74,8 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 %   result.target_name
 %   result.heatmap_mode
 %   result.gamma_ratio
+%   result.gamma_ratio_reduced
+%   result.gamma_settings
 %   result.gamma_resonance
 %   result.fig_gamma_resonance
 % and additional diagnostic fields.
@@ -71,7 +88,7 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 %   % result = fitDoubleFourierScatter(phi1, phi2, z, 4, 4);
 
     if nargin < 5
-        error('Usage: fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode, gamma_ratio)');
+        error('Usage: fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heatmap_mode, gamma_ratio, gamma_settings)');
     end
     if nargin < 6 || isempty(target_name)
         target_name = 'z';
@@ -82,6 +99,9 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
     if nargin < 8 || isempty(gamma_ratio)
         gamma_ratio = [2 1];
     end
+    if nargin < 9 || isempty(gamma_settings)
+        gamma_settings = struct();
+    end
 
     if isstring(target_name)
         target_name = char(target_name);
@@ -91,6 +111,8 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
     end
     heatmap_mode = lower(strtrim(heatmap_mode));
     gamma_ratio = double(gamma_ratio(:).');
+    gamma_ratio_reduced = reducePositiveIntegerRatio(gamma_ratio);
+    gamma_settings = normalizeGammaSettings(gamma_settings);
 
     validateattributes(M, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'M');
     validateattributes(N, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'N');
@@ -190,6 +212,8 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
         basis_groups, basis_n, term_energy_contribution, total_term_energy, 'phi2_only');
     mixed_pair_summary = summarizeMixedPairContributions( ...
         basis_groups, basis_m, basis_n, term_energy_contribution, total_term_energy);
+    mixed_pair_summary_resonant = filterMixedPairSummaryByResonance( ...
+        mixed_pair_summary, gamma_ratio_reduced(2), gamma_ratio_reduced(1));
     contribution_map = buildContributionHeatmap( ...
         M, N, group_contribution_summary, phi1_harmonic_summary, phi2_harmonic_summary, mixed_pair_summary);
     contribution_map_percent = 100 * contribution_map;
@@ -204,11 +228,17 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
     surface_z_centered = reshape(A_surface * coeff, size(surface_phi1));
     surface_z = surface_z_centered + z_mean;
 
-    fig_original = figure('Color', 'w');
-    ax_original = axes('Parent', fig_original);
-    plotScatterAndSurfaceOverlay(ax_original, phi1, phi2, z_original, surface_phi1, surface_phi2, surface_z, ...
-        target_name, sprintf('%s: original scatter + fitted surface (mean=%.4g)', target_name, z_mean), [40, 28]);
-    colorbar(ax_original);
+    if gamma_settings.show_surface_overlay
+        fig_original = figure('Color', 'w');
+        ax_original = axes('Parent', fig_original);
+        plotScatterAndSurfaceOverlay(ax_original, phi1, phi2, z_original, surface_phi1, surface_phi2, surface_z, ...
+            target_name, [40, 28]);
+        colorbar(ax_original);
+        figure(fig_original);
+        tuneFigure;
+    else
+        fig_original = [];
+    end
 
     fig_fit = [];
     fig_residual = [];
@@ -220,21 +250,16 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
             heatmap_values = contribution_map_percent;
             x_values = 0:N;
             y_values = 0:M;
-            heatmap_title = sprintf('%s contribution heatmap (%% of total energy, M=%d, N=%d)', target_name, M, N);
-            heatmap_subtitle = '(0,0): constant, (m,0): \phi_1-only, (0,n): \phi_2-only, (m,n): mixed';
         case {'mixed-only', 'mixed_only', 'mixed'}
             heatmap_values = contribution_map_mixed_percent;
             x_values = 1:N;
             y_values = 1:M;
-            heatmap_title = sprintf('%s mixed-term contribution heatmap (%% of total energy, M=%d, N=%d)', target_name, M, N);
-            heatmap_subtitle = 'displayed on the m=1:M, n=1:N grid';
         otherwise
             error('Unsupported heatmap_mode: %s', heatmap_mode);
     end
 
     if isempty(heatmap_values)
         axis(ax_contribution, 'off');
-        title(ax_contribution, heatmap_title, 'Interpreter', 'tex');
         text(ax_contribution, 0.5, 0.5, 'No terms available for this heatmap mode', ...
             'Units', 'normalized', 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
     else
@@ -242,7 +267,6 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
         set(ax_contribution, 'YDir', 'reverse');
         xlabel(ax_contribution, 'n');
         ylabel(ax_contribution, 'm');
-        title(ax_contribution, {heatmap_title, heatmap_subtitle}, 'Interpreter', 'tex');
         xticks(ax_contribution, x_values);
         yticks(ax_contribution, y_values);
         grid(ax_contribution, 'on');
@@ -252,9 +276,10 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
         ylabel(cb_contribution, 'Contribution (%)');
         %clim(ax_contribution, [0, 40]);
     end
+    figure(fig_contribution);
+    tuneFigure;
 
     fig_contribution_bars = figure('Color', 'w');
-    tiled_bars = tiledlayout(fig_contribution_bars, 3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
     max_display_items = 10;
 
     plot_group_colors = [
@@ -262,50 +287,128 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
         0.4660, 0.6740, 0.1880
         0.8500, 0.3250, 0.0980];
 
-    ax_group = nexttile(tiled_bars);
-    plotContributionSummaryBars(ax_group, phi1_harmonic_summary, max_display_items, ...
-        '\phi_1-only contribution by harmonic order', 'Harmonic order m', plot_group_colors(1, :));
-
-    ax_group = nexttile(tiled_bars);
-    plotContributionSummaryBars(ax_group, phi2_harmonic_summary, max_display_items, ...
-        '\phi_2-only contribution by harmonic order', 'Harmonic order n', plot_group_colors(2, :));
-
-    ax_group = nexttile(tiled_bars);
-    plotContributionSummaryBars(ax_group, mixed_pair_summary, max_display_items, ...
-        '\phi_1-\phi_2 mixed contribution by harmonic pair', 'Harmonic pair (m,n)', plot_group_colors(3, :));
-
-    constant_row = strcmp(group_contribution_summary.group_name, 'constant');
-    constant_ratio_percent = 100 * group_contribution_summary.contribution_ratio(constant_row);
-    sgtitle(tiled_bars, sprintf([ ...
-        '%s: mean-centered contribution bar plots grouped by dependency on \\phi_1 and \\phi_2 (M=%d, N=%d) | ', ...
-        'constant term = %.2f%%'], target_name, M, N, constant_ratio_percent), 'Interpreter', 'tex');
-
-    gamma_resonance = reconstructResonantGamma( ...
-        coeff, basis_groups, basis_types, basis_m, basis_n, gamma_ratio(2), gamma_ratio(1));
-    fig_gamma_resonance = figure('Color', 'w');
-    ax_gamma = axes('Parent', fig_gamma_resonance);
-    if isempty(gamma_resonance.harmonic_index)
-        axis(ax_gamma, 'off');
-        text(ax_gamma, 0.5, 0.5, sprintf('No resonant mixed terms found for \\psi = %g\\phi_2 - %g\\phi_1', ...
-            gamma_ratio(1), gamma_ratio(2)), ...
-            'Units', 'normalized', 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
-            'Interpreter', 'tex');
-        title(ax_gamma, sprintf('%s: reconstructed Gamma(psi)', target_name), 'Interpreter', 'none');
+    if gamma_settings.resonant_only_bar_plot
+        tiled_bars = tiledlayout(fig_contribution_bars, 1, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+        ax_group = nexttile(tiled_bars);
+        plotContributionSummaryBars(ax_group, mixed_pair_summary_resonant, max_display_items, ...
+            sprintf('Resonant mixed contribution for gamma ratio [%g,%g]', ...
+                gamma_ratio_reduced(1), gamma_ratio_reduced(2)), ...
+            'Resonant harmonic pair (m,n)', plot_group_colors(3, :));
     else
-        plot(ax_gamma, gamma_resonance.psi_grid, gamma_resonance.gamma_values, 'LineWidth', 1.8, 'Color', [0.0, 0.4470, 0.7410]);
-        xlabel(ax_gamma, '$\psi$', 'Interpreter', 'latex');
-        ylabel(ax_gamma, '$\Gamma(\psi)$', 'Interpreter', 'latex');
-        title(ax_gamma, sprintf('%s: reconstructed Gamma(psi) for psi = %g*phi2 - %g*phi1', ...
-            target_name, gamma_ratio(1), gamma_ratio(2)), ...
-            'Interpreter', 'none');
-        grid(ax_gamma, 'on');
-        box(ax_gamma, 'on');
-        xlim(ax_gamma, [0, 2*pi]);
-        xticks(ax_gamma, [0, pi/2, pi, 3*pi/2, 2*pi]);
-        xticklabels(ax_gamma, {'0', '$\pi/2$', '$\pi$', '$3\pi/2$', '$2\pi$'});
-        text(ax_gamma, 0.02, 0.98, sprintf('Harmonics used: %s', mat2str(gamma_resonance.harmonic_index.')), ...
-            'Units', 'normalized', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
-            'Interpreter', 'none', 'BackgroundColor', 'w', 'Margin', 3);
+        tiled_bars = tiledlayout(fig_contribution_bars, 3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+        ax_group = nexttile(tiled_bars);
+        plotContributionSummaryBars(ax_group, phi1_harmonic_summary, max_display_items, ...
+            '\phi_1-only contribution by harmonic order', 'Harmonic order m', plot_group_colors(1, :));
+
+        ax_group = nexttile(tiled_bars);
+        plotContributionSummaryBars(ax_group, phi2_harmonic_summary, max_display_items, ...
+            '\phi_2-only contribution by harmonic order', 'Harmonic order n', plot_group_colors(2, :));
+
+        ax_group = nexttile(tiled_bars);
+        plotContributionSummaryBars(ax_group, mixed_pair_summary, max_display_items, ...
+            '\phi_1-\phi_2 mixed contribution by harmonic pair', 'Harmonic pair (m,n)', plot_group_colors(3, :));
+    end
+
+    figure(fig_contribution_bars);
+    tuneFigure;
+
+    if gamma_settings.enabled
+        gamma_resonance = reconstructResonantGamma( ...
+            coeff, basis_groups, basis_types, basis_m, basis_n, gamma_ratio_reduced(2), gamma_ratio_reduced(1));
+        [gamma_values_full, gamma_values_symmetric, gamma_values_antisymmetric] = ...
+            evaluateGammaComponents(gamma_resonance.psi_grid, gamma_resonance.harmonic_index, ...
+                gamma_resonance.gamma_cos, gamma_resonance.gamma_sin);
+        psi_grid_centered = linspace(-pi, pi, numel(gamma_resonance.psi_grid)).';
+        [gamma_values_full_centered, gamma_values_symmetric_centered, gamma_values_antisymmetric_centered] = ...
+            evaluateGammaComponents(psi_grid_centered, gamma_resonance.harmonic_index, ...
+                gamma_resonance.gamma_cos, gamma_resonance.gamma_sin);
+
+        gamma_resonance.gamma_values_full = gamma_values_full;
+        gamma_resonance.gamma_values_symmetric = gamma_values_symmetric;
+        gamma_resonance.gamma_values_antisymmetric = gamma_values_antisymmetric;
+        gamma_resonance.psi_grid_centered = psi_grid_centered;
+        gamma_resonance.gamma_values_full_centered = gamma_values_full_centered;
+        gamma_resonance.gamma_values_symmetric_centered = gamma_values_symmetric_centered;
+        gamma_resonance.gamma_values_antisymmetric_centered = gamma_values_antisymmetric_centered;
+        gamma_resonance.component = gamma_settings.component;
+        gamma_resonance.overlay_full = gamma_settings.overlay_full;
+
+        switch gamma_settings.component
+            case 'full'
+                gamma_resonance.gamma_values = gamma_values_full;
+                gamma_resonance.gamma_values_centered = gamma_values_full_centered;
+                gamma_component_label = 'full';
+            case 'symmetric'
+                gamma_resonance.gamma_values = gamma_values_symmetric;
+                gamma_resonance.gamma_values_centered = gamma_values_symmetric_centered;
+                gamma_component_label = 'symmetric part';
+            case 'antisymmetric'
+                gamma_resonance.gamma_values = gamma_values_antisymmetric;
+                gamma_resonance.gamma_values_centered = gamma_values_antisymmetric_centered;
+                gamma_component_label = 'antisymmetric part';
+            otherwise
+                error('Unsupported gamma component: %s', gamma_settings.component);
+        end
+
+        fig_gamma_resonance = figure('Color', 'w');
+        ax_gamma = axes('Parent', fig_gamma_resonance);
+        if isempty(gamma_resonance.harmonic_index)
+            axis(ax_gamma, 'off');
+            text(ax_gamma, 0.5, 0.5, sprintf('No resonant mixed terms found for \\psi = %g\\phi_2 - %g\\phi_1', ...
+                gamma_ratio_reduced(1), gamma_ratio_reduced(2)), ...
+                'Units', 'normalized', 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle', ...
+                'Interpreter', 'tex');
+        else
+            hold(ax_gamma, 'on');
+            overlay_full_curve = gamma_settings.overlay_full && ~strcmp(gamma_settings.component, 'full');
+            if overlay_full_curve
+                plot(ax_gamma, gamma_resonance.psi_grid_centered, gamma_resonance.gamma_values_full_centered, '--', ...
+                    'LineWidth', 1.4, 'Color', [0.45, 0.45, 0.45], 'DisplayName', 'full reconstructed Gamma(psi)');
+            end
+            plot(ax_gamma, gamma_resonance.psi_grid_centered, gamma_resonance.gamma_values_centered, 'LineWidth', 1.8, ...
+                'Color', [0.0, 0.4470, 0.7410], 'DisplayName', sprintf('%s of Gamma(psi)', gamma_component_label));
+            xlabel(ax_gamma, '$$\psi$$', 'Interpreter', 'latex');
+            ylabel(ax_gamma, '$$\Gamma(\psi)$$', 'Interpreter', 'latex');
+            if overlay_full_curve
+                legend(ax_gamma, 'Location', 'best');
+            end
+            grid(ax_gamma, 'on');
+            box(ax_gamma, 'on');
+            xlim(ax_gamma, [-pi, pi]);
+            xticks(ax_gamma, [-pi, -pi/2, 0, pi/2, pi]);
+            xticklabels(ax_gamma, {'$$-\pi$$', '$$-\pi/2$$', '0', '$$\pi/2$$', '$$\pi$$'});
+            ax_gamma.XLabel.Interpreter = 'latex';
+            ax_gamma.YLabel.Interpreter = 'latex';
+            ax_gamma.TickLabelInterpreter = 'latex';
+            text(ax_gamma, 0.02, 0.98, sprintf('Harmonics used: %s', mat2str(gamma_resonance.harmonic_index.')), ...
+                'Units', 'normalized', 'HorizontalAlignment', 'left', 'VerticalAlignment', 'top', ...
+                'Interpreter', 'none', 'BackgroundColor', 'w', 'Margin', 3);
+        end
+        figure(fig_gamma_resonance);
+        tuneFigure;
+    else
+        gamma_resonance = struct( ...
+            'enabled', false, ...
+            'component', gamma_settings.component, ...
+            'overlay_full', gamma_settings.overlay_full, ...
+            'phi1_base', gamma_ratio_reduced(2), ...
+            'phi2_base', gamma_ratio_reduced(1), ...
+            'psi_label', sprintf('%g*phi2 - %g*phi1', gamma_ratio_reduced(1), gamma_ratio_reduced(2)), ...
+            'harmonic_index', [], ...
+            'gamma_cos', [], ...
+            'gamma_sin', [], ...
+            'psi_grid', [], ...
+            'gamma_values', [], ...
+            'psi_grid_centered', [], ...
+            'gamma_values_centered', [], ...
+            'gamma_values_full', [], ...
+            'gamma_values_full_centered', [], ...
+            'gamma_values_symmetric', [], ...
+            'gamma_values_symmetric_centered', [], ...
+            'gamma_values_antisymmetric', [], ...
+            'gamma_values_antisymmetric_centered', []);
+        fig_gamma_resonance = [];
     end
 
     fprintf('[INFO] Double Fourier fit completed after mean-centering: mean(z)=%.6g, Nsamples=%d, Nbasis=%d, rank(A)=%d, cond(A)=%.3e, RMSE=%.6g\n', ...
@@ -326,6 +429,7 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
     result.phi1_harmonic_summary = phi1_harmonic_summary;
     result.phi2_harmonic_summary = phi2_harmonic_summary;
     result.mixed_pair_summary = mixed_pair_summary;
+    result.mixed_pair_summary_resonant = mixed_pair_summary_resonant;
     result.term_rms_contribution = term_rms_contribution;
     result.term_energy_contribution = term_energy_contribution;
     result.term_contribution_ratio = term_contribution_ratio;
@@ -347,6 +451,8 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
     result.target_name = target_name;
     result.heatmap_mode = heatmap_mode;
     result.gamma_ratio = gamma_ratio;
+    result.gamma_ratio_reduced = gamma_ratio_reduced;
+    result.gamma_settings = gamma_settings;
     result.gamma_resonance = gamma_resonance;
     result.rankA = rankA;
     result.condA = condA;
@@ -515,6 +621,19 @@ function gamma_resonance = reconstructResonantGamma(coeff, basis_groups, basis_t
     gamma_resonance.gamma_values = gamma_values;
 end
 
+function [gamma_values_full, gamma_values_symmetric, gamma_values_antisymmetric] = evaluateGammaComponents(psi_grid, harmonic_index, gamma_cos, gamma_sin)
+    gamma_values_symmetric = zeros(size(psi_grid));
+    gamma_values_antisymmetric = zeros(size(psi_grid));
+
+    for i = 1:numel(harmonic_index)
+        k = harmonic_index(i);
+        gamma_values_symmetric = gamma_values_symmetric + gamma_cos(i) * cos(k * psi_grid);
+        gamma_values_antisymmetric = gamma_values_antisymmetric + gamma_sin(i) * sin(k * psi_grid);
+    end
+
+    gamma_values_full = gamma_values_symmetric + gamma_values_antisymmetric;
+end
+
 function coeff_value = getMixedCoefficient(coeff, basis_groups, basis_types, basis_m, basis_n, m_order, n_order, basis_type)
     mask = strcmp(basis_groups, 'mixed') & strcmp(basis_types, basis_type) & ...
         basis_m == m_order & basis_n == n_order;
@@ -523,6 +642,59 @@ function coeff_value = getMixedCoefficient(coeff, basis_groups, basis_types, bas
     else
         coeff_value = 0;
     end
+end
+
+function ratio_reduced = reducePositiveIntegerRatio(ratio)
+    a = round(ratio(1));
+    b = round(ratio(2));
+
+    while b ~= 0
+        t = mod(a, b);
+        a = b;
+        b = t;
+    end
+
+    ratio_gcd = max(a, 1);
+    ratio_reduced = ratio / ratio_gcd;
+end
+
+function gamma_settings = normalizeGammaSettings(gamma_settings)
+    if ~isstruct(gamma_settings)
+        error('gamma_settings must be a struct when provided.');
+    end
+
+    if ~isfield(gamma_settings, 'enabled') || isempty(gamma_settings.enabled)
+        gamma_settings.enabled = true;
+    end
+    gamma_settings.enabled = logical(gamma_settings.enabled);
+
+    if ~isfield(gamma_settings, 'component') || isempty(gamma_settings.component)
+        gamma_settings.component = 'full';
+    end
+    if isstring(gamma_settings.component)
+        gamma_settings.component = char(gamma_settings.component);
+    end
+    gamma_settings.component = lower(strtrim(gamma_settings.component));
+
+    allowed_components = {'full', 'symmetric', 'antisymmetric'};
+    if ~ismember(gamma_settings.component, allowed_components)
+        error('Unsupported gamma_settings.component: %s', gamma_settings.component);
+    end
+
+    if ~isfield(gamma_settings, 'overlay_full') || isempty(gamma_settings.overlay_full)
+        gamma_settings.overlay_full = false;
+    end
+    gamma_settings.overlay_full = logical(gamma_settings.overlay_full);
+
+    if ~isfield(gamma_settings, 'show_surface_overlay') || isempty(gamma_settings.show_surface_overlay)
+        gamma_settings.show_surface_overlay = true;
+    end
+    gamma_settings.show_surface_overlay = logical(gamma_settings.show_surface_overlay);
+
+    if ~isfield(gamma_settings, 'resonant_only_bar_plot') || isempty(gamma_settings.resonant_only_bar_plot)
+        gamma_settings.resonant_only_bar_plot = false;
+    end
+    gamma_settings.resonant_only_bar_plot = logical(gamma_settings.resonant_only_bar_plot);
 end
 
 function summary_table = summarizeSingleAxisContributions(basis_groups, order_values, term_energy_contribution, total_term_energy, target_group)
@@ -585,6 +757,26 @@ function summary_table = summarizeMixedPairContributions(basis_groups, basis_m, 
     summary_table = sortrows(summary_table, 'contribution_ratio', 'descend');
 end
 
+function summary_table = filterMixedPairSummaryByResonance(mixed_pair_summary, phi1_base, phi2_base)
+    if isempty(mixed_pair_summary) || height(mixed_pair_summary) == 0
+        summary_table = mixed_pair_summary;
+        return;
+    end
+
+    phi1_base = double(phi1_base);
+    phi2_base = double(phi2_base);
+    k_phi1 = mixed_pair_summary.m_order / phi1_base;
+    k_phi2 = mixed_pair_summary.n_order / phi2_base;
+    resonant_mask = abs(k_phi1 - round(k_phi1)) < 1e-12 & ...
+        abs(k_phi2 - round(k_phi2)) < 1e-12 & ...
+        round(k_phi1) == round(k_phi2) & round(k_phi1) >= 1;
+
+    summary_table = mixed_pair_summary(resonant_mask, :);
+    if ~isempty(summary_table)
+        summary_table = sortrows(summary_table, 'contribution_ratio', 'descend');
+    end
+end
+
 function contribution_map = buildContributionHeatmap(M, N, group_contribution_summary, phi1_harmonic_summary, phi2_harmonic_summary, mixed_pair_summary)
     contribution_map = zeros(M + 1, N + 1);
 
@@ -616,10 +808,9 @@ function contribution_map = buildContributionHeatmap(M, N, group_contribution_su
     end
 end
 
-function plotContributionSummaryBars(ax, summary_table, max_display_items, title_prefix, xlabel_text, bar_color)
+function plotContributionSummaryBars(ax, summary_table, max_display_items, title_prefix, xlabel_text, bar_color) %#ok<INUSD>
     if isempty(summary_table) || height(summary_table) == 0
         axis(ax, 'off');
-        title(ax, title_prefix, 'Interpreter', 'tex');
         text(ax, 0.5, 0.5, 'No terms in this group', ...
             'Units', 'normalized', 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
         return;
@@ -633,30 +824,27 @@ function plotContributionSummaryBars(ax, summary_table, max_display_items, title
         'FaceColor', bar_color, 'EdgeColor', 'none');
     xlabel(ax, xlabel_text);
     ylabel(ax, 'Contribution (%)');
-    title(ax, sprintf('%s (top %d, total %.2f%%)', ...
-        title_prefix, n_display, 100 * sum(summary_table.contribution_ratio)), 'Interpreter', 'tex');
     grid(ax, 'on');
     box(ax, 'on');
     set(ax, 'XTick', x_positions, 'XTickLabel', summary_top.label, 'TickLabelInterpreter', 'none');
     xtickangle(ax, 25);
 end
 
-function plotScatterAndSurfaceOverlay(ax, phi1, phi2, z_scatter, surface_phi1, surface_phi2, surface_z, zlabel_text, title_text, view_angles)
+function plotScatterAndSurfaceOverlay(ax, phi1, phi2, z_scatter, surface_phi1, surface_phi2, surface_z, zlabel_text, view_angles)
     hold(ax, 'on');
     surf(ax, surface_phi1, surface_phi2, surface_z, surface_z, ...
         'EdgeColor', 'none', 'FaceAlpha', 0.72, 'FaceLighting', 'gouraud');
     scatter3(ax, phi1, phi2, z_scatter, 10, ...
         'filled', 'MarkerFaceColor', [0.1, 0.1, 0.1], 'MarkerEdgeColor', 'none', ...
         'MarkerFaceAlpha', 0.22, 'MarkerEdgeAlpha', 0.22);
-    formatPhaseScatterAxes(ax, zlabel_text, title_text);
+    formatPhaseScatterAxes(ax, zlabel_text);
     view(ax, view_angles);
 end
 
-function formatPhaseScatterAxes(ax, zlabel_text, title_text)
-    xlabel(ax, '$\phi_1$ (rad)', 'Interpreter', 'latex');
-    ylabel(ax, '$\phi_2$ (rad)', 'Interpreter', 'latex');
+function formatPhaseScatterAxes(ax, zlabel_text) %#ok<INUSD>
+    xlabel(ax, '$$\phi_1$$ (rad)', 'Interpreter', 'latex');
+    ylabel(ax, '$$\phi_2$$ (rad)', 'Interpreter', 'latex');
     zlabel(ax, zlabel_text, 'Interpreter', 'none');
-    title(ax, title_text, 'Interpreter', 'none');
     grid(ax, 'on');
     view(ax, 3);
     box(ax, 'on');
