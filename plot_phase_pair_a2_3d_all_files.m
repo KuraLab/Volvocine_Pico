@@ -1,4 +1,4 @@
-function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N, varargin)
+function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N, varargin)
 % Overlay 3D phase-phase-a2 trajectories from all CSV files in a directory.
 %
 % x = phase of agent 1
@@ -36,6 +36,10 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
 %        fit fields correspond to z_agent_id, while all agent-wise results
 %        are also available in out.agent_analysis.
 
+    if nargout > 1
+        error('Too many output arguments.');
+    end
+
     % Clear any figure windows left from previous runs before starting.
     existing_figures = findall(0, 'Type', 'figure');
     if ~isempty(existing_figures)
@@ -44,7 +48,7 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '250');
+        dirpath = fullfile('EstimateQ', 'Spring5', '250');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -62,10 +66,10 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 10;
+        M = 5;
     end
     if nargin < 8 || isempty(N)
-        N = 10;
+        N = 5;
     end
 
     gamma_ratio = [1 1];
@@ -191,6 +195,8 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
 
     if nargout == 0
         display_phase_agent_mean_omega_summary(out.phase_agent_mean_omega);
+    else
+        varargout{1} = out;
     end
 end
 
@@ -405,10 +411,10 @@ function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, pha
 
     gamma_1 = fit_agent_1.gamma_resonance;
     gamma_2 = fit_agent_2.gamma_resonance;
-    [psi_grid_1, gamma_values_1] = extract_gamma_curve(gamma_1);
-    [psi_grid_2, gamma_values_2] = extract_gamma_curve(gamma_2);
+    [psi_grid_1, gamma_values_1] = extract_gamma_curve(gamma_1, 'full');
+    [psi_grid_2, gamma_values_2] = extract_gamma_curve(gamma_2, 'full');
     if isempty(psi_grid_1) || isempty(psi_grid_2) || isempty(gamma_values_1) || isempty(gamma_values_2)
-        true_gamma.reason = 'Gamma curves were empty for at least one agent.';
+        true_gamma.reason = 'Full gamma curves were empty for at least one agent.';
         return;
     end
 
@@ -439,7 +445,7 @@ function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, pha
     true_gamma.available = true;
     true_gamma.agent_id_1 = phase_agent_ids(1);
     true_gamma.agent_id_2 = phase_agent_ids(2);
-    true_gamma.component = describe_gamma_component(gamma_1, gamma_2);
+    true_gamma.component = 'full';
     true_gamma.psi_grid = psi_grid;
     true_gamma.gamma_agent_1 = gamma_agent_1;
     true_gamma.gamma_agent_2 = gamma_agent_2;
@@ -447,11 +453,30 @@ function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, pha
     true_gamma.figure = fig_true_gamma;
 end
 
-function [psi_grid, gamma_values] = extract_gamma_curve(gamma_resonance)
+function [psi_grid, gamma_values] = extract_gamma_curve(gamma_resonance, mode)
     psi_grid = [];
     gamma_values = [];
+    if nargin < 2 || isempty(mode)
+        mode = 'selected';
+    end
     if ~isstruct(gamma_resonance)
         return;
+    end
+
+    if strcmp(mode, 'full')
+        if isfield(gamma_resonance, 'psi_grid_centered') && isfield(gamma_resonance, 'gamma_values_full_centered') && ...
+                ~isempty(gamma_resonance.psi_grid_centered) && ~isempty(gamma_resonance.gamma_values_full_centered)
+            psi_grid = gamma_resonance.psi_grid_centered(:);
+            gamma_values = gamma_resonance.gamma_values_full_centered(:);
+            return;
+        end
+
+        if isfield(gamma_resonance, 'psi_grid') && isfield(gamma_resonance, 'gamma_values_full') && ...
+                ~isempty(gamma_resonance.psi_grid) && ~isempty(gamma_resonance.gamma_values_full)
+            psi_grid = gamma_resonance.psi_grid(:);
+            gamma_values = gamma_resonance.gamma_values_full(:);
+            return;
+        end
     end
 
     if isfield(gamma_resonance, 'psi_grid_centered') && isfield(gamma_resonance, 'gamma_values_centered') && ...
@@ -465,23 +490,6 @@ function [psi_grid, gamma_values] = extract_gamma_curve(gamma_resonance)
             ~isempty(gamma_resonance.psi_grid) && ~isempty(gamma_resonance.gamma_values)
         psi_grid = gamma_resonance.psi_grid(:);
         gamma_values = gamma_resonance.gamma_values(:);
-    end
-end
-
-function component_label = describe_gamma_component(gamma_1, gamma_2)
-    component_1 = '';
-    component_2 = '';
-    if isstruct(gamma_1) && isfield(gamma_1, 'component') && ~isempty(gamma_1.component)
-        component_1 = char(gamma_1.component);
-    end
-    if isstruct(gamma_2) && isfield(gamma_2, 'component') && ~isempty(gamma_2.component)
-        component_2 = char(gamma_2.component);
-    end
-
-    if strcmp(component_1, component_2) && ~isempty(component_1)
-        component_label = component_1;
-    else
-        component_label = 'selected';
     end
 end
 
