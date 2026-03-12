@@ -66,10 +66,10 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 5;
+        M = 8;
     end
     if nargin < 8 || isempty(N)
-        N = 5;
+        N = 8;
     end
 
     gamma_ratio = [1 1];
@@ -616,7 +616,8 @@ function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, 
     point_data.phase1 = mod(a0_1, 256) * (2*pi/256);
     point_data.phase2 = mod(a0_2, 256) * (2*pi/256);
     point_data.a2_raw = a2_z;
-    point_data.a2_normalized = normalize_by_agent_percentile_span(a2_z, series_by_agent(z_agent_id).a2, 10);
+    point_data.a2_normalized = clip_values( ...
+        normalize_by_agent_percentile_span(a2_z, series_by_agent(z_agent_id).a2, 10), -0.5, 0.5);
     point_data.a2 = point_data.a2_normalized;
 
     meta = struct();
@@ -656,4 +657,8 @@ function xNorm = normalize_by_agent_percentile_span(x, reference_x, tailPct)
     end
 
     xNorm(valid) = (x(valid) - center_value) / span_value;
+end
+
+function xClipped = clip_values(x, lower_bound, upper_bound)
+    xClipped = min(max(x, lower_bound), upper_bound);
 end
