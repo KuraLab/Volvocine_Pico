@@ -62,13 +62,13 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 5;
+        M = 10;
     end
     if nargin < 8 || isempty(N)
-        N = 5;
+        N = 10;
     end
 
-    gamma_ratio = [2 1];
+    gamma_ratio = [1 1];
 
     % Ignore legacy weighted-fit arguments if they are still passed.
     if ~isempty(varargin)
@@ -150,6 +150,8 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     end
     primary_analysis = agent_analysis(primary_index);
     true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, phase_agent_ids, gamma_ratio);
+    phase_agent_omega = compute_phase_agent_mean_omega_all_files( ...
+        csv_paths, phase_agent_ids, analysis_duration_sec, analysis_start_sec);
 
     out = struct();
     out.dirpath = dirpath;
@@ -174,6 +176,7 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     out.marker_alpha = marker_alpha;
     out.agent_analysis = agent_analysis;
     out.true_gamma = true_gamma;
+    out.phase_agent_mean_omega = phase_agent_omega;
     out.figure_true_gamma = unwrap_scalar_field(true_gamma.figure);
 
     % Backward-compatible top-level fields refer to the primary z_agent_id.
@@ -185,6 +188,10 @@ function out = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent
     out.point_cloud = unwrap_scalar_field(primary_analysis.point_cloud);
     out.fourier_fit = unwrap_scalar_field(primary_analysis.fourier_fit);
     out.fourier_fit_sin_phi2_a2 = unwrap_scalar_field(primary_analysis.fourier_fit_sin_phi2_a2);
+
+    if nargout == 0
+        display_phase_agent_mean_omega_summary(out.phase_agent_mean_omega);
+    end
 end
 
 function csv_paths = list_csv_paths(dirpath, file_indices)
@@ -478,6 +485,50 @@ function component_label = describe_gamma_component(gamma_1, gamma_2)
     end
 end
 
+function display_phase_agent_mean_omega_summary(omega_summary)
+    if ~isstruct(omega_summary) || ~isfield(omega_summary, 'available') || ~omega_summary.available
+        if isstruct(omega_summary) && isfield(omega_summary, 'reason') && ~isempty(omega_summary.reason)
+            fprintf('[INFO] Phase-agent mean angular velocity unavailable: %s\n', omega_summary.reason);
+        else
+            fprintf('[INFO] Phase-agent mean angular velocity unavailable.\n');
+        end
+        return;
+    end
+
+    agent_ids = omega_summary.phase_agent_ids(:).';
+    omega_rad = omega_summary.mean_omega_rad_s(:).';
+    omega_deg = omega_summary.mean_omega_deg_s(:).';
+    std_rad = omega_summary.std_omega_rad_s(:).';
+    std_deg = omega_summary.std_omega_deg_s(:).';
+    n_valid_files = numel(omega_summary.per_file);
+    n_skipped_files = numel(omega_summary.skipped_files);
+
+    fprintf('[INFO] Phase-agent mean angular velocity summary (%d files', n_valid_files);
+    if n_skipped_files > 0
+        fprintf(', %d skipped', n_skipped_files);
+    end
+    fprintf(')\n');
+
+    for agent_idx = 1:numel(agent_ids)
+        fprintf('  Agent %d: %.12f rad/s (%.12f deg/s)', ...
+            agent_ids(agent_idx), omega_rad(agent_idx), omega_deg(agent_idx));
+        if agent_idx <= numel(std_rad) && isfinite(std_rad(agent_idx))
+            fprintf(', std %.12f rad/s (%.12f deg/s)', std_rad(agent_idx), std_deg(agent_idx));
+        end
+        fprintf('\n');
+    end
+
+    if numel(agent_ids) >= 2 && isfield(omega_summary, 'mean_ratio_2_over_1') && isfinite(omega_summary.mean_ratio_2_over_1)
+        fprintf('  Mean ratio omega(%d)/omega(%d): %.12f\n', ...
+            agent_ids(2), agent_ids(1), omega_summary.mean_ratio_2_over_1);
+    end
+
+    if numel(agent_ids) >= 2 && isfield(omega_summary, 'median_ratio_2_over_1') && isfinite(omega_summary.median_ratio_2_over_1)
+        fprintf('  Median ratio omega(%d)/omega(%d): %.12f\n', ...
+            agent_ids(2), agent_ids(1), omega_summary.median_ratio_2_over_1);
+    end
+end
+
 function value = unwrap_scalar_field(value)
     if iscell(value)
         if isempty(value)
@@ -504,53 +555,18 @@ function configure_phase_pair_axes(ax, phase_agent_ids, z_axis_label)
 end
 
 function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt)
-    T = readtable(csv_path);
-
-    required_cols = {'time_pc_sec_abs', 'a0', 'a2'};
-    if ~all(ismember(required_cols, T.Properties.VariableNames))
-        error('CSV missing required columns. Required: %s', strjoin(required_cols, ', '));
-    end
-
-    T.time_pc_sec_abs = double(T.time_pc_sec_abs);
-
-    has_agent = ismember('agent_id', T.Properties.VariableNames);
-    has_chunk = ismember('chunk_id', T.Properties.VariableNames);
-
-    if ~has_agent
-        T.agent_id = ones(height(T), 1);
-    end
-
-    if has_agent && has_chunk
-        T_OVERFLOW = 2^32 / 1e6;
-        T_TOL = 5.0;
-        threshold_sec = T_OVERFLOW - T_TOL;
-        jump_sec = T_OVERFLOW;
-
-        T = correct_large_jump_matlab(T, threshold_sec, jump_sec);
-        T = correct_chunk_start_times_matlab(T, 4000.0, T_OVERFLOW);
-    end
-
-    all_agents = unique(T.agent_id, 'sorted').';
     requested_agents = unique([phase_agent_ids(:); z_agent_id]);
-    if ~all(ismember(requested_agents, all_agents))
-        error('Requested agents %s are not all present. Available agents: %s', ...
-            mat2str(requested_agents.'), mat2str(all_agents));
-    end
-
-    series_by_agent = struct();
+    series_by_agent = load_corrected_agent_series_from_csv( ...
+        csv_path, requested_agents, {'time_pc_sec_abs', 'a0', 'a2'});
     overlap_start = -inf;
     overlap_end = inf;
 
     for k = 1:numel(requested_agents)
         aid = requested_agents(k);
-        series = get_agent_series(T, aid);
+        series = series_by_agent(aid);
         if isempty(series.time)
             error('No valid samples found for agent %d.', aid);
         end
-
-        series_by_agent(aid).time = series.time;
-        series_by_agent(aid).a0_corr = series.a0_corr;
-        series_by_agent(aid).a2 = series.a2;
 
         overlap_start = max(overlap_start, min(series.time));
         overlap_end = min(overlap_end, max(series.time));
@@ -632,82 +648,4 @@ function xNorm = normalize_by_agent_percentile_span(x, reference_x, tailPct)
     end
 
     xNorm(valid) = (x(valid) - center_value) / span_value;
-end
-
-function series = get_agent_series(T, agent_id)
-    sub = T(T.agent_id == agent_id, :);
-    sub = sortrows(sub, 'time_pc_sec_abs');
-
-    if isempty(sub)
-        series = struct('time', [], 'a0_corr', [], 'a2', []);
-        return;
-    end
-
-    time_vals = double(sub.time_pc_sec_abs(:));
-    a0_vals = correct_phase_discontinuity(double(sub.a0(:)));
-    a2_vals = double(sub.a2(:));
-
-    valid = isfinite(time_vals) & isfinite(a0_vals) & isfinite(a2_vals);
-    time_vals = time_vals(valid);
-    a0_vals = a0_vals(valid);
-    a2_vals = a2_vals(valid);
-
-    [time_vals, ia] = unique(time_vals, 'stable');
-    a0_vals = a0_vals(ia);
-    a2_vals = a2_vals(ia);
-
-    series = struct('time', time_vals, 'a0_corr', a0_vals, 'a2', a2_vals);
-end
-
-function corrected_phase = correct_phase_discontinuity(phase_data)
-    corrected_phase = phase_data(:);
-    for i = 2:length(corrected_phase)
-        diffv = corrected_phase(i) - corrected_phase(i - 1);
-        if diffv < -128
-            corrected_phase(i:end) = corrected_phase(i:end) + 256;
-        elseif diffv > 128
-            corrected_phase(i:end) = corrected_phase(i:end) - 256;
-        end
-    end
-end
-
-function T = correct_large_jump_matlab(T, threshold_sec, jump_sec)
-    [G, ~] = findgroups(T.agent_id, T.chunk_id);
-
-    for i = 1:max(G)
-        idx = find(G == i);
-        if isempty(idx)
-            continue;
-        end
-
-        [~, rel] = sort(T.time_pc_sec_abs(idx));
-        idx = idx(rel);
-
-        time_series = T.time_pc_sec_abs(idx);
-        time_diff = [0; diff(time_series)];
-        jump_idx = find(time_diff > threshold_sec);
-
-        for j = 1:numel(jump_idx)
-            fix_range = jump_idx(j):numel(time_series);
-            T.time_pc_sec_abs(idx(fix_range)) = T.time_pc_sec_abs(idx(fix_range)) - jump_sec;
-        end
-    end
-end
-
-function T = correct_chunk_start_times_matlab(T, threshold_sec, jump_sec)
-    [G, ~] = findgroups(T.agent_id, T.chunk_id);
-    chunk_start = splitapply(@(x) min(x), T.time_pc_sec_abs, G);
-    median_start = median(chunk_start, 'omitnan');
-
-    for i = 1:max(G)
-        idx = find(G == i);
-        if isempty(idx)
-            continue;
-        end
-
-        start_time = min(T.time_pc_sec_abs(idx));
-        if (start_time - median_start) > threshold_sec
-            T.time_pc_sec_abs(idx) = T.time_pc_sec_abs(idx) - jump_sec;
-        end
-    end
 end
