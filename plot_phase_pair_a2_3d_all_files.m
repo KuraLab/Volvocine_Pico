@@ -48,7 +48,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring5', '250');
+        dirpath = fullfile('EstimateQ', 'Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -60,7 +60,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
         analysis_duration_sec = 80;
     end
     if nargin < 5 || isempty(analysis_start_sec)
-        analysis_start_sec = 5;
+        analysis_start_sec = 10;
     end
     if nargin < 6
         file_indices = [];
