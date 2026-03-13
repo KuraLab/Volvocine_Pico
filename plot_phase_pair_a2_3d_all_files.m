@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring5', '255');
+        dirpath = fullfile('EstimateQ', 'Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -76,6 +76,9 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     if nargin < 8 || isempty(N)
         N = 5;
     end
+
+    % Toggle this to save only scatter/fitting figures after tuneFigure.
+    enable_save_figure = true;
 
     gamma_ratio = [1 1];
 
@@ -131,8 +134,8 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     point_color = [0.0, 0.4470, 0.7410];
     marker_size = 10;
     marker_alpha = 0.18;
-    gamma_settings_a2 = struct('enabled', false, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', true, 'resonant_only_bar_plot', false);
-    gamma_settings_sin_phi2_a2 = struct('enabled', true, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', false, 'resonant_only_bar_plot', true);
+    gamma_settings_a2 = struct('enabled', false, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', true, 'resonant_only_bar_plot', false, 'auto_save_figure', enable_save_figure);
+    gamma_settings_sin_phi2_a2 = struct('enabled', true, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', false, 'resonant_only_bar_plot', true, 'auto_save_figure', enable_save_figure);
     analysis_agent_ids = unique([z_agent_id, phase_agent_ids(:).'], 'stable');
 
     n_analysis_agents = numel(analysis_agent_ids);
@@ -144,7 +147,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
             analysis_duration_sec, analysis_start_sec, sample_dt, ...
             M, N, gamma_ratio, point_color, marker_size, marker_alpha, ...
             gamma_settings_a2, gamma_settings_sin_phi2_a2, ...
-            derived_signal_func, derived_signal_display_name);
+            derived_signal_func);
 
         if agent_idx == 1
             agent_analysis = orderfields(agent_result);
@@ -248,7 +251,7 @@ function phase_agent_ids = detect_default_phase_agents(csv_paths)
     error('Could not determine default phase_agent_ids from the selected CSV files.');
 end
 
-function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, M, N, gamma_ratio, point_color, marker_size, marker_alpha, gamma_settings_a2, gamma_settings_sin_phi2_a2, derived_signal_func, derived_signal_display_name) %#ok<INUSD>
+function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, M, N, gamma_ratio, point_color, marker_size, marker_alpha, gamma_settings_a2, gamma_settings_sin_phi2_a2, derived_signal_func)
     fig = figure('Color', 'w', 'Name', sprintf('a2 agent %d', target_agent_id));
     ax = axes('Parent', fig);
     hold(ax, 'on');
@@ -267,8 +270,13 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
     sin_phi2_a2_all = [];
     time_all = [];
     file_id_all = [];
-    phase_name_for_derived_signal = select_phase_name_for_target_agent(phase_agent_ids, target_agent_id);
-    derived_signal_display_name_target = strrep(derived_signal_display_name, 'phi_target', phase_name_for_derived_signal);
+    save_after_tune = isfield(gamma_settings_a2, 'auto_save_figure') && logical(gamma_settings_a2.auto_save_figure);
+    phi_idx = find(phase_agent_ids == target_agent_id, 1, 'first');
+    if isempty(phi_idx)
+        s_label = ['$$s_{' num2str(target_agent_id) '}(\phi_1,\phi_2)$$'];
+    else
+        s_label = ['$$s_' num2str(phi_idx) '(\phi_1,\phi_2)$$'];
+    end
 
     for i = 1:numel(csv_paths)
         csv_path = csv_paths{i};
@@ -310,10 +318,13 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
         error('No valid files were available to overlay for agent %d.', target_agent_id);
     end
 
-    configure_phase_pair_axes(ax, phase_agent_ids, sprintf('Agent %d a2_norm', target_agent_id));
+    configure_phase_pair_axes(ax, s_label);
 
     figure(fig);
     tuneFigure;
+    if save_after_tune
+        saveFigure;
+    end
 
     point_cloud = struct( ...
         'phi1', phi1_all, ...
@@ -327,7 +338,7 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
 
     fourier_fit = fitDoubleFourierScatter( ...
         point_cloud.phi1, point_cloud.phi2, point_cloud.a2, M, N, ...
-        sprintf('a2_norm(agent %d)', target_agent_id), 'full', gamma_ratio, gamma_settings_a2);
+        s_label, 'full', gamma_ratio, gamma_settings_a2);
     fourier_fit.M = M;
     fourier_fit.N = N;
     fourier_fit.fit_mode = 'unweighted';
@@ -335,7 +346,7 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
 
     fourier_fit_sin_phi2_a2 = fitDoubleFourierScatter( ...
         point_cloud.phi1, point_cloud.phi2, point_cloud.sin_phi2_a2, M, N, ...
-        sprintf('%s(agent %d)', derived_signal_display_name_target, target_agent_id), 'mixed-only', gamma_ratio, gamma_settings_sin_phi2_a2);
+        s_label, 'mixed-only', gamma_ratio, gamma_settings_sin_phi2_a2);
     fourier_fit_sin_phi2_a2.M = M;
     fourier_fit_sin_phi2_a2.N = N;
     fourier_fit_sin_phi2_a2.fit_mode = 'unweighted';
@@ -368,16 +379,6 @@ function phase_target = select_phase_for_target_agent(point_data, phase_agent_id
         phase_target = point_data.phase2;
     else
         phase_target = point_data.phase2;
-    end
-end
-
-function phase_name = select_phase_name_for_target_agent(phase_agent_ids, target_agent_id)
-    if target_agent_id == phase_agent_ids(1)
-        phase_name = 'phi1';
-    elseif target_agent_id == phase_agent_ids(2)
-        phase_name = 'phi2';
-    else
-        phase_name = 'phi2';
     end
 end
 
@@ -553,16 +554,16 @@ function value = unwrap_scalar_field(value)
     end
 end
 
-function configure_phase_pair_axes(ax, phase_agent_ids, z_axis_label)
+function configure_phase_pair_axes(ax, z_axis_label)
     xlim(ax, [0, 2*pi]);
     ylim(ax, [0, 2*pi]);
     xticks(ax, [0, pi/2, pi, 3*pi/2, 2*pi]);
     yticks(ax, [0, pi/2, pi, 3*pi/2, 2*pi]);
     xticklabels(ax, {'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
     yticklabels(ax, {'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
-    xlabel(ax, sprintf('Agent %d phase (rad)', phase_agent_ids(1)));
-    ylabel(ax, sprintf('Agent %d phase (rad)', phase_agent_ids(2)));
-    zlabel(ax, z_axis_label);
+    xlabel(ax, '$$\phi_1$$', 'Interpreter', 'latex');
+    ylabel(ax, '$$\phi_2$$', 'Interpreter', 'latex');
+    zlabel(ax, z_axis_label, 'Interpreter', 'latex');
     grid(ax, 'on');
     view(ax, 3);
     box(ax, 'on');

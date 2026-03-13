@@ -38,6 +38,9 @@ function out = plot_exported_gamma(source_path, psi_grid)
         fullfile('EstimateQ', 'Spring4', '255', 'gamma_exports'), ...
         fullfile('EstimateQ', 'Spring5', '255', 'gamma_exports'), ...
     };
+
+    % Save figures immediately after tuneFigure when true.
+    enable_save_figure = true;
     % ========================
 
     if nargin < 2 || isempty(psi_grid)
@@ -50,7 +53,7 @@ function out = plot_exported_gamma(source_path, psi_grid)
     if nargin < 1 || isempty(source_path)
         % Multi-spring overlay takes priority when paths are configured.
         if ~isempty(configured_overlay_paths)
-            out = plot_true_gamma_overlay(configured_overlay_paths, psi_grid);
+            out = plot_true_gamma_overlay(configured_overlay_paths, psi_grid, enable_save_figure);
             return;
         end
         source_path = resolve_initial_source_path(configured_source_path);
@@ -59,22 +62,19 @@ function out = plot_exported_gamma(source_path, psi_grid)
     source_info = resolve_gamma_source_path(source_path);
     switch source_info.source_type
         case 'bundle'
-            out = plot_gamma_bundle(source_info, psi_grid);
+            out = plot_gamma_bundle(source_info, psi_grid, enable_save_figure);
         case 'csv'
-            out = plot_single_gamma_csv(source_info.file_path);
+            out = plot_single_gamma_csv(source_info.file_path, enable_save_figure);
         case 'csv-folder'
-            out = plot_gamma_csv_folder(source_info);
+            out = plot_gamma_csv_folder(source_info, enable_save_figure);
         otherwise
             error('Unsupported source type: %s', source_info.source_type);
     end
 end
 
-function out = plot_true_gamma_overlay(source_paths, psi_grid)
+function out = plot_true_gamma_overlay(source_paths, psi_grid, enable_save_figure)
 % true_gamma: all springs overlaid on one figure.
 % derived / a2 gamma: one figure per spring directory.
-    spring_colors = get(groot, 'DefaultAxesColorOrder');
-    agent_styles  = {'-', '--', ':', '-.'};  % line style per agent index
-
     empty_lines = struct('x', {}, 'y', {}, 'name', {}, 'line_style', {}, 'color', {}, 'line_width', {});
     true_lines = empty_lines;
     figures    = gobjects(1, 0);
@@ -92,7 +92,6 @@ function out = plot_true_gamma_overlay(source_paths, psi_grid)
             continue;
         end
         gamma_export = loaded.gamma_export;
-        color        = spring_colors(mod(idx - 1, size(spring_colors, 1)) + 1, :);
         spring_label = extract_spring_label(folder);
 
         % --- true_gamma: collect for shared overlay + individual figure ---
@@ -101,10 +100,10 @@ function out = plot_true_gamma_overlay(source_paths, psi_grid)
             try
                 [psi_v, gam_v] = reconstruct_exported_gamma(gamma_export.true_gamma, psi_grid, 'true');
                 if ~isempty(psi_v)
-                    true_lines(end + 1) = make_line(psi_v, gam_v, spring_label, '-', color, 1.8); %#ok<AGROW>
-                    individual_line = make_line(psi_v, gam_v, 'true gamma', '-', color, 1.8);
+                    true_lines(end + 1) = make_line(psi_v, gam_v, spring_label, '-', [], 1.8); %#ok<AGROW>
+                    individual_line = make_line(psi_v, gam_v, 'true gamma', '-', [], 1.8);
                     figures(end + 1) = make_overlay_figure(individual_line, ...
-                        sprintf('%s: true gamma', spring_label)); %#ok<AGROW>
+                        sprintf('%s: true gamma', spring_label), enable_save_figure); %#ok<AGROW>
                 end
             catch err
                 warning('plot_exported_gamma:reconstructFailed', '%s true_gamma: %s', spring_label, err.message);
@@ -118,21 +117,20 @@ function out = plot_true_gamma_overlay(source_paths, psi_grid)
             for agent_idx = 1:numel(gamma_export.agents)
                 agent_export = gamma_export.agents(agent_idx);
                 agent_id     = agent_export.agent_id;
-                line_style   = agent_styles{mod(agent_idx - 1, numel(agent_styles)) + 1};
                 line_name    = sprintf('agent %d', agent_id);
 
                 derived_lines = append_overlay_line(derived_lines, agent_export.derived_gamma, ...
-                    psi_grid, line_name, line_style, color);
+                    psi_grid, line_name);
                 a2_lines = append_overlay_line(a2_lines, agent_export.a2_gamma, ...
-                    psi_grid, line_name, line_style, color);
+                    psi_grid, line_name);
             end
             if ~isempty(derived_lines)
                 figures(end + 1) = make_overlay_figure(derived_lines, ...
-                    sprintf('%s: derived gamma', spring_label)); %#ok<AGROW>
+                    sprintf('%s: derived gamma', spring_label), enable_save_figure); %#ok<AGROW>
             end
             if ~isempty(a2_lines)
                 figures(end + 1) = make_overlay_figure(a2_lines, ...
-                    sprintf('%s: a2 gamma', spring_label)); %#ok<AGROW>
+                    sprintf('%s: a2 gamma', spring_label), enable_save_figure); %#ok<AGROW>
             end
         end
     end
@@ -140,7 +138,7 @@ function out = plot_true_gamma_overlay(source_paths, psi_grid)
     % --- true_gamma overlay figure (all springs) ---
     if ~isempty(true_lines)
         fig = make_overlay_figure(true_lines, ...
-            sprintf('true gamma overlay (%d springs)', numel(source_paths)));
+            sprintf('true gamma overlay (%d springs)', numel(source_paths)), enable_save_figure);
         figures = [fig, figures];
     end
 
@@ -155,7 +153,7 @@ function out = plot_true_gamma_overlay(source_paths, psi_grid)
     out.figures      = figures;
 end
 
-function lines = append_overlay_line(lines, gamma_source, psi_grid, line_name, line_style, color)
+function lines = append_overlay_line(lines, gamma_source, psi_grid, line_name)
     gamma_definition = extract_gamma_definition(gamma_source);
     if ~is_resonant_gamma_plottable(gamma_definition)
         return;
@@ -174,7 +172,7 @@ function lines = append_overlay_line(lines, gamma_source, psi_grid, line_name, l
     if isempty(psi_v) || isempty(gam_v)
         return;
     end
-    lines(end + 1) = make_line(psi_v, gam_v, line_name, line_style, color, 1.4); %#ok<AGROW>
+    lines(end + 1) = make_line(psi_v, gam_v, line_name, '-', [], 1.4); %#ok<AGROW>
 end
 
 function line = make_line(psi_v, gam_v, name, line_style, color, line_width)
@@ -182,12 +180,12 @@ function line = make_line(psi_v, gam_v, name, line_style, color, line_width)
         'line_style', line_style, 'color', color, 'line_width', line_width);
 end
 
-function fig = make_overlay_figure(lines, fig_name)
+function fig = make_overlay_figure(lines, fig_name, enable_save_figure)
     plot_spec = struct('title', '', 'lines', lines, 'info_text', '');
     fig = figure('Color', 'w', 'Name', fig_name);
     ax  = axes('Parent', fig);
     draw_gamma_plot_spec(ax, plot_spec);
-    finalize_gamma_figure(fig);
+    finalize_gamma_figure(fig, enable_save_figure);
 end
 
 function spring_label = extract_spring_label(folder)
@@ -331,7 +329,7 @@ function name = get_last_path_part(dir_path)
     [~, name] = fileparts(dir_path);
 end
 
-function out = plot_gamma_bundle(source_info, psi_grid)
+function out = plot_gamma_bundle(source_info, psi_grid, enable_save_figure)
     loaded = load(source_info.file_path);
     if ~isfield(loaded, 'gamma_export')
         error('The MAT file does not contain a gamma_export variable: %s', source_info.file_path);
@@ -349,7 +347,7 @@ function out = plot_gamma_bundle(source_info, psi_grid)
         fig = figure('Color', 'w', 'Name', sprintf('Exported gamma [%d/%d]: %s', idx, n_plots, plot_specs(idx).title));
         ax = axes('Parent', fig);
         draw_gamma_plot_spec(ax, plot_specs(idx));
-        finalize_gamma_figure(fig);
+        finalize_gamma_figure(fig, enable_save_figure);
         figures(idx) = fig;
     end
 
@@ -373,9 +371,8 @@ function plot_specs = collect_gamma_bundle_plot_specs(gamma_export, psi_grid)
 
         for idx = 1:numel(gamma_export.agents)
             agent_export = gamma_export.agents(idx);
-            agent_color  = get_agent_color(idx);
-            derived_lines = append_agent_gamma_line(derived_lines, agent_export.derived_gamma, psi_grid, agent_export.agent_id, agent_color);
-            a2_lines      = append_agent_gamma_line(a2_lines,      agent_export.a2_gamma,     psi_grid, agent_export.agent_id, agent_color);
+            derived_lines = append_agent_gamma_line(derived_lines, agent_export.derived_gamma, psi_grid, agent_export.agent_id);
+            a2_lines      = append_agent_gamma_line(a2_lines,      agent_export.a2_gamma,     psi_grid, agent_export.agent_id);
         end
 
         if ~isempty(derived_lines)
@@ -395,7 +392,7 @@ function plot_specs = collect_gamma_bundle_plot_specs(gamma_export, psi_grid)
     end
 end
 
-function lines = append_agent_gamma_line(lines, gamma_source, psi_grid, agent_id, agent_color)
+function lines = append_agent_gamma_line(lines, gamma_source, psi_grid, agent_id)
     gamma_definition = extract_gamma_definition(gamma_source);
     if ~is_resonant_gamma_plottable(gamma_definition)
         return;
@@ -419,13 +416,8 @@ function lines = append_agent_gamma_line(lines, gamma_source, psi_grid, agent_id
         'y', gamma_values(:), ...
         'name', sprintf('agent %d', agent_id), ...
         'line_style', '-', ...
-        'color', agent_color, ...
+        'color', [], ...
         'line_width', 1.8); %#ok<AGROW>
-end
-
-function agent_color = get_agent_color(agent_order_idx)
-    palette = get(groot, 'DefaultAxesColorOrder');
-    agent_color = palette(mod(agent_order_idx - 1, size(palette, 1)) + 1, :);
 end
 
 function spec = build_true_gamma_plot_spec(true_gamma, psi_grid)
@@ -435,7 +427,7 @@ function spec = build_true_gamma_plot_spec(true_gamma, psi_grid)
     end
 
     line_specs = {
-        'true', 'true gamma', '-', [0.85, 0.33, 0.10], 2.0};
+        'true', 'true gamma', '-', [], 2.0};
 
     lines = struct('x', {}, 'y', {}, 'name', {}, 'line_style', {}, 'color', {}, 'line_width', {});
     for idx = 1:size(line_specs, 1)
@@ -468,14 +460,14 @@ function spec = build_true_gamma_plot_spec(true_gamma, psi_grid)
     spec.info_text = sprintf('gamma_true = agent %d minus agent %d', true_gamma.agent_id_2, true_gamma.agent_id_1);
 end
 
-function out = plot_single_gamma_csv(csv_path)
+function out = plot_single_gamma_csv(csv_path, enable_save_figure)
     table_data = readtable(csv_path);
     plot_spec = build_csv_plot_spec(table_data, get_file_title(csv_path));
 
     fig = figure('Color', 'w', 'Name', sprintf('Exported gamma CSV: %s', csv_path));
     ax = axes('Parent', fig);
     draw_gamma_plot_spec(ax, plot_spec);
-    finalize_gamma_figure(fig);
+    finalize_gamma_figure(fig, enable_save_figure);
 
     out = struct();
     out.source_type = 'csv';
@@ -485,7 +477,7 @@ function out = plot_single_gamma_csv(csv_path)
     out.plot_specs = plot_spec;
 end
 
-function out = plot_gamma_csv_folder(source_info)
+function out = plot_gamma_csv_folder(source_info, enable_save_figure)
     n_files = numel(source_info.csv_files);
     if n_files < 1
         error('No CSV files were found under %s.', source_info.folder_path);
@@ -501,7 +493,7 @@ function out = plot_gamma_csv_folder(source_info)
         fig = figure('Color', 'w', 'Name', sprintf('Exported gamma CSV [%d/%d]: %s', idx, n_files, plot_specs(idx).title));
         ax = axes('Parent', fig);
         draw_gamma_plot_spec(ax, plot_specs(idx));
-        finalize_gamma_figure(fig);
+        finalize_gamma_figure(fig, enable_save_figure);
         figures(idx) = fig;
     end
 
@@ -553,11 +545,19 @@ end
 function draw_gamma_plot_spec(ax, plot_spec)
     hold(ax, 'on');
     for idx = 1:numel(plot_spec.lines)
-        plot(ax, plot_spec.lines(idx).x, plot_spec.lines(idx).y, ...
-            'LineStyle', plot_spec.lines(idx).line_style, ...
-            'LineWidth', plot_spec.lines(idx).line_width, ...
-            'Color', plot_spec.lines(idx).color, ...
-            'DisplayName', plot_spec.lines(idx).name);
+        line_spec = plot_spec.lines(idx);
+        if isfield(line_spec, 'color') && ~isempty(line_spec.color)
+            plot(ax, line_spec.x, line_spec.y, ...
+                'LineStyle', line_spec.line_style, ...
+                'LineWidth', line_spec.line_width, ...
+                'Color', line_spec.color, ...
+                'DisplayName', line_spec.name);
+        else
+            plot(ax, line_spec.x, line_spec.y, ...
+                'LineStyle', line_spec.line_style, ...
+                'LineWidth', line_spec.line_width, ...
+                'DisplayName', line_spec.name);
+        end
     end
 
     plot(ax, [-pi, pi], [0, 0], ':', 'LineWidth', 0.8, 'Color', [0.6, 0.6, 0.6], 'HandleVisibility', 'off');
@@ -648,9 +648,16 @@ function title_text = get_file_title(file_path)
     title_text = [title_text ext];
 end
 
-function finalize_gamma_figure(fig)
+function finalize_gamma_figure(fig, enable_save_figure)
+    if nargin < 2 || isempty(enable_save_figure)
+        enable_save_figure = false;
+    end
+
     if exist('tuneFigure', 'file') == 2
         tuneFigure;
+        if enable_save_figure
+            saveFigure;
+        end
     else
         set(fig, 'Renderer', 'painters');
     end

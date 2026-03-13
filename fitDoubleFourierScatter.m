@@ -31,6 +31,8 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 %       resonant_only_bar_plot : whether the contribution bar plot should
 %           show only the mixed resonant terms satisfying gamma_ratio
 %           (default false)
+%       auto_save_figure : whether to call saveFigure after tuneFigure for
+%           the 3D scatter + fitted surface overlay figure (default false)
 %
 % The fitted model uses the real trigonometric basis
 %   1
@@ -232,10 +234,13 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
         fig_original = figure('Color', 'w');
         ax_original = axes('Parent', fig_original);
         plotScatterAndSurfaceOverlay(ax_original, phi1, phi2, z_original, surface_phi1, surface_phi2, surface_z, ...
-            target_name, [40, 28]);
+            target_name, [-37.5, 30]);
         colorbar(ax_original);
         figure(fig_original);
         tuneFigure;
+        if gamma_settings.auto_save_figure
+            saveFigure;
+        end
     else
         fig_original = [];
     end
@@ -695,6 +700,11 @@ function gamma_settings = normalizeGammaSettings(gamma_settings)
         gamma_settings.resonant_only_bar_plot = false;
     end
     gamma_settings.resonant_only_bar_plot = logical(gamma_settings.resonant_only_bar_plot);
+
+    if ~isfield(gamma_settings, 'auto_save_figure') || isempty(gamma_settings.auto_save_figure)
+        gamma_settings.auto_save_figure = false;
+    end
+    gamma_settings.auto_save_figure = logical(gamma_settings.auto_save_figure);
 end
 
 function summary_table = summarizeSingleAxisContributions(basis_groups, order_values, term_energy_contribution, total_term_energy, target_group)
@@ -842,9 +852,9 @@ function plotScatterAndSurfaceOverlay(ax, phi1, phi2, z_scatter, surface_phi1, s
 end
 
 function formatPhaseScatterAxes(ax, zlabel_text) %#ok<INUSD>
-    xlabel(ax, '$$\phi_1$$ (rad)', 'Interpreter', 'latex');
-    ylabel(ax, '$$\phi_2$$ (rad)', 'Interpreter', 'latex');
-    zlabel(ax, zlabel_text, 'Interpreter', 'none');
+    xlabel(ax, '$$\phi_1$$', 'Interpreter', 'latex');
+    ylabel(ax, '$$\phi_2$$', 'Interpreter', 'latex');
+    zlabel(ax, zlabel_text, 'Interpreter', 'latex');
     grid(ax, 'on');
     view(ax, 3);
     box(ax, 'on');
