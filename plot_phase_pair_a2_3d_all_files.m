@@ -35,6 +35,11 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
 %        agents. For backward compatibility, top-level figure/point-cloud/
 %        fit fields correspond to z_agent_id, while all agent-wise results
 %        are also available in out.agent_analysis.
+%
+% Side effect:
+%   Portable gamma reconstruction data are exported to
+%   fullfile(dirpath, 'gamma_exports') so that other MATLAB code can load
+%   and reuse the reconstructed Gamma(psi) results.
 
     if nargout > 1
         error('Too many output arguments.');
@@ -48,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '255');
+        dirpath = fullfile('EstimateQ', 'Spring5', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -66,10 +71,10 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 8;
+        M = 5;
     end
     if nargin < 8 || isempty(N)
-        N = 8;
+        N = 5;
     end
 
     gamma_ratio = [1 1];
@@ -127,7 +132,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     marker_size = 10;
     marker_alpha = 0.18;
     gamma_settings_a2 = struct('enabled', false, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', true, 'resonant_only_bar_plot', false);
-    gamma_settings_sin_phi2_a2 = struct('enabled', true, 'component', 'antisymmetric', 'overlay_full', true, 'show_surface_overlay', false, 'resonant_only_bar_plot', true);
+    gamma_settings_sin_phi2_a2 = struct('enabled', true, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', false, 'resonant_only_bar_plot', true);
     analysis_agent_ids = unique([z_agent_id, phase_agent_ids(:).'], 'stable');
 
     n_analysis_agents = numel(analysis_agent_ids);
@@ -192,6 +197,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     out.point_cloud = unwrap_scalar_field(primary_analysis.point_cloud);
     out.fourier_fit = unwrap_scalar_field(primary_analysis.fourier_fit);
     out.fourier_fit_sin_phi2_a2 = unwrap_scalar_field(primary_analysis.fourier_fit_sin_phi2_a2);
+    out.gamma_export = export_gamma_results(dirpath, out);
 
     if nargout == 0
         display_phase_agent_mean_omega_summary(out.phase_agent_mean_omega);
@@ -661,4 +667,321 @@ end
 
 function xClipped = clip_values(x, lower_bound, upper_bound)
     xClipped = min(max(x, lower_bound), upper_bound);
+end
+
+function export_info = export_gamma_results(dirpath, out)
+    export_info = struct( ...
+        'available', false, ...
+        'reason', '', ...
+        'directory', '', ...
+        'mat_file', '', ...
+        'latest_mat_file', '', ...
+        'curve_files', struct('label', {}, 'file_path', {}));
+
+    try
+        export_dir = fullfile(dirpath, 'gamma_exports');
+        if ~exist(export_dir, 'dir')
+            mkdir(export_dir);
+        end
+
+        gamma_export = build_gamma_export_bundle(dirpath, out);
+        timestamp = datestr(now, 'yyyymmdd_HHMMSS');
+        base_name = sprintf('gamma_export_phase%d_%d_z%d_%s', ...
+            out.phase_agent_ids(1), out.phase_agent_ids(2), out.z_agent_id, timestamp);
+        mat_file = fullfile(export_dir, [base_name '.mat']);
+        latest_mat_file = fullfile(export_dir, 'gamma_export_latest.mat');
+
+        save(mat_file, 'gamma_export');
+        save(latest_mat_file, 'gamma_export');
+
+        curve_files = write_gamma_curve_exports(export_dir, gamma_export);
+
+        export_info.available = true;
+        export_info.directory = export_dir;
+        export_info.mat_file = mat_file;
+        export_info.latest_mat_file = latest_mat_file;
+        export_info.curve_files = curve_files;
+
+        fprintf('[INFO] Exported gamma bundle to %s\n', latest_mat_file);
+    catch ME
+        export_info.reason = ME.message;
+        warning('Gamma export failed for %s: %s', dirpath, ME.message);
+    end
+end
+
+function gamma_export = build_gamma_export_bundle(dirpath, out)
+    gamma_export = struct();
+    gamma_export.schema_version = 1;
+    gamma_export.created_at = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+    gamma_export.source_dirpath = dirpath;
+    gamma_export.phase_agent_ids = out.phase_agent_ids;
+    gamma_export.z_agent_id = out.z_agent_id;
+    gamma_export.analysis_agent_ids = out.analysis_agent_ids;
+    gamma_export.analysis_duration_sec = out.analysis_duration_sec;
+    gamma_export.analysis_start_sec = out.analysis_start_sec;
+    gamma_export.file_indices = out.file_indices;
+    gamma_export.fit_mode = out.fit_mode;
+    gamma_export.gamma_ratio = out.gamma_ratio;
+    gamma_export.gamma_settings = out.gamma_settings;
+    gamma_export.derived_signal = out.derived_signal;
+    gamma_export.phase_agent_mean_omega = out.phase_agent_mean_omega;
+    gamma_export.agents = build_agent_gamma_exports(out.agent_analysis);
+    gamma_export.true_gamma = sanitize_true_gamma_export(out.true_gamma);
+end
+
+function agent_exports = build_agent_gamma_exports(agent_analysis)
+    if isempty(agent_analysis)
+        agent_exports = struct([]);
+        return;
+    end
+
+    agent_exports = repmat(struct( ...
+        'agent_id', [], ...
+        'fit_mode', '', ...
+        'gamma_ratio', [], ...
+        'used_files', {{}}, ...
+        'skipped_files', struct('file_path', {}, 'reason', {}), ...
+        'per_file', struct('file_path', {}, 'window_start_abs', {}, 'window_end_abs', {}, 'n_points', {}, 'phase_agent_ids', {}, 'z_agent_id', {}), ...
+        'n_points', 0, ...
+        'a2_gamma', struct(), ...
+        'derived_gamma', struct()), size(agent_analysis));
+
+    for idx = 1:numel(agent_analysis)
+        agent_exports(idx) = build_single_agent_gamma_export(agent_analysis(idx));
+    end
+end
+
+function agent_export = build_single_agent_gamma_export(agent_out)
+    point_cloud = unwrap_scalar_field(agent_out.point_cloud);
+    n_points = 0;
+    if isstruct(point_cloud) && isfield(point_cloud, 'time') && ~isempty(point_cloud.time)
+        n_points = numel(point_cloud.time);
+    end
+
+    agent_export = struct();
+    agent_export.agent_id = agent_out.agent_id;
+    agent_export.fit_mode = agent_out.fit_mode;
+    agent_export.gamma_ratio = agent_out.gamma_ratio;
+    agent_export.used_files = agent_out.used_files;
+    agent_export.skipped_files = agent_out.skipped_files;
+    agent_export.per_file = agent_out.per_file;
+    agent_export.n_points = n_points;
+    agent_export.a2_gamma = build_fit_gamma_export(unwrap_scalar_field(agent_out.fourier_fit), 'a2');
+    agent_export.derived_gamma = build_fit_gamma_export(unwrap_scalar_field(agent_out.fourier_fit_sin_phi2_a2), 'derived');
+end
+
+function fit_export = build_fit_gamma_export(fit_result, signal_role)
+    fit_export = struct( ...
+        'available', false, ...
+        'signal_role', signal_role, ...
+        'target_name', '', ...
+        'fit_mode', '', ...
+        'heatmap_mode', '', ...
+        'rmse', [], ...
+        'M', [], ...
+        'N', [], ...
+        'gamma_ratio', [], ...
+        'gamma_ratio_reduced', [], ...
+        'gamma_settings', struct(), ...
+        'gamma_resonance', sanitize_gamma_resonance(struct()));
+
+    if ~isstruct(fit_result) || isempty(fieldnames(fit_result))
+        return;
+    end
+
+    fit_export.available = true;
+    if isfield(fit_result, 'target_name')
+        fit_export.target_name = fit_result.target_name;
+    end
+    if isfield(fit_result, 'fit_mode')
+        fit_export.fit_mode = fit_result.fit_mode;
+    end
+    if isfield(fit_result, 'heatmap_mode')
+        fit_export.heatmap_mode = fit_result.heatmap_mode;
+    end
+    if isfield(fit_result, 'rmse')
+        fit_export.rmse = fit_result.rmse;
+    end
+    if isfield(fit_result, 'M')
+        fit_export.M = fit_result.M;
+    end
+    if isfield(fit_result, 'N')
+        fit_export.N = fit_result.N;
+    end
+    if isfield(fit_result, 'gamma_ratio')
+        fit_export.gamma_ratio = fit_result.gamma_ratio;
+    end
+    if isfield(fit_result, 'gamma_ratio_reduced')
+        fit_export.gamma_ratio_reduced = fit_result.gamma_ratio_reduced;
+    end
+    if isfield(fit_result, 'gamma_settings')
+        fit_export.gamma_settings = fit_result.gamma_settings;
+    end
+    if isfield(fit_result, 'gamma_resonance')
+        fit_export.gamma_resonance = sanitize_gamma_resonance(fit_result.gamma_resonance);
+    end
+end
+
+function gamma_resonance_export = sanitize_gamma_resonance(gamma_resonance)
+    gamma_resonance_export = struct( ...
+        'enabled', false, ...
+        'component', '', ...
+        'overlay_full', false, ...
+        'phi1_base', [], ...
+        'phi2_base', [], ...
+        'psi_label', '', ...
+        'harmonic_index', [], ...
+        'gamma_cos', [], ...
+        'gamma_sin', [], ...
+        'psi_grid', [], ...
+        'gamma_values', [], ...
+        'psi_grid_centered', [], ...
+        'gamma_values_centered', [], ...
+        'gamma_values_full', [], ...
+        'gamma_values_full_centered', [], ...
+        'gamma_values_symmetric', [], ...
+        'gamma_values_symmetric_centered', [], ...
+        'gamma_values_antisymmetric', [], ...
+        'gamma_values_antisymmetric_centered', []);
+
+    if ~isstruct(gamma_resonance) || isempty(fieldnames(gamma_resonance))
+        return;
+    end
+
+    gamma_resonance_export.enabled = true;
+    if isfield(gamma_resonance, 'enabled')
+        gamma_resonance_export.enabled = logical(gamma_resonance.enabled);
+    end
+
+    field_names = fieldnames(gamma_resonance_export);
+    for idx = 1:numel(field_names)
+        field_name = field_names{idx};
+        if strcmp(field_name, 'enabled')
+            continue;
+        end
+        if isfield(gamma_resonance, field_name)
+            gamma_resonance_export.(field_name) = gamma_resonance.(field_name);
+        end
+    end
+end
+
+function true_gamma_export = sanitize_true_gamma_export(true_gamma)
+    true_gamma_export = struct( ...
+        'available', false, ...
+        'reason', '', ...
+        'agent_id_1', [], ...
+        'agent_id_2', [], ...
+        'gamma_ratio', [], ...
+        'component', '', ...
+        'psi_grid', [], ...
+        'gamma_agent_1', [], ...
+        'gamma_agent_2', [], ...
+        'gamma_true', []);
+
+    if ~isstruct(true_gamma) || isempty(fieldnames(true_gamma))
+        return;
+    end
+
+    field_names = fieldnames(true_gamma_export);
+    for idx = 1:numel(field_names)
+        field_name = field_names{idx};
+        if isfield(true_gamma, field_name)
+            true_gamma_export.(field_name) = true_gamma.(field_name);
+        end
+    end
+end
+
+function curve_files = write_gamma_curve_exports(export_dir, gamma_export)
+    curve_files = struct('label', {}, 'file_path', {});
+
+    for idx = 1:numel(gamma_export.agents)
+        agent_export = gamma_export.agents(idx);
+
+        derived_file = fullfile(export_dir, sprintf('gamma_curve_agent%d_derived.csv', agent_export.agent_id));
+        if write_single_gamma_curve_csv(derived_file, agent_export.derived_gamma.gamma_resonance)
+            curve_files(end + 1) = struct( ...
+                'label', sprintf('agent_%d_derived', agent_export.agent_id), ...
+                'file_path', derived_file); %#ok<AGROW>
+        end
+
+        a2_file = fullfile(export_dir, sprintf('gamma_curve_agent%d_a2.csv', agent_export.agent_id));
+        if write_single_gamma_curve_csv(a2_file, agent_export.a2_gamma.gamma_resonance)
+            curve_files(end + 1) = struct( ...
+                'label', sprintf('agent_%d_a2', agent_export.agent_id), ...
+                'file_path', a2_file); %#ok<AGROW>
+        end
+    end
+
+    if isfield(gamma_export, 'true_gamma') && isstruct(gamma_export.true_gamma) && ...
+            isfield(gamma_export.true_gamma, 'available') && gamma_export.true_gamma.available
+        true_gamma_file = fullfile(export_dir, sprintf('gamma_true_agent%d_%d.csv', ...
+            gamma_export.true_gamma.agent_id_1, gamma_export.true_gamma.agent_id_2));
+        if write_single_gamma_curve_csv(true_gamma_file, gamma_export.true_gamma)
+            curve_files(end + 1) = struct( ...
+                'label', 'true_gamma', ...
+                'file_path', true_gamma_file); %#ok<AGROW>
+        end
+    end
+end
+
+function did_write = write_single_gamma_curve_csv(file_path, gamma_definition)
+    did_write = false;
+    curve_table = build_gamma_curve_table(gamma_definition);
+    if isempty(curve_table) || height(curve_table) < 1
+        return;
+    end
+
+    writetable(curve_table, file_path);
+    did_write = true;
+end
+
+function curve_table = build_gamma_curve_table(gamma_definition)
+    curve_table = table();
+    if ~isstruct(gamma_definition) || isempty(fieldnames(gamma_definition))
+        return;
+    end
+
+    if isfield(gamma_definition, 'gamma_true') && isfield(gamma_definition, 'psi_grid')
+        psi_grid = gamma_definition.psi_grid(:);
+        if isempty(psi_grid)
+            return;
+        end
+
+        curve_table = table(psi_grid, gamma_definition.gamma_agent_1(:), gamma_definition.gamma_agent_2(:), gamma_definition.gamma_true(:), ...
+            'VariableNames', {'psi', 'gamma_agent_1', 'gamma_agent_2', 'gamma_true'});
+        return;
+    end
+
+    psi_grid = get_export_curve_field(gamma_definition, 'psi_grid_centered', 'psi_grid');
+    if isempty(psi_grid)
+        return;
+    end
+
+    curve_table = table(psi_grid(:), 'VariableNames', {'psi'});
+    append_gamma_curve_column('gamma_selected', get_export_curve_field(gamma_definition, 'gamma_values_centered', 'gamma_values'));
+    append_gamma_curve_column('gamma_full', get_export_curve_field(gamma_definition, 'gamma_values_full_centered', 'gamma_values_full'));
+    append_gamma_curve_column('gamma_symmetric', get_export_curve_field(gamma_definition, 'gamma_values_symmetric_centered', 'gamma_values_symmetric'));
+    append_gamma_curve_column('gamma_antisymmetric', get_export_curve_field(gamma_definition, 'gamma_values_antisymmetric_centered', 'gamma_values_antisymmetric'));
+
+    function append_gamma_curve_column(variable_name, values)
+        if isempty(values)
+            return;
+        end
+        values = values(:);
+        if numel(values) ~= height(curve_table)
+            return;
+        end
+        curve_table.(variable_name) = values;
+    end
+end
+
+function values = get_export_curve_field(gamma_definition, primary_field, secondary_field)
+    values = [];
+    if isfield(gamma_definition, primary_field) && ~isempty(gamma_definition.(primary_field))
+        values = gamma_definition.(primary_field);
+        return;
+    end
+    if nargin >= 3 && isfield(gamma_definition, secondary_field) && ~isempty(gamma_definition.(secondary_field))
+        values = gamma_definition.(secondary_field);
+    end
 end
