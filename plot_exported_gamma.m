@@ -40,7 +40,7 @@ function out = plot_exported_gamma(source_path, psi_grid)
     };
 
     % Save figures immediately after tuneFigure when true.
-    enable_save_figure = true;
+    enable_save_figure = false;
     % ========================
 
     if nargin < 2 || isempty(psi_grid)
