@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '255');
+        dirpath = fullfile('EstimateQ', 'Spring5', '295305');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -71,16 +71,16 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 10;
+        M = 5;
     end
     if nargin < 8 || isempty(N)
-        N = 10;
+        N = 5;
     end
 
     % Toggle this to save only scatter/fitting figures after tuneFigure.
     enable_save_figure = false;
 
-    gamma_ratio = [3 1];
+    gamma_ratio = [1 1];
 
     % Ignore legacy weighted-fit arguments if they are still passed.
     if ~isempty(varargin)
