@@ -42,7 +42,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring5', '255');
+        dirpath = fullfile('EstimateQ', 'Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
