@@ -1,0 +1,513 @@
+% Minimal script: reconstruct and plot fitted Fourier surface
+% from gamma_export_latest.mat.
+
+clearvars;
+close all;
+
+% --- User settings ---
+mat_path = '';          % '' -> auto-pick newest gamma_export_latest.mat under EstimateQ
+signal_role = 'a2';     % 'a2' or 'derived'
+n_grid = 121;
+n_phi_line = 401;       % sampling count for 1D W(phi) plot
+n_phi_integral = 2001;  % sampling count for numerical integral over phi
+n_psi_scan = 101;       % sampling count for psi_+ sweep in R(psi_+)
+psi_scan_min = -pi;
+psi_scan_max = pi;
+export_fourier_params = true;  % true -> print/save fitted Fourier parameters
+fourier_param_output_dir = ''; % '' -> use the folder that contains mat_path
+
+if isempty(mat_path)
+    files = dir(fullfile('EstimateQ', 'Spring*', '*', 'gamma_exports', 'gamma_export_latest.mat'));
+    assert(~isempty(files), 'No gamma_export_latest.mat was found under EstimateQ.');
+    [~, newest_idx] = max([files.datenum]);
+    mat_path = fullfile(files(newest_idx).folder, files(newest_idx).name);
+end
+
+S = load(mat_path, 'gamma_export');
+assert(isfield(S, 'gamma_export'), 'The MAT file does not contain gamma_export.');
+G = S.gamma_export;
+
+assert(isfield(G, 'phase_agent_ids') && numel(G.phase_agent_ids) >= 2, ...
+    'gamma_export.phase_agent_ids does not contain two phase-agent IDs.');
+phase_ids = G.phase_agent_ids(:).';
+agent_id_s1 = phase_ids(1);
+agent_id_s2 = phase_ids(2);
+
+fit_data_s1 = get_fit_data_for_agent(G, agent_id_s1, signal_role);
+fit_data_s2 = get_fit_data_for_agent(G, agent_id_s2, signal_role);
+
+[coeff_s1, basis_types_s1, m_order_s1, n_order_s1, z_mean_s1] = extract_basis_data(fit_data_s1);
+[coeff_s2, basis_types_s2, m_order_s2, n_order_s2, z_mean_s2] = extract_basis_data(fit_data_s2);
+
+phi_values = linspace(0, 2*pi, n_grid);
+[Phi1, Phi2] = meshgrid(phi_values, phi_values);
+s1_values = evaluate_exported_s(Phi1, Phi2, coeff_s1, basis_types_s1, m_order_s1, n_order_s1) + z_mean_s1;
+s2_values = evaluate_exported_s(Phi1, Phi2, coeff_s2, basis_types_s2, m_order_s2, n_order_s2) + z_mean_s2;
+
+figure('Color', 'w');
+surf(Phi1, Phi2, s1_values, 'EdgeColor', 'none');
+view(40, 30);
+grid on;
+box on;
+axis tight;
+colormap(turbo);
+colorbar;
+xlabel('\phi_1');
+ylabel('\phi_2');
+zlabel('s(\phi_1,\phi_2)');
+title(sprintf('s_1(\\phi_1,\\phi_2) | agent %d | %s', agent_id_s1, mat_path), 'Interpreter', 'none');
+
+figure('Color', 'w');
+surf(Phi1, Phi2, s2_values, 'EdgeColor', 'none');
+view(40, 30);
+grid on;
+box on;
+axis tight;
+colormap(turbo);
+colorbar;
+xlabel('\phi_1');
+ylabel('\phi_2');
+zlabel('s(\phi_1,\phi_2)');
+title(sprintf('s_2(\\phi_1,\\phi_2) | agent %d | %s', agent_id_s2, mat_path), 'Interpreter', 'none');
+
+% R(psi_+) = (1/(2*pi)) * integral_0^{2*pi} W(phi)^2 dphi
+phi_integral = linspace(0, 2*pi, n_phi_integral);
+psi_scan_values = linspace(psi_scan_min, psi_scan_max, n_psi_scan);
+R1_values = zeros(size(psi_scan_values));
+R2_values = zeros(size(psi_scan_values));
+
+for i = 1:numel(psi_scan_values)
+    psi_i = psi_scan_values(i);
+
+    W1_i = evaluate_exported_s(phi_integral, phi_integral - psi_i, coeff_s1, basis_types_s1, m_order_s1, n_order_s1) ...
+        - evaluate_exported_s(phi_integral, phi_integral + psi_i, coeff_s1, basis_types_s1, m_order_s1, n_order_s1);
+
+    W2_i = evaluate_exported_s(phi_integral - psi_i, phi_integral, coeff_s2, basis_types_s2, m_order_s2, n_order_s2) ...
+        - evaluate_exported_s(phi_integral + psi_i, phi_integral, coeff_s2, basis_types_s2, m_order_s2, n_order_s2);
+
+    R1_values(i) = trapz(phi_integral, W1_i .^ 2) / (2 * pi);
+    R2_values(i) = trapz(phi_integral, W2_i .^ 2) / (2 * pi);
+end
+
+[R1_max, idx_max_s1] = max(R1_values);
+[R2_max, idx_max_s2] = max(R2_values);
+psi_plus_s1 = psi_scan_values(idx_max_s1);
+psi_plus_s2 = psi_scan_values(idx_max_s2);
+
+% s1: W(phi) = s(phi, phi-psi_+) - s(phi, phi+psi_+)
+% s2: W(phi) = s(phi-psi_+, phi) - s(phi+psi_+, phi)
+phi_line = linspace(-pi, pi, n_phi_line);
+
+w1_minus = evaluate_exported_s(phi_line, phi_line - psi_plus_s1, coeff_s1, basis_types_s1, m_order_s1, n_order_s1);
+w1_plus = evaluate_exported_s(phi_line, phi_line + psi_plus_s1, coeff_s1, basis_types_s1, m_order_s1, n_order_s1);
+w1_values = w1_minus - w1_plus;
+
+w2_minus = evaluate_exported_s(phi_line - psi_plus_s2, phi_line, coeff_s2, basis_types_s2, m_order_s2, n_order_s2);
+w2_plus = evaluate_exported_s(phi_line + psi_plus_s2, phi_line, coeff_s2, basis_types_s2, m_order_s2, n_order_s2);
+w2_values = w2_minus - w2_plus;
+
+% Normalize W power to match unit sine-wave power on the same phi grid.
+target_power = trapz(phi_line, sin(phi_line) .^ 2) / (2 * pi);
+w1_power_raw = trapz(phi_line, w1_values .^ 2) / (2 * pi);
+w2_power_raw = trapz(phi_line, w2_values .^ 2) / (2 * pi);
+
+scale_w1 = sqrt(target_power / max(w1_power_raw, eps));
+scale_w2 = sqrt(target_power / max(w2_power_raw, eps));
+w1_values = scale_w1 * w1_values;
+w2_values = scale_w2 * w2_values;
+
+w1_power_norm = trapz(phi_line, w1_values .^ 2) / (2 * pi);
+w2_power_norm = trapz(phi_line, w2_values .^ 2) / (2 * pi);
+
+% Fit W(phi) in Figure 3 by Fourier series up to original s-function order.
+fit_order_s1 = max(0, round(max([m_order_s1(:); n_order_s1(:)])));
+fit_order_s2 = max(0, round(max([m_order_s2(:); n_order_s2(:)])));
+fourier_fit_w1 = fit_fourier_series_periodic(phi_line, w1_values, fit_order_s1);
+fourier_fit_w2 = fit_fourier_series_periodic(phi_line, w2_values, fit_order_s2);
+fourier_param_table_w1 = build_fourier_param_table(fourier_fit_w1);
+fourier_param_table_w2 = build_fourier_param_table(fourier_fit_w2);
+
+if export_fourier_params
+    if isempty(fourier_param_output_dir)
+        output_dir = fileparts(mat_path);
+    else
+        output_dir = fourier_param_output_dir;
+    end
+    if ~exist(output_dir, 'dir')
+        mkdir(output_dir);
+    end
+
+    csv_path_w1 = fullfile(output_dir, sprintf('W1_fourier_fit_params_agent%d_%s.csv', agent_id_s1, signal_role));
+    csv_path_w2 = fullfile(output_dir, sprintf('W2_fourier_fit_params_agent%d_%s.csv', agent_id_s2, signal_role));
+    mat_path_fit = fullfile(output_dir, sprintf('W_fourier_fit_params_%s.mat', signal_role));
+
+    writetable(fourier_param_table_w1, csv_path_w1);
+    writetable(fourier_param_table_w2, csv_path_w2);
+
+    fourier_fit_export = struct();
+    fourier_fit_export.mat_source = mat_path;
+    fourier_fit_export.signal_role = signal_role;
+    fourier_fit_export.agent_id_s1 = agent_id_s1;
+    fourier_fit_export.agent_id_s2 = agent_id_s2;
+    fourier_fit_export.psi_plus_s1 = psi_plus_s1;
+    fourier_fit_export.psi_plus_s2 = psi_plus_s2;
+    fourier_fit_export.fit_order_s1 = fit_order_s1;
+    fourier_fit_export.fit_order_s2 = fit_order_s2;
+    fourier_fit_export.fit_w1 = fourier_fit_w1;
+    fourier_fit_export.fit_w2 = fourier_fit_w2;
+    fourier_fit_export.table_w1 = fourier_param_table_w1;
+    fourier_fit_export.table_w2 = fourier_param_table_w2;
+    save(mat_path_fit, 'fourier_fit_export');
+end
+
+reference_cos = cos(phi_line + pi - 0.6 * pi);
+
+% z(phi) candidates for Gamma(psi):
+% 1) power-normalized W at adopted psi_+^*
+% 2) reference cosine used in comparison plot
+z1_candidate_from_w = scale_w1 * ( ...
+    evaluate_exported_s(phi_integral, phi_integral - psi_plus_s1, coeff_s1, basis_types_s1, m_order_s1, n_order_s1) ...
+    - evaluate_exported_s(phi_integral, phi_integral + psi_plus_s1, coeff_s1, basis_types_s1, m_order_s1, n_order_s1));
+z2_candidate_from_w = scale_w2 * ( ...
+    evaluate_exported_s(phi_integral - psi_plus_s2, phi_integral, coeff_s2, basis_types_s2, m_order_s2, n_order_s2) ...
+    - evaluate_exported_s(phi_integral + psi_plus_s2, phi_integral, coeff_s2, basis_types_s2, m_order_s2, n_order_s2));
+z_candidate_sine = cos(phi_integral + pi - 0.6 * pi);
+
+Gamma1_from_w = zeros(size(psi_scan_values));
+Gamma1_from_sine = zeros(size(psi_scan_values));
+Gamma2_from_w = zeros(size(psi_scan_values));
+Gamma2_from_sine = zeros(size(psi_scan_values));
+
+for i = 1:numel(psi_scan_values)
+    psi_i = psi_scan_values(i);
+
+    % s1: Gamma(psi) = (1/(2*pi)) * integral z(phi) * s1(phi, phi-psi) dphi
+    s1_shifted = evaluate_exported_s(phi_integral, phi_integral - psi_i, coeff_s1, basis_types_s1, m_order_s1, n_order_s1) + z_mean_s1;
+    Gamma1_from_w(i) = trapz(phi_integral, z1_candidate_from_w .* s1_shifted) / (2 * pi);
+    Gamma1_from_sine(i) = trapz(phi_integral, z_candidate_sine .* s1_shifted) / (2 * pi);
+
+    % s2: use the same orientation as W2 definition
+    s2_shifted = evaluate_exported_s(phi_integral - psi_i, phi_integral, coeff_s2, basis_types_s2, m_order_s2, n_order_s2) + z_mean_s2;
+    Gamma2_from_w(i) = trapz(phi_integral, z2_candidate_from_w .* s2_shifted) / (2 * pi);
+    Gamma2_from_sine(i) = trapz(phi_integral, z_candidate_sine .* s2_shifted) / (2 * pi);
+end
+
+% Odd component: Gamma(psi) - Gamma(-psi)
+if psi_scan_min >= 0 || psi_scan_max <= 0
+    warning(['psi scan range does not include both signs. ', ...
+        'Gamma(-psi) is evaluated by extrapolation and may be inaccurate.']);
+end
+
+Gamma1_from_w_neg = interp1(psi_scan_values, Gamma1_from_w, -psi_scan_values, 'pchip', 'extrap');
+Gamma1_from_sine_neg = interp1(psi_scan_values, Gamma1_from_sine, -psi_scan_values, 'pchip', 'extrap');
+Gamma2_from_w_neg = interp1(psi_scan_values, Gamma2_from_w, -psi_scan_values, 'pchip', 'extrap');
+Gamma2_from_sine_neg = interp1(psi_scan_values, Gamma2_from_sine, -psi_scan_values, 'pchip', 'extrap');
+
+Gamma1_odd_from_w = Gamma1_from_w - Gamma1_from_w_neg;
+Gamma1_odd_from_sine = Gamma1_from_sine - Gamma1_from_sine_neg;
+Gamma2_odd_from_w = Gamma2_from_w - Gamma2_from_w_neg;
+Gamma2_odd_from_sine = Gamma2_from_sine - Gamma2_from_sine_neg;
+
+% Figure 5 element-wise subtraction with flipped subtrahend (top - flipped bottom):
+% z=W case    : Gamma1_from_w(psi) - Gamma2_from_w(-psi)
+% z=cos case  : Gamma1_from_sine(psi) - Gamma2_from_sine(-psi)
+Gamma12_diff_from_w = Gamma1_from_w - Gamma2_from_w_neg;
+Gamma12_diff_from_sine = Gamma1_from_sine - Gamma2_from_sine_neg;
+
+figure('Color', 'w');
+tiledlayout(2, 1, 'TileSpacing', 'compact');
+
+nexttile;
+plot(phi_line, w1_values, 'LineWidth', 1.8, ...
+    'DisplayName', 'W_1(\phi)=s_1(\phi,\phi-\psi_+) - s_1(\phi,\phi+\psi_+) (power-normalized)');
+hold on;
+plot(phi_line, fourier_fit_w1.y_fit, '-.', 'LineWidth', 1.6, ...
+    'DisplayName', sprintf('Fourier fit of W_1 (N=%d)', fit_order_s1));
+plot(phi_line, reference_cos, '--', 'LineWidth', 1.6, 'DisplayName', 'cos(\phi+\pi-0.6\pi)');
+grid on;
+box on;
+xlim([-pi, pi]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\phi');
+ylabel('value');
+legend('Location', 'best');
+title(sprintf('s_1: W_1(\\phi) vs cos(\\phi+\\pi-0.6\\pi), \\psi_+^* = %.6g rad', psi_plus_s1));
+
+nexttile;
+plot(phi_line, w2_values, 'LineWidth', 1.8, ...
+    'DisplayName', 'W_2(\phi)=s_2(\phi-\psi_+,\phi) - s_2(\phi+\psi_+,\phi) (power-normalized)');
+hold on;
+plot(phi_line, fourier_fit_w2.y_fit, '-.', 'LineWidth', 1.6, ...
+    'DisplayName', sprintf('Fourier fit of W_2 (N=%d)', fit_order_s2));
+plot(phi_line, reference_cos, '--', 'LineWidth', 1.6, 'DisplayName', 'cos(\phi+\pi-0.6\pi)');
+grid on;
+box on;
+xlim([-pi, pi]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\phi');
+ylabel('value');
+legend('Location', 'best');
+title(sprintf('s_2: W_2(\\phi) vs cos(\\phi+\\pi-0.6\\pi), \\psi_+^* = %.6g rad', psi_plus_s2));
+
+figure('Color', 'w');
+plot(psi_scan_values, R1_values, 'LineWidth', 1.8, 'DisplayName', 'R_1(\psi_+) from W_1');
+hold on;
+plot(psi_scan_values, R2_values, 'LineWidth', 1.8, 'DisplayName', 'R_2(\psi_+) from W_2');
+plot(psi_plus_s1, R1_max, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', 'R_1 max');
+plot(psi_plus_s2, R2_max, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', 'R_2 max');
+grid on;
+box on;
+xlim([psi_scan_min, psi_scan_max]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\psi_+');
+ylabel('R(\psi_+)');
+legend('Location', 'best');
+title('R(\psi_+) = (1/(2\pi))\int_0^{2\pi} W(\phi)^2 d\phi');
+
+figure('Color', 'w');
+tiledlayout(2, 1, 'TileSpacing', 'compact');
+
+nexttile;
+plot(psi_scan_values, Gamma1_from_w, 'LineWidth', 1.8, ...
+    'DisplayName', 'z_1(\phi)=W_1(\phi;\psi_+^*)');
+hold on;
+plot(psi_scan_values, Gamma1_from_sine, '--', 'LineWidth', 1.8, ...
+    'DisplayName', 'z(\phi)=cos(\phi+\pi-0.6\pi)');
+grid on;
+box on;
+xlim([psi_scan_min, psi_scan_max]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\psi');
+ylabel('\Gamma_1(\psi)');
+legend('Location', 'best');
+title('\Gamma_1(\psi) = (1/(2\pi))\int_0^{2\pi} z(\phi)s_1(\phi,\phi-\psi)d\phi');
+
+nexttile;
+plot(psi_scan_values, Gamma2_from_w, 'LineWidth', 1.8, ...
+    'DisplayName', 'z_2(\phi)=W_2(\phi;\psi_+^*)');
+hold on;
+plot(psi_scan_values, Gamma2_from_sine, '--', 'LineWidth', 1.8, ...
+    'DisplayName', 'z(\phi)=cos(\phi+\pi-0.6\pi)');
+grid on;
+box on;
+xlim([psi_scan_min, psi_scan_max]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\psi');
+ylabel('\Gamma_2(\psi)');
+legend('Location', 'best');
+title('\Gamma_2(\psi) = (1/(2\pi))\int_0^{2\pi} z(\phi)s_2(\phi-\psi,\phi)d\phi');
+
+figure('Color', 'w');
+tiledlayout(2, 1, 'TileSpacing', 'compact');
+
+nexttile;
+plot(psi_scan_values, Gamma1_odd_from_w, 'LineWidth', 1.8, ...
+    'DisplayName', '\Gamma_1(\psi)-\Gamma_1(-\psi), z_1=W_1');
+hold on;
+plot(psi_scan_values, Gamma1_odd_from_sine, '--', 'LineWidth', 1.8, ...
+    'DisplayName', '\Gamma_1(\psi)-\Gamma_1(-\psi), z=cos');
+grid on;
+box on;
+xlim([psi_scan_min, psi_scan_max]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\psi');
+ylabel('\Delta\Gamma_1(\psi)');
+legend('Location', 'best');
+title('\Delta\Gamma_1(\psi)=\Gamma_1(\psi)-\Gamma_1(-\psi)');
+
+nexttile;
+plot(psi_scan_values, Gamma2_odd_from_w, 'LineWidth', 1.8, ...
+    'DisplayName', '\Gamma_2(\psi)-\Gamma_2(-\psi), z_2=W_2');
+hold on;
+plot(psi_scan_values, Gamma2_odd_from_sine, '--', 'LineWidth', 1.8, ...
+    'DisplayName', '\Gamma_2(\psi)-\Gamma_2(-\psi), z=cos');
+grid on;
+box on;
+xlim([psi_scan_min, psi_scan_max]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\psi');
+ylabel('\Delta\Gamma_2(\psi)');
+legend('Location', 'best');
+title('\Delta\Gamma_2(\psi)=\Gamma_2(\psi)-\Gamma_2(-\psi)');
+
+figure('Color', 'w');
+plot(psi_scan_values, Gamma12_diff_from_w, 'LineWidth', 1.8, ...
+    'DisplayName', '\Gamma_1(\psi)-\Gamma_2(-\psi) for z=W');
+hold on;
+plot(psi_scan_values, Gamma12_diff_from_sine, '--', 'LineWidth', 1.8, ...
+    'DisplayName', '\Gamma_1(\psi)-\Gamma_2(-\psi) for z=cos');
+grid on;
+box on;
+xlim([psi_scan_min, psi_scan_max]);
+xticks([-pi, -pi/2, 0, pi/2, pi]);
+xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+xlabel('\psi');
+ylabel('\Delta\Gamma_{12}(\psi)');
+legend('Location', 'best');
+title('Figure5 top-bottom subtraction (overlaid): \Gamma_1(\psi)-\Gamma_2(-\psi)');
+
+fprintf('R_1 max = %.12f at psi_plus^* = %.12f rad\n', R1_max, psi_plus_s1);
+fprintf('R_2 max = %.12f at psi_plus^* = %.12f rad\n', R2_max, psi_plus_s2);
+fprintf('s_1 baseline z_mean (added back) = %.12f\n', z_mean_s1);
+fprintf('s_2 baseline z_mean (added back) = %.12f\n', z_mean_s2);
+fprintf('W_1 raw power = %.12f, normalized power = %.12f (target sine power = %.12f)\n', ...
+    w1_power_raw, w1_power_norm, target_power);
+fprintf('W_2 raw power = %.12f, normalized power = %.12f (target sine power = %.12f)\n', ...
+    w2_power_raw, w2_power_norm, target_power);
+fprintf('Fourier fit W_1 order = %d, RMSE = %.12f, R^2 = %.12f\n', ...
+    fourier_fit_w1.order, fourier_fit_w1.rmse, fourier_fit_w1.r2);
+fprintf('Fourier fit W_2 order = %d, RMSE = %.12f, R^2 = %.12f\n', ...
+    fourier_fit_w2.order, fourier_fit_w2.rmse, fourier_fit_w2.r2);
+fprintf('\nFourier parameters for W_1 (k, a_k, b_k, amplitude, phase):\n');
+disp(fourier_param_table_w1);
+fprintf('Fourier parameters for W_2 (k, a_k, b_k, amplitude, phase):\n');
+disp(fourier_param_table_w2);
+if export_fourier_params
+    fprintf('Saved Fourier parameter CSV (W_1): %s\n', csv_path_w1);
+    fprintf('Saved Fourier parameter CSV (W_2): %s\n', csv_path_w2);
+    fprintf('Saved Fourier parameter MAT: %s\n', mat_path_fit);
+end
+fprintf('Gamma_1 at psi_plus^* (z=W_1) = %.12f\n', Gamma1_from_w(idx_max_s1));
+fprintf('Gamma_1 at psi_plus^* (z=cos) = %.12f\n', Gamma1_from_sine(idx_max_s1));
+fprintf('Gamma_2 at psi_plus^* (z=W_2) = %.12f\n', Gamma2_from_w(idx_max_s2));
+fprintf('Gamma_2 at psi_plus^* (z=cos) = %.12f\n', Gamma2_from_sine(idx_max_s2));
+
+function fit_data = get_fit_data_for_agent(gamma_export, agent_id, signal_role)
+    agent_idx = find([gamma_export.agents.agent_id] == agent_id, 1, 'first');
+    assert(~isempty(agent_idx), 'agent_id %d was not found in gamma_export.agents.', agent_id);
+
+    switch lower(signal_role)
+        case 'a2'
+            fit_data = gamma_export.agents(agent_idx).a2_gamma;
+        case 'derived'
+            fit_data = gamma_export.agents(agent_idx).derived_gamma;
+        otherwise
+            error('signal_role must be ''a2'' or ''derived''.');
+    end
+end
+
+function [coeff, basis_types, m_order, n_order, z_mean] = extract_basis_data(fit_data)
+    assert(isfield(fit_data, 'coeff') && ~isempty(fit_data.coeff), 'No coeff was found in selected fit data.');
+    assert(isfield(fit_data, 'basis_types') && ~isempty(fit_data.basis_types), 'No basis_types was found in selected fit data.');
+
+    coeff = fit_data.coeff(:);
+    basis_types = fit_data.basis_types;
+    z_mean = 0;
+    if isfield(fit_data, 'z_mean') && ~isempty(fit_data.z_mean) && isfinite(fit_data.z_mean(1))
+        z_mean = double(fit_data.z_mean(1));
+    else
+        warning(['z_mean was not found in exported fit data. ', ...
+            'Reconstructed surface baseline may differ from original plot. ', ...
+            'Re-export gamma data with updated exporter to include z_mean.']);
+    end
+
+    m_order = [];
+    n_order = [];
+    if isfield(fit_data, 'basis_phi1_order')
+        m_order = fit_data.basis_phi1_order(:);
+    end
+    if isfield(fit_data, 'basis_phi2_order')
+        n_order = fit_data.basis_phi2_order(:);
+    end
+
+    if (isempty(m_order) || isempty(n_order)) && isfield(fit_data, 'basis_table') && istable(fit_data.basis_table)
+        basis_table = fit_data.basis_table;
+        if isempty(m_order) && ismember('phi1_order', basis_table.Properties.VariableNames)
+            m_order = basis_table.phi1_order(:);
+        end
+        if isempty(n_order) && ismember('phi2_order', basis_table.Properties.VariableNames)
+            n_order = basis_table.phi2_order(:);
+        end
+    end
+
+    assert(~isempty(m_order) && ~isempty(n_order), 'No basis order arrays were found in selected fit data.');
+    assert(numel(coeff) == numel(basis_types), 'Size mismatch: coeff and basis_types.');
+    assert(numel(coeff) == numel(m_order), 'Size mismatch: coeff and basis_phi1_order.');
+    assert(numel(coeff) == numel(n_order), 'Size mismatch: coeff and basis_phi2_order.');
+end
+
+function s_values = evaluate_exported_s(phi1, phi2, coeff, basis_types, m_order, n_order)
+    s_values = zeros(size(phi1));
+
+    for k = 1:numel(coeff)
+        mk = m_order(k);
+        nk = n_order(k);
+        t = basis_types{k};
+
+        switch t
+            case 'constant'
+                basis_value = ones(size(phi1));
+            case 'phi1_cos'
+                basis_value = cos(mk * phi1);
+            case 'phi1_sin'
+                basis_value = sin(mk * phi1);
+            case 'phi2_cos'
+                basis_value = cos(nk * phi2);
+            case 'phi2_sin'
+                basis_value = sin(nk * phi2);
+            case 'mixed_cc'
+                basis_value = cos(mk * phi1) .* cos(nk * phi2);
+            case 'mixed_cs'
+                basis_value = cos(mk * phi1) .* sin(nk * phi2);
+            case 'mixed_sc'
+                basis_value = sin(mk * phi1) .* cos(nk * phi2);
+            case 'mixed_ss'
+                basis_value = sin(mk * phi1) .* sin(nk * phi2);
+            otherwise
+                error('Unsupported basis type: %s', t);
+        end
+
+        s_values = s_values + coeff(k) * basis_value;
+    end
+end
+
+function fit_result = fit_fourier_series_periodic(phi, y, max_order)
+    phi_col = phi(:);
+    y_col = y(:);
+    max_order = max(0, round(double(max_order)));
+
+    n_samples = numel(phi_col);
+    design = zeros(n_samples, 1 + 2 * max_order);
+    design(:, 1) = 1;
+
+    for k = 1:max_order
+        design(:, 2 * k) = cos(k * phi_col);
+        design(:, 2 * k + 1) = sin(k * phi_col);
+    end
+
+    coeff_ls = design \ y_col;
+    y_fit_col = design * coeff_ls;
+
+    fit_result = struct();
+    fit_result.order = max_order;
+    fit_result.a0 = coeff_ls(1);
+    fit_result.a = zeros(max_order, 1);
+    fit_result.b = zeros(max_order, 1);
+    if max_order > 0
+        fit_result.a = coeff_ls(2:2:(2 * max_order));
+        fit_result.b = coeff_ls(3:2:(2 * max_order + 1));
+    end
+    fit_result.y_fit = reshape(y_fit_col, size(phi));
+    fit_result.rmse = sqrt(mean((y_col - y_fit_col) .^ 2));
+
+    y_var = sum((y_col - mean(y_col)) .^ 2);
+    fit_result.r2 = 1 - sum((y_col - y_fit_col) .^ 2) / max(y_var, eps);
+end
+
+function param_table = build_fourier_param_table(fit_result)
+    k = (0:fit_result.order).';
+    a_k = [fit_result.a0; fit_result.a(:)];
+    b_k = [0; fit_result.b(:)];
+    amplitude = sqrt(a_k .^ 2 + b_k .^ 2);
+    phase = atan2(-b_k, a_k);
+
+    param_table = table(k, a_k, b_k, amplitude, phase, ...
+        'VariableNames', {'k', 'a_k', 'b_k', 'amplitude', 'phase'});
+end

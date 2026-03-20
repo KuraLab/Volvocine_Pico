@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring5', '295305');
+        dirpath = fullfile('EstimateQ', 'Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -71,10 +71,10 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
         file_indices = [];
     end
     if nargin < 7 || isempty(M)
-        M = 5;
+        M = 10;
     end
     if nargin < 8 || isempty(N)
-        N = 5;
+        N = 10;
     end
 
     % Toggle this to save only scatter/fitting figures after tuneFigure.
@@ -94,7 +94,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     derived_signal_expression = '+cos(phase_target + pi - 0.6*pi) .* a2_normalized';
     derived_signal_display_name = 'cos(phi_target + pi - 0.6*pi) * a2_norm';
     derived_signal_axis_label = 'cos(phi_target + pi - 0.6*pi) * a2_{norm}';
-    derived_signal_func = @(phase_target, a2_normalized) +5*(cos(phase_target + pi - 0.6*pi) + 0 * cos(phase_target + pi + 0.0*pi)) .* a2_normalized;
+    derived_signal_func = @(phase_target, a2_normalized) +5*cos(phase_target + pi - 0.6*pi) .* a2_normalized;
 
     sample_dt = 0.01;
     if ~isscalar(analysis_duration_sec) || analysis_duration_sec <= 0 || ~isfinite(analysis_duration_sec)
@@ -781,6 +781,14 @@ function fit_export = build_fit_gamma_export(fit_result, signal_role)
         'rmse', [], ...
         'M', [], ...
         'N', [], ...
+        'z_mean', [], ...
+        'coeff', [], ...
+        'basis_names', {{}}, ...
+        'basis_groups', {{}}, ...
+        'basis_types', {{}}, ...
+        'basis_phi1_order', [], ...
+        'basis_phi2_order', [], ...
+        'basis_table', table(), ...
         'gamma_ratio', [], ...
         'gamma_ratio_reduced', [], ...
         'gamma_settings', struct(), ...
@@ -808,6 +816,43 @@ function fit_export = build_fit_gamma_export(fit_result, signal_role)
     end
     if isfield(fit_result, 'N')
         fit_export.N = fit_result.N;
+    end
+    if isfield(fit_result, 'z_mean')
+        fit_export.z_mean = fit_result.z_mean;
+    end
+    if isfield(fit_result, 'coeff')
+        fit_export.coeff = fit_result.coeff;
+    end
+    if isfield(fit_result, 'basis_names')
+        fit_export.basis_names = fit_result.basis_names;
+    end
+    if isfield(fit_result, 'basis_groups')
+        fit_export.basis_groups = fit_result.basis_groups;
+    end
+    if isfield(fit_result, 'basis_types')
+        fit_export.basis_types = fit_result.basis_types;
+    end
+    if isfield(fit_result, 'basis_m')
+        fit_export.basis_phi1_order = fit_result.basis_m;
+    end
+    if isfield(fit_result, 'basis_n')
+        fit_export.basis_phi2_order = fit_result.basis_n;
+    end
+    if isfield(fit_result, 'contribution_table') && istable(fit_result.contribution_table)
+        basis_table = fit_result.contribution_table;
+        keep_columns = {'term_index', 'basis_name', 'basis_group', 'phi1_order', 'phi2_order', 'coefficient'};
+        keep_columns = keep_columns(ismember(keep_columns, basis_table.Properties.VariableNames));
+        if ~isempty(keep_columns)
+            basis_table = basis_table(:, keep_columns);
+        end
+        fit_export.basis_table = basis_table;
+
+        if isempty(fit_export.basis_phi1_order) && ismember('phi1_order', basis_table.Properties.VariableNames)
+            fit_export.basis_phi1_order = basis_table.phi1_order;
+        end
+        if isempty(fit_export.basis_phi2_order) && ismember('phi2_order', basis_table.Properties.VariableNames)
+            fit_export.basis_phi2_order = basis_table.phi2_order;
+        end
     end
     if isfield(fit_result, 'gamma_ratio')
         fit_export.gamma_ratio = fit_result.gamma_ratio;
