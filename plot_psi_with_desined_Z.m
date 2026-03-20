@@ -42,7 +42,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '255');
+        dirpath = fullfile('EstimateQ', 'Spring5', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -117,8 +117,9 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
         fprintf('[INFO] Exported W2 phase sensitivity was not found in %s. Skipping W2-based analysis.\n', dirpath);
     end
 
+    base_mode_label = 'sin';
     [figure_phase_sensitivity, phase_sensitivity_power] = plot_phase_sensitivity_overlay( ...
-        control_gain, use_w1_derived_signal, w1_model, use_w2_derived_signal, w2_model);
+        control_gain, use_w1_derived_signal, w1_model, use_w2_derived_signal, w2_model, base_mode_label);
 
     sample_dt = 0.01;
     if ~isscalar(analysis_duration_sec) || analysis_duration_sec <= 0 || ~isfinite(analysis_duration_sec)
@@ -183,7 +184,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     primary_analysis = agent_analysis(primary_index);
     true_gamma = compute_true_gamma_from_agent_analysis( ...
         agent_analysis, phase_agent_ids, gamma_ratio, ...
-        'fourier_fit_sin_phi2_a2', 'cos', [0.8500, 0.3250, 0.0980]);
+        'fourier_fit_sin_phi2_a2', base_mode_label, [0.8500, 0.3250, 0.0980]);
     true_gamma_w1 = compute_true_gamma_from_agent_analysis( ...
         agent_analysis, phase_agent_ids, gamma_ratio, ...
         'fourier_fit_sin_phi2_a2_w1', 'W1', [0.0000, 0.4470, 0.7410]);
@@ -427,7 +428,7 @@ function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, pha
         fit_field_name = 'fourier_fit_sin_phi2_a2';
     end
     if nargin < 5 || isempty(mode_label)
-        mode_label = 'cos';
+        mode_label = 'sin';
     end
     if nargin < 6 || isempty(curve_color)
         curve_color = [0.8500, 0.3250, 0.0980];
@@ -499,7 +500,11 @@ function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, pha
     true_gamma.figure = [];
 end
 
-function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_gain, use_w1, w1_model, use_w2, w2_model)
+function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_gain, use_w1, w1_model, use_w2, w2_model, base_mode_label)
+    if nargin < 6 || isempty(base_mode_label)
+        base_mode_label = 'sin';
+    end
+
     phase_grid = linspace(-pi, pi, 801);
     z_cos = control_gain * cos(phase_grid + pi - 0.6 * pi);
     power_cos = trapz(phase_grid, z_cos .^ 2) / (2 * pi);
@@ -518,7 +523,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     hold(ax, 'on');
 
     plot(ax, phase_grid, z_cos, 'LineWidth', 1.8, 'Color', [0.8500, 0.3250, 0.0980], ...
-        'DisplayName', sprintf('%g*cos(\phi+\pi-0.6\pi) | P=%.6g', control_gain, power_cos));
+        'DisplayName', sprintf('%s', base_mode_label));
 
     if use_w1 && isstruct(w1_model) && w1_model.available
         z_w1 = control_gain * evaluate_exported_w1(phase_grid, w1_model);
@@ -527,7 +532,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
         power_summary.w1.power = power_w1;
         power_summary.ratio_w1_to_cos = power_w1 / max(power_cos, eps);
         plot(ax, phase_grid, z_w1, 'LineWidth', 1.8, 'Color', [0.0000, 0.4470, 0.7410], ...
-            'DisplayName', sprintf('%g*W_1(\phi) | P=%.6g', control_gain, power_w1));
+            'DisplayName', 'W1');
     end
 
     if use_w2 && isstruct(w2_model) && w2_model.available
@@ -537,14 +542,13 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
         power_summary.w2.power = power_w2;
         power_summary.ratio_w2_to_cos = power_w2 / max(power_cos, eps);
         plot(ax, phase_grid, z_w2, 'LineWidth', 1.8, 'Color', [0.4660, 0.6740, 0.1880], ...
-            'DisplayName', sprintf('%g*W_2(\phi) | P=%.6g', control_gain, power_w2));
+            'DisplayName', 'W2');
     end
 
     plot(ax, phase_grid, zeros(size(phase_grid)), ':', 'LineWidth', 1.0, 'Color', [0.5, 0.5, 0.5], ...
         'HandleVisibility', 'off');
     xlabel(ax, '$$\phi$$', 'Interpreter', 'latex');
     ylabel(ax, '$$Z(\phi)$$', 'Interpreter', 'latex');
-    title(ax, '$$\mathrm{Phase\ sensitivity\ functions\ (overlay)}$$', 'Interpreter', 'latex');
     grid(ax, 'on');
     box(ax, 'on');
     xlim(ax, [-pi, pi]);
@@ -556,6 +560,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     ax.TickLabelInterpreter = 'latex';
     figure(fig_handle);
     tuneFigure;
+    saveFigure;
 
     fprintf('[INFO] Phase-sensitivity power comparison: cos=%.12f\n', power_summary.cos.power);
     if power_summary.w1.available
@@ -605,15 +610,14 @@ function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, tru
         end
 
         plot(ax, gamma_item.psi_grid(:), gamma_item.gamma_true(:), 'LineWidth', 1.8, 'Color', line_color, ...
-            'DisplayName', sprintf('\\Gamma_{true} [%s]', mode_label));
+            'DisplayName', sprintf('%s', mode_label));
     end
 
     psi_ref = linspace(-pi, pi, 201);
     plot(ax, psi_ref, zeros(size(psi_ref)), ':', 'LineWidth', 1.0, 'Color', [0.5, 0.5, 0.5], ...
         'HandleVisibility', 'off');
     xlabel(ax, '$$\psi$$', 'Interpreter', 'latex');
-    ylabel(ax, '$$\Gamma_{\mathrm{true}}(\psi)$$', 'Interpreter', 'latex');
-    title(ax, '$$\Gamma_{\mathrm{true}}(\psi)\ \mathrm{overlay}$$', 'Interpreter', 'latex');
+    ylabel(ax, '$$\Gamma(\psi)-\Gamma(-\psi)$$', 'Interpreter', 'latex');
     grid(ax, 'on');
     box(ax, 'on');
     xlim(ax, [-pi, pi]);
@@ -625,6 +629,7 @@ function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, tru
     ax.TickLabelInterpreter = 'latex';
     figure(fig_handle);
     tuneFigure;
+    saveFigure;
 end
 
 function [psi_grid, gamma_values] = extract_gamma_curve(gamma_resonance, mode)
