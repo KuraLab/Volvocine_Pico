@@ -134,8 +134,8 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     point_color = [0.0, 0.4470, 0.7410];
     marker_size = 10;
     marker_alpha = 0.18;
-    gamma_settings_a2 = struct('enabled', false, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', true, 'resonant_only_bar_plot', false, 'auto_save_figure', enable_save_figure);
-    gamma_settings_sin_phi2_a2 = struct('enabled', true, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', false, 'resonant_only_bar_plot', true, 'auto_save_figure', enable_save_figure);
+    gamma_settings_a2 = struct('enabled', false, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', true, 'auto_save_figure', enable_save_figure);
+    gamma_settings_sin_phi2_a2 = struct('enabled', true, 'component', 'full', 'overlay_full', false, 'show_surface_overlay', false, 'auto_save_figure', enable_save_figure);
     analysis_agent_ids = unique([z_agent_id, phase_agent_ids(:).'], 'stable');
 
     n_analysis_agents = numel(analysis_agent_ids);

@@ -28,9 +28,6 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 %           (default false)
 %       show_surface_overlay : whether to create the 3D scatter + fitted
 %           surface overlay figure (default true)
-%       resonant_only_bar_plot : whether the contribution bar plot should
-%           show only the mixed resonant terms satisfying gamma_ratio
-%           (default false)
 %       auto_save_figure : whether to call saveFigure after tuneFigure for
 %           the 3D scatter + fitted surface overlay figure (default false)
 %
@@ -248,75 +245,8 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
     fig_fit = [];
     fig_residual = [];
 
-    fig_contribution = figure('Color', 'w');
-    ax_contribution = axes('Parent', fig_contribution);
-    switch heatmap_mode
-        case {'full', 'all'}
-            heatmap_values = contribution_map_percent;
-            x_values = 0:N;
-            y_values = 0:M;
-        case {'mixed-only', 'mixed_only', 'mixed'}
-            heatmap_values = contribution_map_mixed_percent;
-            x_values = 1:N;
-            y_values = 1:M;
-        otherwise
-            error('Unsupported heatmap_mode: %s', heatmap_mode);
-    end
-
-    if isempty(heatmap_values)
-        axis(ax_contribution, 'off');
-        text(ax_contribution, 0.5, 0.5, 'No terms available for this heatmap mode', ...
-            'Units', 'normalized', 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
-    else
-        imagesc(ax_contribution, x_values, y_values, heatmap_values);
-        set(ax_contribution, 'YDir', 'reverse');
-        xlabel(ax_contribution, 'n');
-        ylabel(ax_contribution, 'm');
-        xticks(ax_contribution, x_values);
-        yticks(ax_contribution, y_values);
-        grid(ax_contribution, 'on');
-        box(ax_contribution, 'on');
-        colormap(ax_contribution, parula);
-        cb_contribution = colorbar(ax_contribution);
-        ylabel(cb_contribution, 'Contribution (%)');
-        %clim(ax_contribution, [0, 40]);
-    end
-    figure(fig_contribution);
-    tuneFigure;
-
-    fig_contribution_bars = figure('Color', 'w');
-    max_display_items = 10;
-
-    plot_group_colors = [
-        0.0, 0.4470, 0.7410
-        0.4660, 0.6740, 0.1880
-        0.8500, 0.3250, 0.0980];
-
-    if gamma_settings.resonant_only_bar_plot
-        tiled_bars = tiledlayout(fig_contribution_bars, 1, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
-        ax_group = nexttile(tiled_bars);
-        plotContributionSummaryBars(ax_group, mixed_pair_summary_resonant, max_display_items, ...
-            sprintf('Resonant mixed contribution for gamma ratio [%g,%g]', ...
-                gamma_ratio_reduced(1), gamma_ratio_reduced(2)), ...
-            'Resonant harmonic pair (m,n)', plot_group_colors(3, :));
-    else
-        tiled_bars = tiledlayout(fig_contribution_bars, 3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
-
-        ax_group = nexttile(tiled_bars);
-        plotContributionSummaryBars(ax_group, phi1_harmonic_summary, max_display_items, ...
-            '\phi_1-only contribution by harmonic order', 'Harmonic order m', plot_group_colors(1, :));
-
-        ax_group = nexttile(tiled_bars);
-        plotContributionSummaryBars(ax_group, phi2_harmonic_summary, max_display_items, ...
-            '\phi_2-only contribution by harmonic order', 'Harmonic order n', plot_group_colors(2, :));
-
-        ax_group = nexttile(tiled_bars);
-        plotContributionSummaryBars(ax_group, mixed_pair_summary, max_display_items, ...
-            '\phi_1-\phi_2 mixed contribution by harmonic pair', 'Harmonic pair (m,n)', plot_group_colors(3, :));
-    end
-
-    figure(fig_contribution_bars);
-    tuneFigure;
+    fig_contribution = [];
+    fig_contribution_bars = [];
 
     if gamma_settings.enabled
         gamma_resonance = reconstructResonantGamma( ...
@@ -696,11 +626,6 @@ function gamma_settings = normalizeGammaSettings(gamma_settings)
     end
     gamma_settings.show_surface_overlay = logical(gamma_settings.show_surface_overlay);
 
-    if ~isfield(gamma_settings, 'resonant_only_bar_plot') || isempty(gamma_settings.resonant_only_bar_plot)
-        gamma_settings.resonant_only_bar_plot = false;
-    end
-    gamma_settings.resonant_only_bar_plot = logical(gamma_settings.resonant_only_bar_plot);
-
     if ~isfield(gamma_settings, 'auto_save_figure') || isempty(gamma_settings.auto_save_figure)
         gamma_settings.auto_save_figure = false;
     end
@@ -816,28 +741,6 @@ function contribution_map = buildContributionHeatmap(M, N, group_contribution_su
             contribution_map(m_order + 1, n_order + 1) = mixed_pair_summary.contribution_ratio(i);
         end
     end
-end
-
-function plotContributionSummaryBars(ax, summary_table, max_display_items, title_prefix, xlabel_text, bar_color) %#ok<INUSD>
-    if isempty(summary_table) || height(summary_table) == 0
-        axis(ax, 'off');
-        text(ax, 0.5, 0.5, 'No terms in this group', ...
-            'Units', 'normalized', 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
-        return;
-    end
-
-    n_display = min(max_display_items, height(summary_table));
-    summary_top = summary_table(1:n_display, :);
-    x_positions = 1:n_display;
-
-    bar(ax, x_positions, 100 * summary_top.contribution_ratio, ...
-        'FaceColor', bar_color, 'EdgeColor', 'none');
-    xlabel(ax, xlabel_text);
-    ylabel(ax, 'Contribution (%)');
-    grid(ax, 'on');
-    box(ax, 'on');
-    set(ax, 'XTick', x_positions, 'XTickLabel', summary_top.label, 'TickLabelInterpreter', 'none');
-    xtickangle(ax, 25);
 end
 
 function plotScatterAndSurfaceOverlay(ax, phi1, phi2, z_scatter, surface_phi1, surface_phi2, surface_z, zlabel_text, view_angles)
