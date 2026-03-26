@@ -67,7 +67,6 @@ float omega = 3.0f * 3.14f;
 float kappa = 1.0f;  // フィードバックゲイン
 float kappa_init = 0.0f;
 float kappa_now = 0.0f;
-float alpha = 0.1f;  // 位相遅れ定数
 const int PRC_MAX_HARMONICS = 10;
 int prcHarmonics = 1;
 float prcCosCoeffs[PRC_MAX_HARMONICS + 1] = {0.0f};
@@ -339,7 +338,7 @@ void setup() {
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
   // 最初はメインポート（5000）でパラメータリクエスト
-  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
+  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
 
   // パラメータ取得後、専用ポートに切り替え
   serverPort = agentPort;
@@ -438,7 +437,7 @@ void loop() {
       // サーバーにパラメータをリクエスト（一時的にメインポートを使用）
       unsigned int tempPort = serverPort;
       serverPort = 5000; // メインポートに一時切り替え
-      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
+      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
       serverPort = tempPort; // 専用ポートに戻す
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
@@ -460,7 +459,7 @@ void loop() {
     // パラメータリクエスト時は一時的にメインポートを使用
     unsigned int tempPort = serverPort;
     serverPort = 5000; // メインポートに一時切り替え
-    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
+    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
     serverPort = tempPort; // 専用ポートに戻す
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }

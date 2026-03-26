@@ -78,7 +78,7 @@ def handle_parameter_request(sock, data, addr):
 
             # サーバー側のパラメータを送信
             response = (
-                f"omega:{omega:.2f},kappa:{kappa:.2f},alpha:{alpha:.2f},"
+                f"omega:{omega:.2f},kappa:{kappa:.2f},"
                 f"center:{servo_center:.1f},amplitude:{servo_amplitude:.1f},"
                 f"stop_id:{stop_agent_id},stop_delay:{stop_delay_seconds},"
                 f"{build_prc_payload()}"

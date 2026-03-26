@@ -1,6 +1,5 @@
 #include "agent_config.h"
 #include <LittleFS.h>
-#include <math.h>
 #include <string.h>
 
 int readAgentIdFromFile() {
@@ -24,7 +23,7 @@ int readAgentIdFromFile() {
     return line.toInt(); // ファイルの値をintに変換して返す
 }
 
-void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &alpha, float &servoCenter, float &servoAmplitude, int &stopAgentId, int &stopDelaySeconds, int &prcHarmonics, float *prcCosCoeffs, float *prcSinCoeffs, int prcMaxHarmonics) {
+void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &servoCenter, float &servoAmplitude, int &stopAgentId, int &stopDelaySeconds, int &prcHarmonics, float *prcCosCoeffs, float *prcSinCoeffs, int prcMaxHarmonics) {
   // デバッグ情報を含むリクエスト文字列を作成
   int analogValue26 = analogRead(26);  // 26ピンのアナログ入力値を取得
   char requestBuffer[128]; // バッファサイズを拡張して新しいパラメータに対応
@@ -67,9 +66,6 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
           } else if (sscanf(token, "kappa:%f", &fval) == 1) {
             kappa = fval;
             parsedBaseFields++;
-          } else if (sscanf(token, "alpha:%f", &fval) == 1) {
-            alpha = fval;
-            parsedBaseFields++;
           } else if (sscanf(token, "center:%f", &fval) == 1) {
             servoCenter = fval;
             parsedBaseFields++;
@@ -101,7 +97,7 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
           token = strtok(nullptr, ",");
         }
 
-        // PRCが来ない場合は従来式 cos(psi-alpha) と等価な1次フーリエ係数へフォールバック。
+        // PRCが来ない場合は既定の1次フーリエ係数へフォールバック。
         for (int n = 0; n <= prcMaxHarmonics; n++) {
           prcCosCoeffs[n] = 0.0f;
           prcSinCoeffs[n] = 0.0f;
@@ -118,12 +114,12 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
           }
         } else {
           prcHarmonics = 1;
-          prcCosCoeffs[1] = cosf(alpha);
-          prcSinCoeffs[1] = sinf(alpha);
+          prcCosCoeffs[1] = 1.0f;
+          prcSinCoeffs[1] = 0.0f;
         }
 
-        if (parsedBaseFields >= 7) {
-            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, alpha=%.2f, center=%.1f, amplitude=%.1f, stop_id=%d, stop_delay=%d, prc_n=%d (parsed_prc=%d)\n", omega, kappa, alpha, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, parsedPrcFields);
+        if (parsedBaseFields >= 6) {
+            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, center=%.1f, amplitude=%.1f, stop_id=%d, stop_delay=%d, prc_n=%d (parsed_prc=%d)\n", omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, parsedPrcFields);
         } else {
           Serial.printf("[WARN] Failed to parse all base parameters. Received: %s (parsed_base=%d, parsed_prc=%d)\n", originalBuffer, parsedBaseFields, parsedPrcFields);
         }
