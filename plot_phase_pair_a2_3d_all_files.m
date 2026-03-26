@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring4', '255');
+        dirpath = fullfile('EstimateQ', 'Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -94,7 +94,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     derived_signal_expression = '+cos(phase_target + pi - 0.6*pi) .* a2_normalized';
     derived_signal_display_name = 'cos(phi_target + pi - 0.6*pi) * a2_norm';
     derived_signal_axis_label = 'cos(phi_target + pi - 0.6*pi) * a2_{norm}';
-    derived_signal_func = @(phase_target, a2_normalized) +5*cos(phase_target + pi - 0.6*pi) .* a2_normalized;
+    derived_signal_func = @(phase_target, a2_normalized) +5*cos(phase_target + 0.6*pi) .* a2_normalized;
 
     sample_dt = 0.01;
     if ~isscalar(analysis_duration_sec) || analysis_duration_sec <= 0 || ~isfinite(analysis_duration_sec)

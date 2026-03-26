@@ -96,7 +96,10 @@ def agent_communication_worker(agent_id):
             # パラメータリクエストの処理
             if data.startswith(b"REQUEST_PARAMS"):
                 returned_agent_id = handle_parameter_request(sock, data, addr)
-                agent_addrs[returned_agent_id] = addr
+                if isinstance(returned_agent_id, int):
+                    agent_addrs[returned_agent_id] = addr
+                else:
+                    print(f"[WARN] Invalid agent_id from parameter request: {returned_agent_id}")
                 continue
 
             # ハンドシェイクメッセージの処理
@@ -154,9 +157,12 @@ def main():
                     # パラメータリクエストの処理
                     if data.startswith(b"REQUEST_PARAMS"):
                         agent_id = handle_parameter_request(main_socket, data, addr)
-                        agent_addrs[agent_id] = addr
-                        # エージェント専用スレッドを開始
-                        ensure_agent_thread(agent_id)
+                        if isinstance(agent_id, int):
+                            agent_addrs[agent_id] = addr
+                            # エージェント専用スレッドを開始
+                            ensure_agent_thread(agent_id)
+                        else:
+                            print(f"[WARN] Invalid agent_id from parameter request on main socket: {agent_id}")
                         continue
 
                     # ハンドシェイクメッセージの処理

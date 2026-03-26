@@ -42,7 +42,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring3', '255');
+        dirpath = fullfile('EstimateQ', 'Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -83,7 +83,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     derived_signal_expression = sprintf('%g*cos(phase_target + pi - 0.6*pi) .* a2_normalized', control_gain);
     derived_signal_display_name = sprintf('%g*cos(phi_target + pi - 0.6*pi) * a2_norm', control_gain);
     derived_signal_axis_label = sprintf('%g*cos(phi_target + pi - 0.6*pi) * a2_{norm}', control_gain);
-    derived_signal_func = @(phase_target, a2_normalized) control_gain * cos(phase_target + pi - 0.6*pi) .* a2_normalized;
+    derived_signal_func = @(phase_target, a2_normalized) control_gain * cos(phase_target + 0.4*pi) .* a2_normalized;
 
     w1_model = load_exported_w1_model(dirpath);
     use_w1_derived_signal = w1_model.available;
@@ -560,7 +560,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     ax.TickLabelInterpreter = 'latex';
     figure(fig_handle);
     tuneFigure;
-    saveFigure;
+    %saveFigure;
 
     fprintf('[INFO] Phase-sensitivity power comparison: cos=%.12f\n', power_summary.cos.power);
     if power_summary.w1.available
@@ -629,7 +629,7 @@ function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, tru
     ax.TickLabelInterpreter = 'latex';
     figure(fig_handle);
     tuneFigure;
-    saveFigure;
+    %saveFigure;
 end
 
 function [psi_grid, gamma_values] = extract_gamma_curve(gamma_resonance, mode)
