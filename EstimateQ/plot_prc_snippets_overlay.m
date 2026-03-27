@@ -159,7 +159,7 @@ function [prc_a, prc_b, label_text] = parse_prc_snippet_file(file_path)
         label_text = [name ext];
     end
 
-    if isempty(prc_harmonics) || ~isfinite(prc_harmonics) || prc_harmonics < 1
+    if isempty(prc_harmonics) || ~isfinite(prc_harmonics) || prc_harmonics < 0
         error('Could not parse prc_harmonics from %s', file_path);
     end
 
@@ -178,7 +178,7 @@ function [prc_a, prc_b, label_text] = parse_prc_snippet_file(file_path)
         if ~isempty(tok_a)
             idx = str2double(tok_a{1});
             val = str2double(tok_a{2});
-            if isfinite(idx) && isfinite(val) && idx >= 1 && idx <= prc_harmonics
+            if isfinite(idx) && isfinite(val) && idx >= 0 && idx <= prc_harmonics
                 prc_a(idx + 1) = val;
             end
             continue;
@@ -188,7 +188,7 @@ function [prc_a, prc_b, label_text] = parse_prc_snippet_file(file_path)
         if ~isempty(tok_b)
             idx = str2double(tok_b{1});
             val = str2double(tok_b{2});
-            if isfinite(idx) && isfinite(val) && idx >= 1 && idx <= prc_harmonics
+            if isfinite(idx) && isfinite(val) && idx >= 0 && idx <= prc_harmonics
                 prc_b(idx + 1) = val;
             end
         end

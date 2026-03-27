@@ -83,12 +83,12 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
             gotPrcN = true;
             parsedPrcFields++;
           } else if (sscanf(token, "prc_a%d:%f", &idx, &fval) == 2) {
-            if (idx >= 1 && idx <= prcMaxHarmonics && idx < (int)(sizeof(tempCos) / sizeof(tempCos[0]))) {
+            if (idx >= 0 && idx <= prcMaxHarmonics && idx < (int)(sizeof(tempCos) / sizeof(tempCos[0]))) {
               tempCos[idx] = fval;
               parsedPrcFields++;
             }
           } else if (sscanf(token, "prc_b%d:%f", &idx, &fval) == 2) {
-            if (idx >= 1 && idx <= prcMaxHarmonics && idx < (int)(sizeof(tempSin) / sizeof(tempSin[0]))) {
+            if (idx >= 0 && idx <= prcMaxHarmonics && idx < (int)(sizeof(tempSin) / sizeof(tempSin[0]))) {
               tempSin[idx] = fval;
               parsedPrcFields++;
             }
@@ -103,11 +103,13 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
           prcSinCoeffs[n] = 0.0f;
         }
 
-        if (gotPrcN && receivedPrcN > 0 && parsedPrcFields > 1) {
+        if (gotPrcN && receivedPrcN >= 0 && parsedPrcFields > 1) {
           if (receivedPrcN > prcMaxHarmonics) {
             receivedPrcN = prcMaxHarmonics;
           }
           prcHarmonics = receivedPrcN;
+          prcCosCoeffs[0] = tempCos[0];
+          prcSinCoeffs[0] = tempSin[0];
           for (int n = 1; n <= prcHarmonics; n++) {
             prcCosCoeffs[n] = tempCos[n];
             prcSinCoeffs[n] = tempSin[n];

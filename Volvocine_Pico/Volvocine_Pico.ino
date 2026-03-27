@@ -110,7 +110,7 @@ float normalize(float value, float lower, float upper) {
 }
 
 float evaluatePRC(float psi) {
-  float z = 0.0f;
+  float z = prcCosCoeffs[0];
   int nMax = prcHarmonics;
   if (nMax > PRC_MAX_HARMONICS) {
     nMax = PRC_MAX_HARMONICS;

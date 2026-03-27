@@ -14,7 +14,7 @@ servo_amplitude = 65.0 # サーボ振幅
 stop_agent_id = 4      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
 stop_delay_seconds = 30000 # 停止までの秒数
 
-# PRCのフーリエ係数（1..prc_harmonics を使用）
+# PRCのフーリエ係数（0..prc_harmonics を使用）
 # z(psi) = Σ [ prc_a[n] * cos(n*psi) + prc_b[n] * sin(n*psi) ]
 prc_harmonics = 10
 prc_a = [0.0] * (prc_harmonics + 1)
@@ -32,7 +32,7 @@ prc_b[1] = math.sin(alpha)
 def build_prc_payload():
     """PRC係数をレスポンス文字列へ展開"""
     fields = [f"prc_n:{prc_harmonics}"]
-    for n in range(1, prc_harmonics + 1):
+    for n in range(0, prc_harmonics + 1):
         fields.append(f"prc_a{n}:{prc_a[n]:.6f}")
         fields.append(f"prc_b{n}:{prc_b[n]:.6f}")
     return ",".join(fields)

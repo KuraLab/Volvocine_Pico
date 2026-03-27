@@ -1,8 +1,10 @@
-# Auto-generated from W1 exported reference (a0=-0.3767510302 dropped)
+# Auto-generated from W1 exported reference
 prc_harmonics = 10
 prc_a = [0.0] * (prc_harmonics + 1)
 prc_b = [0.0] * (prc_harmonics + 1)
 
+prc_a[0] = -0.3767510302
+prc_b[0] = 0.0000000000
 prc_a[1] = 0.5292257399
 prc_b[1] = 0.3301385178
 prc_a[2] = -0.1938630343

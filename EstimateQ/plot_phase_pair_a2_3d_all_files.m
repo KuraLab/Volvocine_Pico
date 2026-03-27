@@ -21,7 +21,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
 %   plot_phase_pair_a2_3d_all_files(..., M, N, [m_phi2, n_phi1])
 %
 % Defaults:
-%   dirpath = 'EstimateF/Spring5/250'
+%   dirpath = 'Spring1/255'
 %   phase_agent_ids = first two non-99 agents found in the first valid CSV
 %   z_agent_id = phase_agent_ids(2)  % primary target for backward-compatible top-level outputs
 %   analysis_duration_sec = 15
@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '255');
+        dirpath = fullfile('Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -106,6 +106,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     validateattributes(M, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'M');
     validateattributes(N, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'N');
     validateattributes(gamma_ratio, {'numeric'}, {'vector', 'numel', 2, 'integer', 'positive', 'finite'}, mfilename, 'gamma_ratio');
+    dirpath = resolve_analysis_dirpath(dirpath);
     if ~isfolder(dirpath)
         error('Directory not found: %s', dirpath);
     end
@@ -207,6 +208,28 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     else
         varargout{1} = out;
     end
+end
+
+function resolved_dirpath = resolve_analysis_dirpath(dirpath)
+    if isfolder(dirpath)
+        resolved_dirpath = dirpath;
+        return;
+    end
+
+    candidate_pwd = fullfile(pwd, dirpath);
+    if isfolder(candidate_pwd)
+        resolved_dirpath = candidate_pwd;
+        return;
+    end
+
+    base_dir = fileparts(mfilename('fullpath'));
+    candidate_base = fullfile(base_dir, dirpath);
+    if isfolder(candidate_base)
+        resolved_dirpath = candidate_base;
+        return;
+    end
+
+    resolved_dirpath = candidate_pwd;
 end
 
 function csv_paths = list_csv_paths(dirpath, file_indices)
@@ -772,15 +795,11 @@ function did_write = write_model_prc_snippet(file_path, model, source_label, max
 
     prc_a = zeros(n_h + 1, 1);
     prc_b = zeros(n_h + 1, 1);
+    prc_a(1) = model.a0;
     prc_a(2:end) = model.a(1:n_h);
     prc_b(2:end) = model.b(1:n_h);
 
-    source_with_note = source_label;
-    if isfield(model, 'a0') && abs(model.a0) > 1e-12
-        source_with_note = sprintf('%s (a0=%.10g dropped)', source_label, model.a0);
-    end
-
-    snippet_text = build_prc_python_snippet(prc_a, prc_b, source_with_note);
+    snippet_text = build_prc_python_snippet(prc_a, prc_b, source_label);
     fid = fopen(file_path, 'w');
     if fid < 0
         return;
@@ -925,6 +944,8 @@ function snippet_text = build_prc_python_snippet(prc_a, prc_b, source_label)
     lines{end + 1} = 'prc_a = [0.0] * (prc_harmonics + 1)';
     lines{end + 1} = 'prc_b = [0.0] * (prc_harmonics + 1)';
     lines{end + 1} = '';
+    lines{end + 1} = sprintf('prc_a[0] = %.10f', prc_a(1));
+    lines{end + 1} = sprintf('prc_b[0] = %.10f', prc_b(1));
     for n = 1:prc_harmonics
         lines{end + 1} = sprintf('prc_a[%d] = %.10f', n, prc_a(n + 1));
         lines{end + 1} = sprintf('prc_b[%d] = %.10f', n, prc_b(n + 1));
