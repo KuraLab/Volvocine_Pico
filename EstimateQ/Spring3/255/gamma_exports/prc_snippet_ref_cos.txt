@@ -1,11 +1,11 @@
-# Auto-generated from cos(phi + 0.4*pi) reference
+# Auto-generated from cos(phi + 0.6*pi) reference
 prc_harmonics = 10
 prc_a = [0.0] * (prc_harmonics + 1)
 prc_b = [0.0] * (prc_harmonics + 1)
 
 prc_a[0] = 0.0000000000
 prc_b[0] = 0.0000000000
-prc_a[1] = 0.3090169944
+prc_a[1] = -0.3090169944
 prc_b[1] = -0.9510565163
 prc_a[2] = 0.0000000000
 prc_b[2] = 0.0000000000

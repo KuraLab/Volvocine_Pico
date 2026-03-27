@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('Spring5', '255');
+        dirpath = fullfile('Spring3', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -744,9 +744,9 @@ function snippet_files = write_prc_snippet_exports(export_dir, dirpath, ~, ~, ~,
     snippet_files = struct('label', {}, 'file_path', {});
 
     % Reference snippets matching plot_psi_with_desined_Z first overlay source.
-    delta = 0.4 * pi;
+    delta = 0.6 * pi;
     cos_ref_file = fullfile(export_dir, 'prc_snippet_ref_cos.txt');
-    if write_direct_coeff_prc_snippet(cos_ref_file, cos(delta), -sin(delta), 'cos(phi + 0.4*pi) reference', max_harmonics)
+    if write_direct_coeff_prc_snippet(cos_ref_file, cos(delta), -sin(delta), 'cos(phi + 0.6*pi) reference', max_harmonics)
         snippet_files(end + 1) = struct('label', 'ref_cos', 'file_path', cos_ref_file); %#ok<AGROW>
     end
 
