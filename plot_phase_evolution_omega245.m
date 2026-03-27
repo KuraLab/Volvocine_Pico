@@ -15,8 +15,8 @@ save%   apply_filter = true
 %   sample_window = [50, 60]
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateF','Spring5/250');
-        %dirpath = fullfile('EstimateF','Doublecheck/Spring5');
+        %dirpath = fullfile('EstimateF','Spring5/250');
+        dirpath = fullfile('EstimateQ','VerifyZopt/Spring3/w1/250');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
         n_seconds_to_cut = 0;
