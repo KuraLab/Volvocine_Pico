@@ -37,6 +37,48 @@ def build_prc_payload():
         fields.append(f"prc_b{n}:{prc_b[n]:.6f}")
     return ",".join(fields)
 
+
+def format_payload_for_log(payload, max_prc_order=3):
+    """payload文字列を横長で見やすい形式に整形（PRCはmax_prc_order次まで表示）"""
+    fields = []
+    for item in payload.split(','):
+        if ':' in item:
+            key, value = item.split(':', 1)
+            fields.append((key, value))
+
+    base_items = []
+    prc_n = None
+    prc_items = {}
+
+    for key, value in fields:
+        if key == "prc_n":
+            prc_n = value
+        elif key.startswith("prc_a") or key.startswith("prc_b"):
+            suffix = key[5:]
+            if suffix.isdigit():
+                idx = int(suffix)
+                if idx <= max_prc_order:
+                    prc_items[key] = value
+        else:
+            base_items.append(f"{key}={value}")
+
+    prc_parts = []
+    if prc_n is not None:
+        prc_parts.append(f"prc_n={prc_n}")
+    for n in range(1, max_prc_order + 1):
+        a_key = f"prc_a{n}"
+        b_key = f"prc_b{n}"
+        if a_key in prc_items:
+            prc_parts.append(f"a{n}={prc_items[a_key]}")
+        if b_key in prc_items:
+            prc_parts.append(f"b{n}={prc_items[b_key]}")
+
+    base_str = ", ".join(base_items)
+    prc_str = ", ".join(prc_parts)
+    if prc_str:
+        prc_str += ", ..."
+    return f"{base_str} | {prc_str}" if prc_str else base_str
+
 def get_omega_for_agent(agent_id):
     """
     エージェントIDに応じたomega値を取得する関数
@@ -84,7 +126,10 @@ def handle_parameter_request(sock, data, addr):
                 f"{build_prc_payload()}"
             )
             sock.sendto(response.encode('utf-8'), addr)
-            print(f"[INFO] Sent parameters to Agent ID: {agent_id}, Omega: {omega:.2f}, Voltage: {voltage:.2f}: {response}")
+            print(
+                f"[INFO] Sent parameters | id={agent_id}, O={omega:.2f}, V={voltage:.2f} | "
+                f"{format_payload_for_log(response, max_prc_order=3)}"
+            )
             return agent_id
 
         except (IndexError, ValueError) as e:
