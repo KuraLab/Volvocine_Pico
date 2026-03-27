@@ -21,7 +21,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
 %   plot_phase_pair_a2_3d_all_files(..., M, N, [m_phi2, n_phi1])
 %
 % Defaults:
-%   dirpath = 'EstimateF/Spring5/250'
+%   dirpath = 'Spring1/255'
 %   phase_agent_ids = first two non-99 agents found in the first valid CSV
 %   z_agent_id = phase_agent_ids(2)  % primary target for backward-compatible top-level outputs
 %   analysis_duration_sec = 15
@@ -53,7 +53,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '255');
+        dirpath = fullfile('Spring1', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -94,7 +94,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     derived_signal_expression = '+cos(phase_target + pi - 0.6*pi) .* a2_normalized';
     derived_signal_display_name = 'cos(phi_target + pi - 0.6*pi) * a2_norm';
     derived_signal_axis_label = 'cos(phi_target + pi - 0.6*pi) * a2_{norm}';
-    derived_signal_func = @(phase_target, a2_normalized) +5*cos(phase_target + 0.6*pi) .* a2_normalized;
+    derived_signal_func = @(phase_target, a2_normalized) +5*cos(phase_target + 0.4*pi) .* a2_normalized;
 
     sample_dt = 0.01;
     if ~isscalar(analysis_duration_sec) || analysis_duration_sec <= 0 || ~isfinite(analysis_duration_sec)
@@ -106,6 +106,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     validateattributes(M, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'M');
     validateattributes(N, {'numeric'}, {'scalar', 'integer', 'nonnegative', 'finite'}, mfilename, 'N');
     validateattributes(gamma_ratio, {'numeric'}, {'vector', 'numel', 2, 'integer', 'positive', 'finite'}, mfilename, 'gamma_ratio');
+    dirpath = resolve_analysis_dirpath(dirpath);
     if ~isfolder(dirpath)
         error('Directory not found: %s', dirpath);
     end
@@ -200,13 +201,35 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     out.point_cloud = unwrap_scalar_field(primary_analysis.point_cloud);
     out.fourier_fit = unwrap_scalar_field(primary_analysis.fourier_fit);
     out.fourier_fit_sin_phi2_a2 = unwrap_scalar_field(primary_analysis.fourier_fit_sin_phi2_a2);
-    out.gamma_export = export_gamma_results(dirpath, out);
+    out.gamma_export = export_gamma_results(dirpath, out, derived_signal_func);
 
     if nargout == 0
         display_phase_agent_mean_omega_summary(out.phase_agent_mean_omega);
     else
         varargout{1} = out;
     end
+end
+
+function resolved_dirpath = resolve_analysis_dirpath(dirpath)
+    if isfolder(dirpath)
+        resolved_dirpath = dirpath;
+        return;
+    end
+
+    candidate_pwd = fullfile(pwd, dirpath);
+    if isfolder(candidate_pwd)
+        resolved_dirpath = candidate_pwd;
+        return;
+    end
+
+    base_dir = fileparts(mfilename('fullpath'));
+    candidate_base = fullfile(base_dir, dirpath);
+    if isfolder(candidate_base)
+        resolved_dirpath = candidate_base;
+        return;
+    end
+
+    resolved_dirpath = candidate_pwd;
 end
 
 function csv_paths = list_csv_paths(dirpath, file_indices)
@@ -670,14 +693,15 @@ function xClipped = clip_values(x, lower_bound, upper_bound)
     xClipped = min(max(x, lower_bound), upper_bound);
 end
 
-function export_info = export_gamma_results(dirpath, out)
+function export_info = export_gamma_results(dirpath, out, phase_sensitivity_func)
     export_info = struct( ...
         'available', false, ...
         'reason', '', ...
         'directory', '', ...
         'mat_file', '', ...
         'latest_mat_file', '', ...
-        'curve_files', struct('label', {}, 'file_path', {}));
+        'curve_files', struct('label', {}, 'file_path', {}), ...
+        'prc_snippet_files', struct('label', {}, 'file_path', {}));
 
     try
         export_dir = fullfile(dirpath, 'gamma_exports');
@@ -696,18 +720,238 @@ function export_info = export_gamma_results(dirpath, out)
         save(latest_mat_file, 'gamma_export');
 
         curve_files = write_gamma_curve_exports(export_dir, gamma_export);
+        prc_snippet_files = write_prc_snippet_exports(export_dir, dirpath, phase_sensitivity_func, out.derived_signal.display_name, gamma_export, 10);
 
         export_info.available = true;
         export_info.directory = export_dir;
         export_info.mat_file = mat_file;
         export_info.latest_mat_file = latest_mat_file;
         export_info.curve_files = curve_files;
+        export_info.prc_snippet_files = prc_snippet_files;
 
         fprintf('[INFO] Exported gamma bundle to %s\n', latest_mat_file);
     catch ME
         export_info.reason = ME.message;
         warning('Gamma export failed for %s: %s', dirpath, ME.message);
     end
+end
+
+function snippet_files = write_prc_snippet_exports(export_dir, dirpath, ~, ~, ~, max_harmonics)
+    if nargin < 6 || isempty(max_harmonics)
+        max_harmonics = 10;
+    end
+
+    snippet_files = struct('label', {}, 'file_path', {});
+
+    % Reference snippets matching plot_psi_with_desined_Z first overlay source.
+    delta = 0.4 * pi;
+    cos_ref_file = fullfile(export_dir, 'prc_snippet_ref_cos.txt');
+    if write_direct_coeff_prc_snippet(cos_ref_file, cos(delta), -sin(delta), 'cos(phi + 0.4*pi) reference', max_harmonics)
+        snippet_files(end + 1) = struct('label', 'ref_cos', 'file_path', cos_ref_file); %#ok<AGROW>
+    end
+
+    w1_model = load_exported_w_model_for_snippet(dirpath, 'w1');
+    w1_ref_file = fullfile(export_dir, 'prc_snippet_ref_w1.txt');
+    if write_model_prc_snippet(w1_ref_file, w1_model, 'W1 exported reference', max_harmonics)
+        snippet_files(end + 1) = struct('label', 'ref_w1', 'file_path', w1_ref_file); %#ok<AGROW>
+    end
+
+    w2_model = load_exported_w_model_for_snippet(dirpath, 'w2');
+    w2_ref_file = fullfile(export_dir, 'prc_snippet_ref_w2.txt');
+    if write_model_prc_snippet(w2_ref_file, w2_model, 'W2 exported reference', max_harmonics)
+        snippet_files(end + 1) = struct('label', 'ref_w2', 'file_path', w2_ref_file); %#ok<AGROW>
+    end
+
+end
+
+function did_write = write_direct_coeff_prc_snippet(file_path, a1, b1, source_label, max_harmonics)
+    did_write = false;
+    n_h = max(1, max_harmonics);
+    prc_a = zeros(n_h + 1, 1);
+    prc_b = zeros(n_h + 1, 1);
+    prc_a(2) = a1;
+    prc_b(2) = b1;
+
+    snippet_text = build_prc_python_snippet(prc_a, prc_b, source_label);
+    fid = fopen(file_path, 'w');
+    if fid < 0
+        return;
+    end
+    cleanup_obj = onCleanup(@() fclose(fid)); %#ok<NASGU>
+    fprintf(fid, '%s\n', snippet_text);
+    did_write = true;
+end
+
+function did_write = write_model_prc_snippet(file_path, model, source_label, max_harmonics)
+    did_write = false;
+    if ~isstruct(model) || ~isfield(model, 'available') || ~model.available
+        return;
+    end
+
+    n_h = min(max_harmonics, model.order);
+    if n_h < 1
+        return;
+    end
+
+    prc_a = zeros(n_h + 1, 1);
+    prc_b = zeros(n_h + 1, 1);
+    prc_a(1) = model.a0;
+    prc_a(2:end) = model.a(1:n_h);
+    prc_b(2:end) = model.b(1:n_h);
+
+    snippet_text = build_prc_python_snippet(prc_a, prc_b, source_label);
+    fid = fopen(file_path, 'w');
+    if fid < 0
+        return;
+    end
+    cleanup_obj = onCleanup(@() fclose(fid)); %#ok<NASGU>
+    fprintf(fid, '%s\n', snippet_text);
+    did_write = true;
+end
+
+function model = load_exported_w_model_for_snippet(dirpath, mode_name)
+    model = struct('available', false, 'source_file', '', 'order', 0, 'a0', 0, 'a', [], 'b', []);
+
+    search_dirs = {dirpath, fullfile(dirpath, 'gamma_exports')};
+
+    mat_path = find_latest_matching_file(search_dirs, 'W_fourier_fit_params_*.mat');
+    if ~isempty(mat_path)
+        model = load_w_model_from_mat_for_snippet(mat_path, mode_name);
+        if model.available
+            return;
+        end
+    end
+
+    if strcmpi(mode_name, 'w1')
+        csv_pattern = 'W1_fourier_fit_params_agent*_*.csv';
+    else
+        csv_pattern = 'W2_fourier_fit_params_agent*_*.csv';
+    end
+    csv_path = find_latest_matching_file(search_dirs, csv_pattern);
+    if ~isempty(csv_path)
+        model = load_w_model_from_csv_for_snippet(csv_path);
+    end
+end
+
+function latest_path = find_latest_matching_file(search_dirs, pattern)
+    latest_path = '';
+    latest_time = -inf;
+    for d = 1:numel(search_dirs)
+        dir_path = search_dirs{d};
+        if ~isfolder(dir_path)
+            continue;
+        end
+        files = dir(fullfile(dir_path, pattern));
+        for i = 1:numel(files)
+            if files(i).datenum > latest_time
+                latest_time = files(i).datenum;
+                latest_path = fullfile(files(i).folder, files(i).name);
+            end
+        end
+    end
+end
+
+function model = load_w_model_from_mat_for_snippet(mat_path, mode_name)
+    model = struct('available', false, 'source_file', mat_path, 'order', 0, 'a0', 0, 'a', [], 'b', []);
+    try
+        S = load(mat_path);
+    catch
+        return;
+    end
+    if ~isfield(S, 'fourier_fit_export') || ~isstruct(S.fourier_fit_export)
+        return;
+    end
+
+    if strcmpi(mode_name, 'w1')
+        field_name = 'fit_w1';
+    else
+        field_name = 'fit_w2';
+    end
+    if ~isfield(S.fourier_fit_export, field_name) || ~isstruct(S.fourier_fit_export.(field_name))
+        return;
+    end
+
+    fit_w = S.fourier_fit_export.(field_name);
+    if ~all(isfield(fit_w, {'order', 'a0', 'a', 'b'}))
+        return;
+    end
+
+    order = max(0, round(double(fit_w.order)));
+    a = reshape(double(fit_w.a), [], 1);
+    b = reshape(double(fit_w.b), [], 1);
+    if numel(a) < order || numel(b) < order
+        return;
+    end
+
+    model.available = true;
+    model.order = order;
+    model.a0 = double(fit_w.a0);
+    model.a = a(1:order);
+    model.b = b(1:order);
+end
+
+function model = load_w_model_from_csv_for_snippet(csv_path)
+    model = struct('available', false, 'source_file', csv_path, 'order', 0, 'a0', 0, 'a', [], 'b', []);
+    try
+        T = readtable(csv_path);
+    catch
+        return;
+    end
+    if ~all(ismember({'k', 'a_k', 'b_k'}, T.Properties.VariableNames))
+        return;
+    end
+
+    k = double(T.k(:));
+    a_k = double(T.a_k(:));
+    b_k = double(T.b_k(:));
+    valid = isfinite(k) & isfinite(a_k) & isfinite(b_k) & (k >= 0) & (abs(k - round(k)) < eps(10));
+    k = round(k(valid));
+    a_k = a_k(valid);
+    b_k = b_k(valid);
+    if isempty(k)
+        return;
+    end
+
+    order = max(k);
+    a = zeros(order, 1);
+    b = zeros(order, 1);
+    idx0 = find(k == 0, 1, 'first');
+    if isempty(idx0)
+        return;
+    end
+    a0 = a_k(idx0);
+
+    for n = 1:order
+        idxn = find(k == n, 1, 'first');
+        if ~isempty(idxn)
+            a(n) = a_k(idxn);
+            b(n) = b_k(idxn);
+        end
+    end
+
+    model.available = true;
+    model.order = order;
+    model.a0 = a0;
+    model.a = a;
+    model.b = b;
+end
+
+function snippet_text = build_prc_python_snippet(prc_a, prc_b, source_label)
+    prc_harmonics = numel(prc_a) - 1;
+    lines = cell(0, 1);
+    lines{end + 1} = sprintf('# Auto-generated from %s', source_label);
+    lines{end + 1} = sprintf('prc_harmonics = %d', prc_harmonics);
+    lines{end + 1} = 'prc_a = [0.0] * (prc_harmonics + 1)';
+    lines{end + 1} = 'prc_b = [0.0] * (prc_harmonics + 1)';
+    lines{end + 1} = '';
+    lines{end + 1} = sprintf('prc_a[0] = %.10f', prc_a(1));
+    lines{end + 1} = sprintf('prc_b[0] = %.10f', prc_b(1));
+    for n = 1:prc_harmonics
+        lines{end + 1} = sprintf('prc_a[%d] = %.10f', n, prc_a(n + 1));
+        lines{end + 1} = sprintf('prc_b[%d] = %.10f', n, prc_b(n + 1));
+    end
+
+    snippet_text = strjoin(lines, newline);
 end
 
 function gamma_export = build_gamma_export_bundle(dirpath, out)
@@ -942,13 +1186,6 @@ function curve_files = write_gamma_curve_exports(export_dir, gamma_export)
 
     for idx = 1:numel(gamma_export.agents)
         agent_export = gamma_export.agents(idx);
-
-        derived_file = fullfile(export_dir, sprintf('gamma_curve_agent%d_derived.csv', agent_export.agent_id));
-        if write_single_gamma_curve_csv(derived_file, agent_export.derived_gamma.gamma_resonance)
-            curve_files(end + 1) = struct( ...
-                'label', sprintf('agent_%d_derived', agent_export.agent_id), ...
-                'file_path', derived_file); %#ok<AGROW>
-        end
 
         a2_file = fullfile(export_dir, sprintf('gamma_curve_agent%d_a2.csv', agent_export.agent_id));
         if write_single_gamma_curve_csv(a2_file, agent_export.a2_gamma.gamma_resonance)
