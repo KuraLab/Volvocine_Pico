@@ -38,7 +38,7 @@ function out = plot_prc_snippets_overlay(input_path, n_samples)
         n_h = min(numel(prc_a), numel(prc_b)) - 1;
         prc_harmonics(k) = n_h;
 
-        z = zeros(size(psi));
+        z = prc_a(1) * ones(size(psi));
         for n = 1:n_h
             z = z + prc_a(n + 1) * cos(n * psi) + prc_b(n + 1) * sin(n * psi);
         end
