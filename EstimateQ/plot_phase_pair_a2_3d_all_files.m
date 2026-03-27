@@ -45,6 +45,8 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
         error('Too many output arguments.');
     end
 
+    ensure_local_function_folder_on_path();
+
     % Clear any figure windows left from previous runs before starting.
     existing_figures = findall(0, 'Type', 'figure');
     if ~isempty(existing_figures)
@@ -230,6 +232,13 @@ function resolved_dirpath = resolve_analysis_dirpath(dirpath)
     end
 
     resolved_dirpath = candidate_pwd;
+end
+
+function ensure_local_function_folder_on_path()
+    local_dir = fileparts(mfilename('fullpath'));
+    if isempty(which('fitDoubleFourierScatter')) && ~contains(path, local_dir)
+        addpath(local_dir);
+    end
 end
 
 function csv_paths = list_csv_paths(dirpath, file_indices)
@@ -710,13 +719,9 @@ function export_info = export_gamma_results(dirpath, out, phase_sensitivity_func
         end
 
         gamma_export = build_gamma_export_bundle(dirpath, out);
-        timestamp = datestr(now, 'yyyymmdd_HHMMSS');
-        base_name = sprintf('gamma_export_phase%d_%d_z%d_%s', ...
-            out.phase_agent_ids(1), out.phase_agent_ids(2), out.z_agent_id, timestamp);
-        mat_file = fullfile(export_dir, [base_name '.mat']);
         latest_mat_file = fullfile(export_dir, 'gamma_export_latest.mat');
+        mat_file = latest_mat_file;
 
-        save(mat_file, 'gamma_export');
         save(latest_mat_file, 'gamma_export');
 
         curve_files = write_gamma_curve_exports(export_dir, gamma_export);

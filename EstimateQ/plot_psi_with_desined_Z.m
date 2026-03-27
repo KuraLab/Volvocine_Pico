@@ -8,14 +8,14 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
 % their average defines the center, and their difference is normalized to 1.
 %
 % Usage:
-%   plot_phase_pair_a2_3d_all_files()
-%   plot_phase_pair_a2_3d_all_files(dirpath)
-%   plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices)
-%   plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N)
-%   plot_phase_pair_a2_3d_all_files(..., M, N, [m_phi2, n_phi1])
+%   plot_psi_with_desined_Z()
+%   plot_psi_with_desined_Z(dirpath)
+%   plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices)
+%   plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, file_indices, M, N)
+%   plot_psi_with_desined_Z(..., M, N, [m_phi2, n_phi1])
 %
 % Defaults:
-%   dirpath = 'EstimateF/Spring5/250'
+%   dirpath = 'Spring3/255'
 %   phase_agent_ids = first two non-99 agents found in the first valid CSV
 %   z_agent_id = phase_agent_ids(2)  % primary target for backward-compatible top-level outputs
 %   analysis_duration_sec = 15
@@ -34,6 +34,8 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
         error('Too many output arguments.');
     end
 
+    ensure_local_function_folder_on_path();
+
     % Clear any figure windows left from previous runs before starting.
     existing_figures = findall(0, 'Type', 'figure');
     if ~isempty(existing_figures)
@@ -42,7 +44,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring3', '255');
+        dirpath = fullfile('Spring3', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -65,6 +67,8 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     if nargin < 8 || isempty(N)
         N = 10;
     end
+
+    dirpath = resolve_analysis_dirpath(dirpath);
 
     enable_save_figure = false;
 
@@ -184,13 +188,13 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     primary_analysis = agent_analysis(primary_index);
     true_gamma = compute_true_gamma_from_agent_analysis( ...
         agent_analysis, phase_agent_ids, gamma_ratio, ...
-        'fourier_fit_sin_phi2_a2', base_mode_label, [0.8500, 0.3250, 0.0980]);
+        'fourier_fit_sin_phi2_a2', base_mode_label);
     true_gamma_w1 = compute_true_gamma_from_agent_analysis( ...
         agent_analysis, phase_agent_ids, gamma_ratio, ...
-        'fourier_fit_sin_phi2_a2_w1', 'W1', [0.0000, 0.4470, 0.7410]);
+        'fourier_fit_sin_phi2_a2_w1', 'W1');
     true_gamma_w2 = compute_true_gamma_from_agent_analysis( ...
         agent_analysis, phase_agent_ids, gamma_ratio, ...
-        'fourier_fit_sin_phi2_a2_w2', 'W2', [0.4660, 0.6740, 0.1880]);
+        'fourier_fit_sin_phi2_a2_w2', 'W2');
     phase_agent_omega = compute_phase_agent_mean_omega_all_files( ...
         csv_paths, phase_agent_ids, analysis_duration_sec, analysis_start_sec);
 
@@ -282,6 +286,35 @@ function csv_paths = list_csv_paths(dirpath, file_indices)
     end
 
     csv_paths = cellfun(@(name) fullfile(dirpath, name), selected, 'UniformOutput', false);
+end
+
+function resolved_dirpath = resolve_analysis_dirpath(dirpath)
+    if isfolder(dirpath)
+        resolved_dirpath = dirpath;
+        return;
+    end
+
+    candidate_pwd = fullfile(pwd, dirpath);
+    if isfolder(candidate_pwd)
+        resolved_dirpath = candidate_pwd;
+        return;
+    end
+
+    base_dir = fileparts(mfilename('fullpath'));
+    candidate_base = fullfile(base_dir, dirpath);
+    if isfolder(candidate_base)
+        resolved_dirpath = candidate_base;
+        return;
+    end
+
+    resolved_dirpath = candidate_pwd;
+end
+
+function ensure_local_function_folder_on_path()
+    local_dir = fileparts(mfilename('fullpath'));
+    if isempty(which('fitDoubleFourierScatter')) && ~contains(path, local_dir)
+        addpath(local_dir);
+    end
 end
 
 function phase_agent_ids = detect_default_phase_agents(csv_paths)
@@ -423,22 +456,17 @@ function phase_target = select_phase_for_target_agent(point_data, phase_agent_id
     end
 end
 
-function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, phase_agent_ids, gamma_ratio, fit_field_name, mode_label, curve_color)
+function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, phase_agent_ids, gamma_ratio, fit_field_name, mode_label)
     if nargin < 4 || isempty(fit_field_name)
         fit_field_name = 'fourier_fit_sin_phi2_a2';
     end
     if nargin < 5 || isempty(mode_label)
         mode_label = 'sin';
     end
-    if nargin < 6 || isempty(curve_color)
-        curve_color = [0.8500, 0.3250, 0.0980];
-    end
-
     true_gamma = struct( ...
         'available', false, ...
         'reason', '', ...
         'mode_label', mode_label, ...
-        'curve_color', curve_color, ...
         'agent_id_1', [], ...
         'agent_id_2', [], ...
         'gamma_ratio', gamma_ratio, ...
@@ -522,7 +550,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     ax = axes('Parent', fig_handle);
     hold(ax, 'on');
 
-    plot(ax, phase_grid, z_cos, 'LineWidth', 1.8, 'Color', [0.8500, 0.3250, 0.0980], ...
+    plot(ax, phase_grid, z_cos, 'LineWidth', 1.8, ...
         'DisplayName', sprintf('%s', base_mode_label));
 
     if use_w1 && isstruct(w1_model) && w1_model.available
@@ -531,7 +559,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
         power_summary.w1.available = true;
         power_summary.w1.power = power_w1;
         power_summary.ratio_w1_to_cos = power_w1 / max(power_cos, eps);
-        plot(ax, phase_grid, z_w1, 'LineWidth', 1.8, 'Color', [0.0000, 0.4470, 0.7410], ...
+        plot(ax, phase_grid, z_w1, 'LineWidth', 1.8, ...
             'DisplayName', 'W1');
     end
 
@@ -541,11 +569,11 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
         power_summary.w2.available = true;
         power_summary.w2.power = power_w2;
         power_summary.ratio_w2_to_cos = power_w2 / max(power_cos, eps);
-        plot(ax, phase_grid, z_w2, 'LineWidth', 1.8, 'Color', [0.4660, 0.6740, 0.1880], ...
+        plot(ax, phase_grid, z_w2, 'LineWidth', 1.8, ...
             'DisplayName', 'W2');
     end
 
-    plot(ax, phase_grid, zeros(size(phase_grid)), ':', 'LineWidth', 1.0, 'Color', [0.5, 0.5, 0.5], ...
+    plot(ax, phase_grid, zeros(size(phase_grid)), ':', 'LineWidth', 1.0, ...
         'HandleVisibility', 'off');
     xlabel(ax, '$$\phi$$', 'Interpreter', 'latex');
     ylabel(ax, '$$Z(\phi)$$', 'Interpreter', 'latex');
@@ -604,17 +632,12 @@ function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, tru
             mode_label = gamma_item.mode_label;
         end
 
-        line_color = [0.0000, 0.0000, 0.0000];
-        if isfield(gamma_item, 'curve_color') && isnumeric(gamma_item.curve_color) && numel(gamma_item.curve_color) == 3
-            line_color = gamma_item.curve_color;
-        end
-
-        plot(ax, gamma_item.psi_grid(:), gamma_item.gamma_true(:), 'LineWidth', 1.8, 'Color', line_color, ...
+        plot(ax, gamma_item.psi_grid(:), gamma_item.gamma_true(:), 'LineWidth', 1.8, ...
             'DisplayName', sprintf('%s', mode_label));
     end
 
     psi_ref = linspace(-pi, pi, 201);
-    plot(ax, psi_ref, zeros(size(psi_ref)), ':', 'LineWidth', 1.0, 'Color', [0.5, 0.5, 0.5], ...
+    plot(ax, psi_ref, zeros(size(psi_ref)), ':', 'LineWidth', 1.0, ...
         'HandleVisibility', 'off');
     xlabel(ax, '$$\psi$$', 'Interpreter', 'latex');
     ylabel(ax, '$$\Gamma(\psi)-\Gamma(-\psi)$$', 'Interpreter', 'latex');

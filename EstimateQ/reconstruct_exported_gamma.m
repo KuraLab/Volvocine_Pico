@@ -2,6 +2,8 @@ function [psi_grid, gamma_values, meta] = reconstruct_exported_gamma(gamma_sourc
 % reconstruct_exported_gamma Re-evaluate exported Gamma(psi) data.
 %
 % Usage:
+%   % Run from EstimateQ root:
+%   dirpath = fullfile('Spring3', '255');
 %   S = load(fullfile(dirpath, 'gamma_exports', 'gamma_export_latest.mat'));
 %   [psi, gamma_true] = reconstruct_exported_gamma(S.gamma_export.true_gamma);
 %   [psi, gamma_full] = reconstruct_exported_gamma(S.gamma_export.agents(1).derived_gamma, [], 'full');

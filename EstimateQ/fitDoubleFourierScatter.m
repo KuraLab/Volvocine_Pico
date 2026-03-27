@@ -80,7 +80,7 @@ function result = fitDoubleFourierScatter(phi1, phi2, z, M, N, target_name, heat
 % and additional diagnostic fields.
 %
 % Example:
-%   out = plot_phase_pair_a2_3d_all_files(fullfile('EstimateF','Spring3','250'), [2 3], 3, 15, 5);
+%   out = plot_phase_pair_a2_3d_all_files(fullfile('Spring3','255'), [2 3], 3, 15, 5);
 %   result = fitDoubleFourierScatter(out.point_cloud.phi1, out.point_cloud.phi2, out.point_cloud.a2, 3, 3);
 %
 %   % If you already have scattered data directly:

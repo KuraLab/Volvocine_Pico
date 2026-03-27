@@ -9,6 +9,8 @@ function out = plot_prc_snippets_overlay(input_path, n_samples)
 % If input_path is a folder, all prc_snippet_*.txt files are plotted.
 % If input_path is a file, only that snippet is plotted.
 
+    ensure_local_function_folder_on_path();
+
     if nargin < 1 || isempty(input_path)
         input_path = resolve_default_snippet_dir();
     else
@@ -192,5 +194,12 @@ function [prc_a, prc_b, label_text] = parse_prc_snippet_file(file_path)
                 prc_b(idx + 1) = val;
             end
         end
+    end
+end
+
+function ensure_local_function_folder_on_path()
+    local_dir = fileparts(mfilename('fullpath'));
+    if ~contains(path, local_dir)
+        addpath(local_dir);
     end
 end
