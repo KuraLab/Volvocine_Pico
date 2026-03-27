@@ -16,17 +16,33 @@ stop_delay_seconds = 30000 # 停止までの秒数
 
 # PRCのフーリエ係数（0..prc_harmonics を使用）
 # z(psi) = Σ [ prc_a[n] * cos(n*psi) + prc_b[n] * sin(n*psi) ]
+# Auto-generated from W1 exported reference
 prc_harmonics = 10
 prc_a = [0.0] * (prc_harmonics + 1)
 prc_b = [0.0] * (prc_harmonics + 1)
 
-# 既存の cos(psi-alpha) と等価な初期値（1次のみ）
-prc_a[1] = math.cos(alpha)
-prc_b[1] = math.sin(alpha)
-
-# 例: 高調波を使う場合は以下を編集
-# prc_a[2] = 0.10
-# prc_b[3] = -0.05
+prc_a[0] = -0.3767510302
+prc_b[0] = 0.0000000000
+prc_a[1] = 0.5292257399
+prc_b[1] = 0.3301385178
+prc_a[2] = -0.1938630343
+prc_b[2] = -0.4143336823
+prc_a[3] = -0.0670861556
+prc_b[3] = 0.2843023116
+prc_a[4] = 0.1085279582
+prc_b[4] = -0.0808283019
+prc_a[5] = -0.0591260108
+prc_b[5] = -0.0562506473
+prc_a[6] = 0.0153849482
+prc_b[6] = 0.0380577273
+prc_a[7] = 0.0144728801
+prc_b[7] = 0.0298497013
+prc_a[8] = -0.0254654234
+prc_b[8] = -0.0361526236
+prc_a[9] = -0.0048666782
+prc_b[9] = -0.0187996171
+prc_a[10] = 0.0422941152
+prc_b[10] = 0.0061840271
 
 
 def build_prc_payload():
@@ -65,7 +81,7 @@ def format_payload_for_log(payload, max_prc_order=3):
     prc_parts = []
     if prc_n is not None:
         prc_parts.append(f"prc_n={prc_n}")
-    for n in range(1, max_prc_order + 1):
+    for n in range(0, max_prc_order + 1):
         a_key = f"prc_a{n}"
         b_key = f"prc_b{n}"
         if a_key in prc_items:
@@ -128,7 +144,7 @@ def handle_parameter_request(sock, data, addr):
             sock.sendto(response.encode('utf-8'), addr)
             print(
                 f"[INFO] Sent parameters | id={agent_id}, O={omega:.2f}, V={voltage:.2f} | "
-                f"{format_payload_for_log(response, max_prc_order=3)}"
+                f"{format_payload_for_log(response, max_prc_order=2)}"
             )
             return agent_id
 
