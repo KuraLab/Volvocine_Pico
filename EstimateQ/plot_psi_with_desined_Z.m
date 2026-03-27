@@ -83,7 +83,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     % ===== Derived-signal definition =====
-    control_gain = 3;
+    control_gain = 5;
     derived_signal_expression = sprintf('%g*cos(phase_target + 0.6*pi) .* a2_normalized', control_gain);
     derived_signal_display_name = sprintf('%g*cos(phi_target + 0.6*pi) * a2_norm', control_gain);
     derived_signal_axis_label = sprintf('%g*cos(phi_target + 0.6*pi) * a2_{norm}', control_gain);

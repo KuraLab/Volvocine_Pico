@@ -3,16 +3,20 @@ function out = plot_prc_snippets_overlay(input_path, n_samples)
 %
 % Usage:
 %   plot_prc_snippets_overlay()
-%   plot_prc_snippets_overlay(fullfile('Spring1','255','gamma_exports'))
-%   plot_prc_snippets_overlay(fullfile('Spring1','255','gamma_exports','prc_snippet_ref_w1.txt'))
+%   plot_prc_snippets_overlay(fullfile('Spring2','255','gamma_exports'))
+%   plot_prc_snippets_overlay(fullfile('Spring2','255','gamma_exports','prc_snippet_ref_w1.txt'))
 %
 % If input_path is a folder, all prc_snippet_*.txt files are plotted.
 % If input_path is a file, only that snippet is plotted.
 
     ensure_local_function_folder_on_path();
 
+    % Change these defaults when calling with no input_path.
+    default_spring = 'Spring3';
+    default_omega = '255';
+
     if nargin < 1 || isempty(input_path)
-        input_path = resolve_default_snippet_dir();
+        input_path = resolve_default_snippet_dir(default_spring, default_omega);
     else
         input_path = resolve_input_path(input_path);
     end
@@ -22,7 +26,7 @@ function out = plot_prc_snippets_overlay(input_path, n_samples)
 
     txt_files = collect_snippet_files(input_path);
     if isempty(txt_files)
-        error('No snippet txt files found for: %s\nRun from EstimateQ or pass an explicit path (e.g., fullfile(''Spring1'',''255'',''gamma_exports'')).', input_path);
+        error('No snippet txt files found for: %s\nRun from EstimateQ or pass an explicit path (e.g., fullfile(''%s'',''%s'',''gamma_exports'')).', input_path, default_spring, default_omega);
     end
 
     psi = linspace(-pi, pi, n_samples).';
@@ -108,15 +112,15 @@ function txt_files = collect_snippet_files(input_path)
     end
 end
 
-function resolved_path = resolve_default_snippet_dir()
-    candidate_pwd = fullfile(pwd, 'Spring1', '255', 'gamma_exports');
+function resolved_path = resolve_default_snippet_dir(default_spring, default_omega)
+    candidate_pwd = fullfile(pwd, default_spring, default_omega, 'gamma_exports');
     if isfolder(candidate_pwd)
         resolved_path = candidate_pwd;
         return;
     end
 
     base_dir = fileparts(mfilename('fullpath'));
-    resolved_path = fullfile(base_dir, 'Spring1', '255', 'gamma_exports');
+    resolved_path = fullfile(base_dir, default_spring, default_omega, 'gamma_exports');
 end
 
 function resolved_path = resolve_input_path(input_path)
