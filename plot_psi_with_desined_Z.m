@@ -42,7 +42,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('EstimateQ', 'Spring1', '255');
+        dirpath = fullfile('EstimateQ', 'Spring3', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -79,11 +79,11 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     % ===== Derived-signal definition =====
-    control_gain = 1;
-    derived_signal_expression = sprintf('%g*cos(phase_target + pi - 0.6*pi) .* a2_normalized', control_gain);
-    derived_signal_display_name = sprintf('%g*cos(phi_target + pi - 0.6*pi) * a2_norm', control_gain);
-    derived_signal_axis_label = sprintf('%g*cos(phi_target + pi - 0.6*pi) * a2_{norm}', control_gain);
-    derived_signal_func = @(phase_target, a2_normalized) control_gain * cos(phase_target + 0.4*pi) .* a2_normalized;
+    control_gain = 3;
+    derived_signal_expression = sprintf('%g*cos(phase_target + 0.6*pi) .* a2_normalized', control_gain);
+    derived_signal_display_name = sprintf('%g*cos(phi_target + 0.6*pi) * a2_norm', control_gain);
+    derived_signal_axis_label = sprintf('%g*cos(phi_target + 0.6*pi) * a2_{norm}', control_gain);
+    derived_signal_func = @(phase_target, a2_normalized) control_gain * cos(phase_target + 0.6*pi) .* a2_normalized;
 
     w1_model = load_exported_w1_model(dirpath);
     use_w1_derived_signal = w1_model.available;
@@ -506,7 +506,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     end
 
     phase_grid = linspace(-pi, pi, 801);
-    z_cos = control_gain * cos(phase_grid + pi - 0.6 * pi);
+    z_cos = control_gain * cos(phase_grid + 0.6 * pi);
     power_cos = trapz(phase_grid, z_cos .^ 2) / (2 * pi);
 
     power_summary = struct( ...
