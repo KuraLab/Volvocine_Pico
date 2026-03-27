@@ -2,6 +2,21 @@
 #include <LittleFS.h>
 #include <string.h>
 
+static void printCurrentPrcSeries(int prcHarmonics, const float *prcCosCoeffs, const float *prcSinCoeffs, int prcMaxHarmonics) {
+  int nMax = prcHarmonics;
+  if (nMax < 0) {
+    nMax = 0;
+  }
+  if (nMax > prcMaxHarmonics) {
+    nMax = prcMaxHarmonics;
+  }
+
+  Serial.printf("[INFO] Current PRC Fourier series (n=0..%d):\n", nMax);
+  for (int n = 0; n <= nMax; n++) {
+    Serial.printf("[INFO]   a%d=%.6f, b%d=%.6f\n", n, prcCosCoeffs[n], n, prcSinCoeffs[n]);
+  }
+}
+
 int readAgentIdFromFile() {
     // Pico(W) 版 LittleFS では引数なしで begin()
     if(!LittleFS.begin()){
@@ -122,8 +137,10 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
 
         if (parsedBaseFields >= 6) {
             Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, center=%.1f, amplitude=%.1f, stop_id=%d, stop_delay=%d, prc_n=%d (parsed_prc=%d)\n", omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, parsedPrcFields);
+            printCurrentPrcSeries(prcHarmonics, prcCosCoeffs, prcSinCoeffs, prcMaxHarmonics);
         } else {
           Serial.printf("[WARN] Failed to parse all base parameters. Received: %s (parsed_base=%d, parsed_prc=%d)\n", originalBuffer, parsedBaseFields, parsedPrcFields);
+          printCurrentPrcSeries(prcHarmonics, prcCosCoeffs, prcSinCoeffs, prcMaxHarmonics);
         }
         return;
       }
@@ -132,4 +149,5 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
   }
 
   Serial.println("[WARN] Parameter request timed out. Keeping last received PRC.");
+  printCurrentPrcSeries(prcHarmonics, prcCosCoeffs, prcSinCoeffs, prcMaxHarmonics);
 }
