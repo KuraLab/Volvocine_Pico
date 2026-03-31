@@ -1,13 +1,15 @@
 # サーバー側で管理するパラメータ
 # エージェントIDごとのomega値を配列で管理
 import math
+import os
+import re
 
 omega_values = {
-    4: 3.14 * 2.25   # エージェント1の周波数
+    4: 3.14 * 2.51   # エージェント1の周波数
 }
 default_omega = 3.14 * 2.50 # デフォルト周波数（未定義IDの場合）
 
-kappa =5       # フィードバックゲイン
+kappa =2       # フィードバックゲイン
 alpha = -3.14*0.6
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 65.0 # サーボ振幅
@@ -16,33 +18,64 @@ stop_delay_seconds = 30000 # 停止までの秒数
 
 # PRCのフーリエ係数（0..prc_harmonics を使用）
 # z(psi) = Σ [ prc_a[n] * cos(n*psi) + prc_b[n] * sin(n*psi) ]
-# Auto-generated from cos(phi + 0.6*pi) reference
-prc_harmonics = 10
-prc_a = [0.0] * (prc_harmonics + 1)
-prc_b = [0.0] * (prc_harmonics + 1)
+PRC_SOURCE_DIR = os.environ.get(
+    "PRC_SOURCE_DIR",
+    os.path.join("EstimateQ", "Spring3", "255", "gamma_exports")
+)
+PRC_SOURCE_FILE = "prc_snippet_ref_cos.txt"
 
-prc_a[0] = 0.0000000000
-prc_b[0] = 0.0000000000
-prc_a[1] = -0.3090169944
-prc_b[1] = -0.9510565163
-prc_a[2] = 0.0000000000
-prc_b[2] = 0.0000000000
-prc_a[3] = 0.0000000000
-prc_b[3] = 0.0000000000
-prc_a[4] = 0.0000000000
-prc_b[4] = 0.0000000000
-prc_a[5] = 0.0000000000
-prc_b[5] = 0.0000000000
-prc_a[6] = 0.0000000000
-prc_b[6] = 0.0000000000
-prc_a[7] = 0.0000000000
-prc_b[7] = 0.0000000000
-prc_a[8] = 0.0000000000
-prc_b[8] = 0.0000000000
-prc_a[9] = 0.0000000000
-prc_b[9] = 0.0000000000
-prc_a[10] = 0.0000000000
-prc_b[10] = 0.0000000000
+
+def load_prc_from_directory(source_dir, source_file=PRC_SOURCE_FILE):
+    """PRC snippet txt からフーリエ係数を読み込む。"""
+    source_path = os.path.join(source_dir, source_file)
+    if not os.path.isfile(source_path):
+        raise FileNotFoundError(f"PRC snippet file not found: {source_path}")
+
+    with open(source_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    harmonics = None
+    harmonics_pattern = re.compile(r"^\s*prc_harmonics\s*=\s*(\d+)\s*$")
+    for line in lines:
+        m = harmonics_pattern.match(line)
+        if m:
+            harmonics = int(m.group(1))
+            break
+
+    if harmonics is None:
+        raise ValueError(f"prc_harmonics not found in {source_path}")
+
+    a = [0.0] * (harmonics + 1)
+    b = [0.0] * (harmonics + 1)
+    num_pattern = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+    a_pattern = re.compile(rf"^\s*prc_a\[(\d+)\]\s*=\s*({num_pattern})\s*$")
+    b_pattern = re.compile(rf"^\s*prc_b\[(\d+)\]\s*=\s*({num_pattern})\s*$")
+
+    for line in lines:
+        m_a = a_pattern.match(line)
+        if m_a:
+            idx = int(m_a.group(1))
+            if 0 <= idx <= harmonics:
+                a[idx] = float(m_a.group(2))
+            continue
+
+        m_b = b_pattern.match(line)
+        if m_b:
+            idx = int(m_b.group(1))
+            if 0 <= idx <= harmonics:
+                b[idx] = float(m_b.group(2))
+
+    return harmonics, a, b
+
+
+try:
+    prc_harmonics, prc_a, prc_b = load_prc_from_directory(PRC_SOURCE_DIR)
+    print(f"[INFO] Loaded PRC from {os.path.join(PRC_SOURCE_DIR, PRC_SOURCE_FILE)}")
+except Exception as e:
+    raise RuntimeError(
+        f"Failed to load PRC from directory '{PRC_SOURCE_DIR}' "
+        f"(file: {PRC_SOURCE_FILE}). {e}"
+    ) from e
 
 
 
