@@ -70,33 +70,64 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
 
     dirpath = resolve_analysis_dirpath(dirpath);
 
-    enable_save_figure = false;
+    enable_save_figure = true;
 
     gamma_ratio = [1 1];
 
-    % Ignore legacy weighted-fit arguments if they are still passed.
-    if ~isempty(varargin)
-        first_extra = varargin{1};
-        if isnumeric(first_extra) && numel(first_extra) == 2 && all(isfinite(first_extra(:)))
-            gamma_ratio = double(first_extra(:).');
+    % Processing switches (w2s == W2). Override via varargin struct.
+    processing_modes = struct('cos', true, 'w1', true, 'w2s', false);
+
+    % Optional extras:
+    %   - numeric [m_phi2, n_phi1] -> gamma_ratio (legacy behavior)
+    %   - struct with fields cos/w1/w2s (or w2)
+    for extra_idx = 1:numel(varargin)
+        extra_arg = varargin{extra_idx};
+        if isnumeric(extra_arg) && numel(extra_arg) == 2 && all(isfinite(extra_arg(:)))
+            gamma_ratio = double(extra_arg(:).');
+        elseif isstruct(extra_arg)
+            if isfield(extra_arg, 'cos')
+                processing_modes.cos = logical(extra_arg.cos);
+            end
+            if isfield(extra_arg, 'w1')
+                processing_modes.w1 = logical(extra_arg.w1);
+            end
+            if isfield(extra_arg, 'w2s')
+                processing_modes.w2s = logical(extra_arg.w2s);
+            elseif isfield(extra_arg, 'w2')
+                processing_modes.w2s = logical(extra_arg.w2);
+            end
         end
     end
 
     % ===== Derived-signal definition =====
-    control_gain = 2;
+    enable_cos_derived_signal = processing_modes.cos;
+    enable_w1_derived_signal = processing_modes.w1;
+    enable_w2_derived_signal = processing_modes.w2s;
+
+    if ~enable_cos_derived_signal && ~enable_w1_derived_signal && ~enable_w2_derived_signal
+        error('At least one of cos/w1/w2s processing must be enabled.');
+    end
+
+    control_gain = 1;
     derived_signal_expression = sprintf('%g*cos(phase_target + 0.6*pi) .* a2_normalized', control_gain);
     derived_signal_display_name = sprintf('%g*cos(phi_target + 0.6*pi) * a2_norm', control_gain);
     derived_signal_axis_label = sprintf('%g*cos(phi_target + 0.6*pi) * a2_{norm}', control_gain);
     derived_signal_func = @(phase_target, a2_normalized) control_gain * cos(phase_target + 0.6*pi) .* a2_normalized;
 
     w1_model = load_exported_w1_model(dirpath);
-    use_w1_derived_signal = w1_model.available;
+    use_w1_derived_signal = enable_w1_derived_signal && w1_model.available;
     if use_w1_derived_signal
         derived_signal_w1_expression = sprintf('%g*W_1_exported(phase_target) .* a2_normalized', control_gain);
         derived_signal_w1_display_name = sprintf('%g*W_1_exported(phi_target) * a2_norm', control_gain);
         derived_signal_w1_axis_label = sprintf('%g*W_1_exported(phi_target) * a2_{norm}', control_gain);
         derived_signal_w1_func = @(phase_target, a2_normalized) control_gain * evaluate_exported_w1(phase_target, w1_model) .* a2_normalized;
         fprintf('[INFO] Using exported W1 phase sensitivity from %s\n', w1_model.source_file);
+    elseif ~enable_w1_derived_signal
+        derived_signal_w1_expression = '';
+        derived_signal_w1_display_name = '';
+        derived_signal_w1_axis_label = '';
+        derived_signal_w1_func = [];
+        fprintf('[INFO] W1-based analysis is disabled by switch.\n');
     else
         derived_signal_w1_expression = '';
         derived_signal_w1_display_name = '';
@@ -106,13 +137,19 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     end
 
     w2_model = load_exported_w2_model(dirpath);
-    use_w2_derived_signal = w2_model.available;
+    use_w2_derived_signal = enable_w2_derived_signal && w2_model.available;
     if use_w2_derived_signal
         derived_signal_w2_expression = sprintf('%g*W_2_exported(phase_target) .* a2_normalized', control_gain);
         derived_signal_w2_display_name = sprintf('%g*W_2_exported(phi_target) * a2_norm', control_gain);
         derived_signal_w2_axis_label = sprintf('%g*W_2_exported(phi_target) * a2_{norm}', control_gain);
         derived_signal_w2_func = @(phase_target, a2_normalized) control_gain * evaluate_exported_w2(phase_target, w2_model) .* a2_normalized;
         fprintf('[INFO] Using exported W2 phase sensitivity from %s\n', w2_model.source_file);
+    elseif ~enable_w2_derived_signal
+        derived_signal_w2_expression = '';
+        derived_signal_w2_display_name = '';
+        derived_signal_w2_axis_label = '';
+        derived_signal_w2_func = [];
+        fprintf('[INFO] W2-based analysis is disabled by switch.\n');
     else
         derived_signal_w2_expression = '';
         derived_signal_w2_display_name = '';
@@ -121,9 +158,14 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
         fprintf('[INFO] Exported W2 phase sensitivity was not found in %s. Skipping W2-based analysis.\n', dirpath);
     end
 
+    use_cos_derived_signal = enable_cos_derived_signal;
+    if ~use_cos_derived_signal
+        fprintf('[INFO] cos-based analysis is disabled by switch.\n');
+    end
+
     base_mode_label = 'sin';
     [figure_phase_sensitivity, phase_sensitivity_power] = plot_phase_sensitivity_overlay( ...
-        control_gain, use_w1_derived_signal, w1_model, use_w2_derived_signal, w2_model, base_mode_label);
+        control_gain, use_cos_derived_signal, use_w1_derived_signal, w1_model, use_w2_derived_signal, w2_model, base_mode_label, enable_save_figure);
 
     sample_dt = 0.01;
     if ~isscalar(analysis_duration_sec) || analysis_duration_sec <= 0 || ~isfinite(analysis_duration_sec)
@@ -171,7 +213,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
             csv_paths, phase_agent_ids, target_agent_id, ...
             analysis_duration_sec, analysis_start_sec, sample_dt, ...
             M, N, gamma_ratio, gamma_settings_derived, ...
-            derived_signal_func, derived_signal_w1_func, use_w1_derived_signal, ...
+            derived_signal_func, use_cos_derived_signal, derived_signal_w1_func, use_w1_derived_signal, ...
             derived_signal_w2_func, use_w2_derived_signal);
 
         if agent_idx == 1
@@ -198,7 +240,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     phase_agent_omega = compute_phase_agent_mean_omega_all_files( ...
         csv_paths, phase_agent_ids, analysis_duration_sec, analysis_start_sec);
 
-    figure_true_gamma_overlay = plot_true_gamma_overlay(true_gamma, true_gamma_w1, true_gamma_w2);
+    figure_true_gamma_overlay = plot_true_gamma_overlay(true_gamma, true_gamma_w1, true_gamma_w2, enable_save_figure);
     if ~isempty(figure_true_gamma_overlay)
         if true_gamma.available
             true_gamma.figure = figure_true_gamma_overlay;
@@ -224,6 +266,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     out.gamma_ratio = gamma_ratio;
     out.gamma_settings = struct('derived', gamma_settings_derived);
     out.derived_signal = struct( ...
+        'available', use_cos_derived_signal, ...
         'expression', derived_signal_expression, ...
         'display_name', derived_signal_display_name, ...
         'axis_label', derived_signal_axis_label);
@@ -338,7 +381,7 @@ function phase_agent_ids = detect_default_phase_agents(csv_paths)
     error('Could not determine default phase_agent_ids from the selected CSV files.');
 end
 
-function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, M, N, gamma_ratio, gamma_settings_derived, derived_signal_func, derived_signal_w1_func, use_w1_derived_signal, derived_signal_w2_func, use_w2_derived_signal)
+function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, M, N, gamma_ratio, gamma_settings_derived, derived_signal_func, use_cos_derived_signal, derived_signal_w1_func, use_w1_derived_signal, derived_signal_w2_func, use_w2_derived_signal)
     used_files = {};
     skipped_files = struct('file_path', {}, 'reason', {});
     per_file = struct('file_path', {}, 'window_start_abs', {}, 'window_end_abs', {}, ...
@@ -373,7 +416,11 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
         end
 
         phase_for_derived_signal = select_phase_for_target_agent(point_data, phase_agent_ids, target_agent_id);
-        sin_phi2_a2 = derived_signal_func(phase_for_derived_signal, point_data.a2_normalized);
+        if use_cos_derived_signal && isa(derived_signal_func, 'function_handle')
+            sin_phi2_a2 = derived_signal_func(phase_for_derived_signal, point_data.a2_normalized);
+        else
+            sin_phi2_a2 = [];
+        end
         if use_w1_derived_signal && isa(derived_signal_w1_func, 'function_handle')
             sin_phi2_a2_w1 = derived_signal_w1_func(phase_for_derived_signal, point_data.a2_normalized);
         else
@@ -387,7 +434,9 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
 
         phi1_all = [phi1_all; point_data.phase1(:)]; %#ok<AGROW>
         phi2_all = [phi2_all; point_data.phase2(:)]; %#ok<AGROW>
-        sin_phi2_a2_all = [sin_phi2_a2_all; sin_phi2_a2(:)]; %#ok<AGROW>
+        if use_cos_derived_signal
+            sin_phi2_a2_all = [sin_phi2_a2_all; sin_phi2_a2(:)]; %#ok<AGROW>
+        end
         if use_w1_derived_signal
             sin_phi2_a2_w1_all = [sin_phi2_a2_w1_all; sin_phi2_a2_w1(:)]; %#ok<AGROW>
         end
@@ -403,35 +452,17 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
         error('No valid files were available to overlay for agent %d.', target_agent_id);
     end
 
-    fourier_fit_sin_phi2_a2 = fitDoubleFourierScatter( ...
-        phi1_all, phi2_all, sin_phi2_a2_all, M, N, ...
-        s_label, 'mixed-only', gamma_ratio, gamma_settings_derived);
-    fourier_fit_sin_phi2_a2.M = M;
-    fourier_fit_sin_phi2_a2.N = N;
-    fourier_fit_sin_phi2_a2.fit_mode = 'unweighted';
-    fourier_fit_sin_phi2_a2.gamma_ratio = gamma_ratio;
+    fourier_fit_sin_phi2_a2 = fit_fourier_if_enabled( ...
+        use_cos_derived_signal, sin_phi2_a2_all, ...
+        phi1_all, phi2_all, M, N, s_label, gamma_ratio, gamma_settings_derived);
 
-    fourier_fit_sin_phi2_a2_w1 = struct();
-    if use_w1_derived_signal && ~isempty(sin_phi2_a2_w1_all)
-        fourier_fit_sin_phi2_a2_w1 = fitDoubleFourierScatter( ...
-            phi1_all, phi2_all, sin_phi2_a2_w1_all, M, N, ...
-            s_label, 'mixed-only', gamma_ratio, gamma_settings_derived);
-        fourier_fit_sin_phi2_a2_w1.M = M;
-        fourier_fit_sin_phi2_a2_w1.N = N;
-        fourier_fit_sin_phi2_a2_w1.fit_mode = 'unweighted';
-        fourier_fit_sin_phi2_a2_w1.gamma_ratio = gamma_ratio;
-    end
+    fourier_fit_sin_phi2_a2_w1 = fit_fourier_if_enabled( ...
+        use_w1_derived_signal, sin_phi2_a2_w1_all, ...
+        phi1_all, phi2_all, M, N, s_label, gamma_ratio, gamma_settings_derived);
 
-    fourier_fit_sin_phi2_a2_w2 = struct();
-    if use_w2_derived_signal && ~isempty(sin_phi2_a2_w2_all)
-        fourier_fit_sin_phi2_a2_w2 = fitDoubleFourierScatter( ...
-            phi1_all, phi2_all, sin_phi2_a2_w2_all, M, N, ...
-            s_label, 'mixed-only', gamma_ratio, gamma_settings_derived);
-        fourier_fit_sin_phi2_a2_w2.M = M;
-        fourier_fit_sin_phi2_a2_w2.N = N;
-        fourier_fit_sin_phi2_a2_w2.fit_mode = 'unweighted';
-        fourier_fit_sin_phi2_a2_w2.gamma_ratio = gamma_ratio;
-    end
+    fourier_fit_sin_phi2_a2_w2 = fit_fourier_if_enabled( ...
+        use_w2_derived_signal, sin_phi2_a2_w2_all, ...
+        phi1_all, phi2_all, M, N, s_label, gamma_ratio, gamma_settings_derived);
 
     agent_out = struct();
     agent_out.agent_id = target_agent_id;
@@ -528,9 +559,12 @@ function true_gamma = compute_true_gamma_from_agent_analysis(agent_analysis, pha
     true_gamma.figure = [];
 end
 
-function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_gain, use_w1, w1_model, use_w2, w2_model, base_mode_label)
-    if nargin < 6 || isempty(base_mode_label)
+function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_gain, use_cos, use_w1, w1_model, use_w2, w2_model, base_mode_label, enable_save_figure)
+    if nargin < 7 || isempty(base_mode_label)
         base_mode_label = 'sin';
+    end
+    if nargin < 8 || isempty(enable_save_figure)
+        enable_save_figure = false;
     end
 
     phase_grid = linspace(-pi, pi, 801);
@@ -540,7 +574,7 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     power_summary = struct( ...
         'definition', '(1/(2*pi))*integral_{-pi}^{pi} Z(phi)^2 dphi', ...
         'grid_count', numel(phase_grid), ...
-        'cos', struct('available', true, 'power', power_cos), ...
+        'cos', struct('available', false, 'power', NaN), ...
         'w1', struct('available', false, 'power', NaN), ...
         'w2', struct('available', false, 'power', NaN), ...
         'ratio_w1_to_cos', NaN, ...
@@ -549,16 +583,26 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     fig_handle = figure('Color', 'w', 'Name', 'phase sensitivity (overlay)');
     ax = axes('Parent', fig_handle);
     hold(ax, 'on');
+    y_values = [];
+    y_margin_scale = 1.10;
 
-    plot(ax, phase_grid, z_cos, 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('%s', base_mode_label));
+    if use_cos
+        power_summary.cos.available = true;
+        power_summary.cos.power = power_cos;
+        y_values = [y_values; z_cos(:)]; %#ok<AGROW>
+        plot(ax, phase_grid, z_cos, 'LineWidth', 1.8, ...
+            'DisplayName', sprintf('%s', base_mode_label));
+    end
 
     if use_w1 && isstruct(w1_model) && w1_model.available
         z_w1 = control_gain * evaluate_exported_w1(phase_grid, w1_model);
         power_w1 = trapz(phase_grid, z_w1 .^ 2) / (2 * pi);
         power_summary.w1.available = true;
         power_summary.w1.power = power_w1;
-        power_summary.ratio_w1_to_cos = power_w1 / max(power_cos, eps);
+        if power_summary.cos.available
+            power_summary.ratio_w1_to_cos = power_w1 / max(power_cos, eps);
+        end
+        y_values = [y_values; z_w1(:)]; %#ok<AGROW>
         plot(ax, phase_grid, z_w1, 'LineWidth', 1.8, ...
             'DisplayName', 'W1');
     end
@@ -568,7 +612,10 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
         power_w2 = trapz(phase_grid, z_w2 .^ 2) / (2 * pi);
         power_summary.w2.available = true;
         power_summary.w2.power = power_w2;
-        power_summary.ratio_w2_to_cos = power_w2 / max(power_cos, eps);
+        if power_summary.cos.available
+            power_summary.ratio_w2_to_cos = power_w2 / max(power_cos, eps);
+        end
+        y_values = [y_values; z_w2(:)]; %#ok<AGROW>
         plot(ax, phase_grid, z_w2, 'LineWidth', 1.8, ...
             'DisplayName', 'W2');
     end
@@ -582,15 +629,33 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     xlim(ax, [-pi, pi]);
     xticks(ax, [-pi, -pi/2, 0, pi/2, pi]);
     xticklabels(ax, {'$$-\pi$$', '$$-\pi/2$$', '0', '$$\pi/2$$', '$$\pi$$'});
+
+    % Keep 0 at vertical center and add a small display margin.
+    y_values = y_values(isfinite(y_values));
+    if ~isempty(y_values)
+        y_abs_max = max(abs(y_values));
+        if y_abs_max <= 0
+            y_abs_max = 1;
+        end
+        y_abs_max = y_abs_max * y_margin_scale;
+        ylim(ax, [-y_abs_max, y_abs_max]);
+    end
+
     legend(ax, 'Location', 'best');
     ax.XLabel.Interpreter = 'latex';
     ax.YLabel.Interpreter = 'latex';
     ax.TickLabelInterpreter = 'latex';
     figure(fig_handle);
     tuneFigure;
-    %saveFigure;
+    if enable_save_figure
+        saveFigure;
+    end
 
-    fprintf('[INFO] Phase-sensitivity power comparison: cos=%.12f\n', power_summary.cos.power);
+    if power_summary.cos.available
+        fprintf('[INFO] Phase-sensitivity power comparison: cos=%.12f\n', power_summary.cos.power);
+    else
+        fprintf('[INFO] Phase-sensitivity power comparison: cos disabled.\n');
+    end
     if power_summary.w1.available
         fprintf('[INFO]   W1=%.12f (W1/cos=%.12f)\n', power_summary.w1.power, power_summary.ratio_w1_to_cos);
     else
@@ -603,7 +668,10 @@ function [fig_handle, power_summary] = plot_phase_sensitivity_overlay(control_ga
     end
 end
 
-function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, true_gamma_w2)
+function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, true_gamma_w2, enable_save_figure)
+    if nargin < 4 || isempty(enable_save_figure)
+        enable_save_figure = false;
+    end
     gamma_list = {true_gamma_cos, true_gamma_w1, true_gamma_w2};
     fig_handle = [];
 
@@ -646,13 +714,33 @@ function fig_handle = plot_true_gamma_overlay(true_gamma_cos, true_gamma_w1, tru
     xlim(ax, [-pi, pi]);
     xticks(ax, [-pi, -pi/2, 0, pi/2, pi]);
     xticklabels(ax, {'$$-\pi$$', '$$-\pi/2$$', '0', '$$\pi/2$$', '$$\pi$$'});
+
+    % Keep 0 at the vertical center and add a small display margin.
+    y_values = [];
+    y_margin_scale = 1.10;
+    for idx = active_idx
+        gamma_item = gamma_list{idx};
+        y_values = [y_values; gamma_item.gamma_true(:)]; %#ok<AGROW>
+    end
+    y_values = y_values(isfinite(y_values));
+    if ~isempty(y_values)
+        y_abs_max = max(abs(y_values));
+        if y_abs_max <= 0
+            y_abs_max = 1;
+        end
+        y_abs_max = y_abs_max * y_margin_scale;
+        ylim(ax, [-y_abs_max, y_abs_max]);
+    end
+
     legend(ax, 'Location', 'best');
     ax.XLabel.Interpreter = 'latex';
     ax.YLabel.Interpreter = 'latex';
     ax.TickLabelInterpreter = 'latex';
     figure(fig_handle);
     tuneFigure;
-    %saveFigure;
+    if enable_save_figure
+        saveFigure;
+    end
 end
 
 function [psi_grid, gamma_values] = extract_gamma_curve(gamma_resonance, mode)
@@ -849,209 +937,67 @@ function xClipped = clip_values(x, lower_bound, upper_bound)
 end
 
 function model = load_exported_w1_model(dirpath)
-    model = struct( ...
-        'available', false, ...
-        'reason', '', ...
-        'source_file', '', ...
-        'source_format', '', ...
-        'signal_role', '', ...
-        'order', 0, ...
-        'a0', 0, ...
-        'a', [], ...
-        'b', []);
-
-    search_dirs = {dirpath, fullfile(dirpath, 'gamma_exports')};
-    [mat_path, mat_found] = find_latest_file(search_dirs, 'W_fourier_fit_params_*.mat');
-    if mat_found
-        model = load_w1_from_mat(mat_path);
-        if model.available
-            return;
-        end
-    end
-
-    [csv_path, csv_found] = find_latest_file(search_dirs, 'W1_fourier_fit_params_agent*_*.csv');
-    if csv_found
-        model = load_w1_from_csv(csv_path);
-        if model.available
-            return;
-        end
-    end
-
-    if ~model.available && isempty(model.reason)
-        model.reason = 'No exported W1 parameter file was found.';
-    end
+    model = load_exported_w_model(dirpath, 1);
 end
 
 function y = evaluate_exported_w1(phase, model)
-    if ~isstruct(model) || ~isfield(model, 'available') || ~model.available
-        error('evaluate_exported_w1 requires a valid loaded model.');
-    end
-
-    y = model.a0 * ones(size(phase));
-    for k = 1:model.order
-        y = y + model.a(k) * cos(k * phase) + model.b(k) * sin(k * phase);
-    end
-end
-
-function model = load_w1_from_mat(mat_path)
-    model = struct( ...
-        'available', false, ...
-        'reason', '', ...
-        'source_file', mat_path, ...
-        'source_format', 'mat', ...
-        'signal_role', '', ...
-        'order', 0, ...
-        'a0', 0, ...
-        'a', [], ...
-        'b', []);
-
-    try
-        S = load(mat_path);
-    catch ME
-        model.reason = sprintf('Could not load MAT file: %s', ME.message);
-        return;
-    end
-
-    if ~isfield(S, 'fourier_fit_export') || ~isstruct(S.fourier_fit_export)
-        model.reason = 'MAT file does not contain fourier_fit_export.';
-        return;
-    end
-
-    fit_export = S.fourier_fit_export;
-    if ~isfield(fit_export, 'fit_w1') || ~isstruct(fit_export.fit_w1)
-        model.reason = 'MAT file does not contain fit_w1.';
-        return;
-    end
-
-    fit_w1 = fit_export.fit_w1;
-    required_fields = {'order', 'a0', 'a', 'b'};
-    if ~all(isfield(fit_w1, required_fields))
-        model.reason = 'fit_w1 does not contain required Fourier fields.';
-        return;
-    end
-
-    order = max(0, round(double(fit_w1.order)));
-    a = reshape(double(fit_w1.a), [], 1);
-    b = reshape(double(fit_w1.b), [], 1);
-    if numel(a) < order || numel(b) < order
-        model.reason = 'fit_w1 Fourier vectors are shorter than the declared order.';
-        return;
-    end
-
-    model.available = true;
-    model.reason = '';
-    if isfield(fit_export, 'signal_role')
-        model.signal_role = fit_export.signal_role;
-    end
-    model.order = order;
-    model.a0 = double(fit_w1.a0);
-    model.a = a(1:order);
-    model.b = b(1:order);
-end
-
-function model = load_w1_from_csv(csv_path)
-    model = struct( ...
-        'available', false, ...
-        'reason', '', ...
-        'source_file', csv_path, ...
-        'source_format', 'csv', ...
-        'signal_role', '', ...
-        'order', 0, ...
-        'a0', 0, ...
-        'a', [], ...
-        'b', []);
-
-    try
-        T = readtable(csv_path);
-    catch ME
-        model.reason = sprintf('Could not read W1 CSV file: %s', ME.message);
-        return;
-    end
-
-    required_columns = {'k', 'a_k', 'b_k'};
-    if ~all(ismember(required_columns, T.Properties.VariableNames))
-        model.reason = 'W1 CSV must contain columns: k, a_k, b_k.';
-        return;
-    end
-
-    k = double(T.k(:));
-    a_k = double(T.a_k(:));
-    b_k = double(T.b_k(:));
-    valid = isfinite(k) & isfinite(a_k) & isfinite(b_k) & (k >= 0) & (abs(k - round(k)) < eps(10));
-    k = round(k(valid));
-    a_k = a_k(valid);
-    b_k = b_k(valid);
-
-    if isempty(k)
-        model.reason = 'W1 CSV has no valid Fourier rows.';
-        return;
-    end
-
-    order = max(k);
-    a = zeros(order, 1);
-    b = zeros(order, 1);
-
-    idx0 = find(k == 0, 1, 'first');
-    if isempty(idx0)
-        model.reason = 'W1 CSV is missing k=0 (a0) row.';
-        return;
-    end
-    a0 = a_k(idx0);
-
-    for n = 1:order
-        idxn = find(k == n, 1, 'first');
-        if isempty(idxn)
-            continue;
-        end
-        a(n) = a_k(idxn);
-        b(n) = b_k(idxn);
-    end
-
-    model.available = true;
-    model.reason = '';
-    model.order = order;
-    model.a0 = a0;
-    model.a = a;
-    model.b = b;
+    y = evaluate_exported_w(phase, model, 1);
 end
 
 function model = load_exported_w2_model(dirpath)
-    model = struct( ...
-        'available', false, ...
-        'reason', '', ...
-        'source_file', '', ...
-        'source_format', '', ...
-        'signal_role', '', ...
-        'order', 0, ...
-        'a0', 0, ...
-        'a', [], ...
-        'b', []);
+    model = load_exported_w_model(dirpath, 2);
+end
 
+function y = evaluate_exported_w2(phase, model)
+    y = evaluate_exported_w(phase, model, 2);
+end
+
+function fit_result = fit_fourier_if_enabled(is_enabled, values, phi1_all, phi2_all, M, N, s_label, gamma_ratio, gamma_settings_derived)
+    fit_result = struct();
+    if ~is_enabled || isempty(values)
+        return;
+    end
+
+    fit_result = fitDoubleFourierScatter( ...
+        phi1_all, phi2_all, values, M, N, ...
+        s_label, 'mixed-only', gamma_ratio, gamma_settings_derived);
+    fit_result.M = M;
+    fit_result.N = N;
+    fit_result.fit_mode = 'unweighted';
+    fit_result.gamma_ratio = gamma_ratio;
+end
+
+function model = load_exported_w_model(dirpath, signal_index)
+    model = create_empty_w_model('', '');
+
+    signal_label = sprintf('W%d', signal_index);
     search_dirs = {dirpath, fullfile(dirpath, 'gamma_exports')};
+
     [mat_path, mat_found] = find_latest_file(search_dirs, 'W_fourier_fit_params_*.mat');
     if mat_found
-        model = load_w2_from_mat(mat_path);
+        model = load_w_from_mat(mat_path, signal_index);
         if model.available
             return;
         end
     end
 
-    [csv_path, csv_found] = find_latest_file(search_dirs, 'W2_fourier_fit_params_agent*_*.csv');
+    csv_pattern = sprintf('W%d_fourier_fit_params_agent*_*.csv', signal_index);
+    [csv_path, csv_found] = find_latest_file(search_dirs, csv_pattern);
     if csv_found
-        model = load_w2_from_csv(csv_path);
+        model = load_w_from_csv(csv_path, signal_index);
         if model.available
             return;
         end
     end
 
     if ~model.available && isempty(model.reason)
-        model.reason = 'No exported W2 parameter file was found.';
+        model.reason = sprintf('No exported %s parameter file was found.', signal_label);
     end
 end
 
-function y = evaluate_exported_w2(phase, model)
+function y = evaluate_exported_w(phase, model, signal_index)
     if ~isstruct(model) || ~isfield(model, 'available') || ~model.available
-        error('evaluate_exported_w2 requires a valid loaded model.');
+        error('evaluate_exported_w%d requires a valid loaded model.', signal_index);
     end
 
     y = model.a0 * ones(size(phase));
@@ -1060,17 +1006,11 @@ function y = evaluate_exported_w2(phase, model)
     end
 end
 
-function model = load_w2_from_mat(mat_path)
-    model = struct( ...
-        'available', false, ...
-        'reason', '', ...
-        'source_file', mat_path, ...
-        'source_format', 'mat', ...
-        'signal_role', '', ...
-        'order', 0, ...
-        'a0', 0, ...
-        'a', [], ...
-        'b', []);
+function model = load_w_from_mat(mat_path, signal_index)
+    model = create_empty_w_model(mat_path, 'mat');
+
+    signal_label = sprintf('W%d', signal_index);
+    fit_field_name = sprintf('fit_w%d', signal_index);
 
     try
         S = load(mat_path);
@@ -1085,23 +1025,23 @@ function model = load_w2_from_mat(mat_path)
     end
 
     fit_export = S.fourier_fit_export;
-    if ~isfield(fit_export, 'fit_w2') || ~isstruct(fit_export.fit_w2)
-        model.reason = 'MAT file does not contain fit_w2.';
+    if ~isfield(fit_export, fit_field_name) || ~isstruct(fit_export.(fit_field_name))
+        model.reason = sprintf('MAT file does not contain %s.', fit_field_name);
         return;
     end
 
-    fit_w2 = fit_export.fit_w2;
+    fit_w = fit_export.(fit_field_name);
     required_fields = {'order', 'a0', 'a', 'b'};
-    if ~all(isfield(fit_w2, required_fields))
-        model.reason = 'fit_w2 does not contain required Fourier fields.';
+    if ~all(isfield(fit_w, required_fields))
+        model.reason = sprintf('%s does not contain required Fourier fields.', fit_field_name);
         return;
     end
 
-    order = max(0, round(double(fit_w2.order)));
-    a = reshape(double(fit_w2.a), [], 1);
-    b = reshape(double(fit_w2.b), [], 1);
+    order = max(0, round(double(fit_w.order)));
+    a = reshape(double(fit_w.a), [], 1);
+    b = reshape(double(fit_w.b), [], 1);
     if numel(a) < order || numel(b) < order
-        model.reason = 'fit_w2 Fourier vectors are shorter than the declared order.';
+        model.reason = sprintf('%s Fourier vectors are shorter than the declared order.', fit_field_name);
         return;
     end
 
@@ -1111,33 +1051,30 @@ function model = load_w2_from_mat(mat_path)
         model.signal_role = fit_export.signal_role;
     end
     model.order = order;
-    model.a0 = double(fit_w2.a0);
+    model.a0 = double(fit_w.a0);
     model.a = a(1:order);
     model.b = b(1:order);
+
+    if isempty(model.signal_role)
+        model.signal_role = signal_label;
+    end
 end
 
-function model = load_w2_from_csv(csv_path)
-    model = struct( ...
-        'available', false, ...
-        'reason', '', ...
-        'source_file', csv_path, ...
-        'source_format', 'csv', ...
-        'signal_role', '', ...
-        'order', 0, ...
-        'a0', 0, ...
-        'a', [], ...
-        'b', []);
+function model = load_w_from_csv(csv_path, signal_index)
+    model = create_empty_w_model(csv_path, 'csv');
+
+    signal_label = sprintf('W%d', signal_index);
 
     try
         T = readtable(csv_path);
     catch ME
-        model.reason = sprintf('Could not read W2 CSV file: %s', ME.message);
+        model.reason = sprintf('Could not read %s CSV file: %s', signal_label, ME.message);
         return;
     end
 
     required_columns = {'k', 'a_k', 'b_k'};
     if ~all(ismember(required_columns, T.Properties.VariableNames))
-        model.reason = 'W2 CSV must contain columns: k, a_k, b_k.';
+        model.reason = sprintf('%s CSV must contain columns: k, a_k, b_k.', signal_label);
         return;
     end
 
@@ -1150,7 +1087,7 @@ function model = load_w2_from_csv(csv_path)
     b_k = b_k(valid);
 
     if isempty(k)
-        model.reason = 'W2 CSV has no valid Fourier rows.';
+        model.reason = sprintf('%s CSV has no valid Fourier rows.', signal_label);
         return;
     end
 
@@ -1160,7 +1097,7 @@ function model = load_w2_from_csv(csv_path)
 
     idx0 = find(k == 0, 1, 'first');
     if isempty(idx0)
-        model.reason = 'W2 CSV is missing k=0 (a0) row.';
+        model.reason = sprintf('%s CSV is missing k=0 (a0) row.', signal_label);
         return;
     end
     a0 = a_k(idx0);
@@ -1176,10 +1113,24 @@ function model = load_w2_from_csv(csv_path)
 
     model.available = true;
     model.reason = '';
+    model.signal_role = signal_label;
     model.order = order;
     model.a0 = a0;
     model.a = a;
     model.b = b;
+end
+
+function model = create_empty_w_model(source_file, source_format)
+    model = struct( ...
+        'available', false, ...
+        'reason', '', ...
+        'source_file', source_file, ...
+        'source_format', source_format, ...
+        'signal_role', '', ...
+        'order', 0, ...
+        'a0', 0, ...
+        'a', [], ...
+        'b', []);
 end
 
 function [file_path, is_found] = find_latest_file(search_dirs, pattern)
