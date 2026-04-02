@@ -297,7 +297,7 @@ if export_fourier_params
     save(mat_path_fit, 'fourier_fit_export');
 end
 
-reference_cos = cos(phi_line + pi - 0.6 * pi);
+reference_cos = cos(phi_line + 0.6 * pi);
 
 % z(phi) candidates for Gamma(psi):
 % 1) power-normalized W at adopted psi_+^*
@@ -390,51 +390,53 @@ if n_w_tiles > 0
     if processing_modes.s1
         nexttile;
         plot(phi_line, w1_values, 'LineWidth', 1.8, ...
-            'DisplayName', sprintf('W_1, \\psi_+=%.6g', psi_plus_s1));
+            'DisplayName', sprintf('$$W_1, \\psi_+=%.6g$$', psi_plus_s1));
         hold on;
         plot(phi_line, fourier_fit_w1.y_fit, '-.', 'LineWidth', 1.6, ...
-            'DisplayName', sprintf('Fourier fit W_1 (N=%d, \\psi_+=%.6g)', fit_order_s1, psi_plus_s1));
+            'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_1\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s1, psi_plus_s1));
         if has_symmetric_peak_s1
             plot(phi_line, w1_values_alt, 'LineWidth', 1.4, ...
-                'DisplayName', sprintf('W_1, \\psi_+=%.6g', psi_plus_s1_alt));
+                'DisplayName', sprintf('$$W_1, \\psi_+=%.6g$$', psi_plus_s1_alt));
             plot(phi_line, fourier_fit_w1_alt.y_fit, '-.', 'LineWidth', 1.2, ...
-                'DisplayName', sprintf('Fourier fit W_1 (N=%d, \\psi_+=%.6g)', fit_order_s1, psi_plus_s1_alt));
+                'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_1\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s1, psi_plus_s1_alt));
         end
-        plot(phi_line, reference_cos, '--', 'LineWidth', 1.6, 'DisplayName', 'cos(\phi+\pi-0.6\pi)');
+        plot(phi_line, reference_cos, '--', 'LineWidth', 1.6, 'DisplayName', '$$\\cos(\\phi+\\pi-0.6\\pi)$$');
         grid on;
         box on;
         xlim([-pi, pi]);
         xticks([-pi, -pi/2, 0, pi/2, pi]);
         xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-        xlabel('\phi');
+        xlabel('$$\phi$$');
         ylabel('value');
-        legend('Location', 'best');
-        title(sprintf('s_1: W_1(\\phi) vs cos(\\phi+\\pi-0.6\\pi), \\psi_+^* = %.6g rad', psi_plus_s1));
+        add_y_margin_from_lines(gca, 0.12);
+        show_legend_if_multiple(gca);
+        title(sprintf('$$s_1:\ W_1(\\phi)\ \mathrm{vs}\ \cos(\\phi+\\pi-0.6\\pi),\\ \psi_+^*=%.6g\ \mathrm{rad}$$', psi_plus_s1));
     end
 
     if processing_modes.s2
         nexttile;
         plot(phi_line, w2_values, 'LineWidth', 1.8, ...
-            'DisplayName', sprintf('W_2, \\psi_+=%.6g', psi_plus_s2));
+            'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
         hold on;
-        plot(phi_line, fourier_fit_w2.y_fit, '-.', 'LineWidth', 1.6, ...
-            'DisplayName', sprintf('Fourier fit W_2 (N=%d, \\psi_+=%.6g)', fit_order_s2, psi_plus_s2));
+        %plot(phi_line, fourier_fit_w2.y_fit, '-.', 'LineWidth', 1.6, ...
+        %    'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_2\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s2, psi_plus_s2));
         if has_symmetric_peak_s2
             plot(phi_line, w2_values_alt, 'LineWidth', 1.4, ...
-                'DisplayName', sprintf('W_2, \\psi_+=%.6g', psi_plus_s2_alt));
-            plot(phi_line, fourier_fit_w2_alt.y_fit, '-.', 'LineWidth', 1.2, ...
-                'DisplayName', sprintf('Fourier fit W_2 (N=%d, \\psi_+=%.6g)', fit_order_s2, psi_plus_s2_alt));
+                'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_2^*$$');
+            %plot(phi_line, fourier_fit_w2_alt.y_fit, '-.', 'LineWidth', 1.2, ...
+            %    'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_2\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s2, psi_plus_s2_alt));
         end
-        plot(phi_line, reference_cos, '--', 'LineWidth', 1.6, 'DisplayName', 'cos(\phi+\pi-0.6\pi)');
+        plot(phi_line, reference_cos, 'LineWidth', 1.6, 'DisplayName', '$$\sin(\theta+\tau)$$');
         grid on;
         box on;
         xlim([-pi, pi]);
         xticks([-pi, -pi/2, 0, pi/2, pi]);
         xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-        xlabel('\phi');
-        ylabel('value');
-        legend('Location', 'best');
-        title(sprintf('s_2: W_2(\\phi) vs cos(\\phi+\\pi-0.6\\pi), \\psi_+^* = %.6g rad', psi_plus_s2));
+        xlabel('$$\theta$$');
+        ylabel('$$z(\theta)$$');
+        add_y_margin_from_lines(gca, 0.12);
+        show_legend_if_multiple(gca);
+        %title(sprintf('$$s_2:\ W_2(\\phi)\ \mathrm{vs}\ \cos(\\phi+\\pi-0.6\\pi),\\ \psi_+^*=%.6g\ \mathrm{rad}$$', psi_plus_s2));
     end
     tuneFigure;
 end
@@ -442,17 +444,17 @@ end
 figure('Color', 'w');
 hold on;
 if processing_modes.s1
-    plot(psi_scan_values, R1_values, 'LineWidth', 1.8, 'DisplayName', 'R_1(\psi_+) from W_1');
-    plot(psi_plus_s1, R1_max, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', 'R_1 max');
+    plot(psi_scan_values, R1_values, 'LineWidth', 1.8, 'DisplayName', '$$R_1(\psi_+)\ \mathrm{from}\ W_1$$');
+    plot(psi_plus_s1, R1_max, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', '$$R_1\ \max$$');
     if has_symmetric_peak_s1
-        plot(psi_plus_s1_alt, R1_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', 'R_1 symmetric max');
+        plot(psi_plus_s1_alt, R1_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', '$$R_1\ \mathrm{symmetric\ max}$$');
     end
 end
 if processing_modes.s2
-    plot(psi_scan_values, R2_values, 'LineWidth', 1.8, 'DisplayName', 'R_2(\psi_+) from W_2');
-    plot(psi_plus_s2, R2_max, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', 'R_2 max');
+    plot(psi_scan_values, R2_values, 'LineWidth', 1.8, 'DisplayName', '$$R_2(\psi_+)\ \mathrm{from}\ W_2$$');
+    plot(psi_plus_s2, R2_max, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', '$$R_2\ \max$$');
     if has_symmetric_peak_s2
-        plot(psi_plus_s2_alt, R2_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', 'R_2 symmetric max');
+        plot(psi_plus_s2_alt, R2_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, 'DisplayName', '$$R_2\ \mathrm{symmetric\ max}$$');
     end
 end
 grid on;
@@ -460,101 +462,105 @@ box on;
 xlim([psi_scan_min, psi_scan_max]);
 xticks([-pi, -pi/2, 0, pi/2, pi]);
 xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-xlabel('\psi_+');
-ylabel('R(\psi_+)');
-legend('Location', 'best');
-title('R(\psi_+) = \int_0^{2\pi} W(\phi)^2 d\phi');
+xlabel('$$\psi^*$$');
+ylabel('$$\int_0^{2\pi} W(\theta)^2\,d\theta$$');
+show_legend_if_multiple(gca);
 tuneFigure;
 
 if processing_modes.s1
     figure('Color', 'w');
     plot(psi_scan_values, Gamma1_from_w, 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('z_1(\\phi)=W_1(\\phi;\\psi_+=%.6g)', psi_plus_s1));
+        'DisplayName', sprintf('$$z_1(\\phi)=W_1(\\phi;\\psi_+=%.6g)$$', psi_plus_s1));
     hold on;
     if has_symmetric_peak_s1
         plot(psi_scan_values, Gamma1_from_w_alt, 'LineWidth', 1.4, ...
-            'DisplayName', sprintf('z_1(\\phi)=W_1(\\phi;\\psi_+=%.6g)', psi_plus_s1_alt));
+            'DisplayName', sprintf('$$z_1(\\phi)=W_1(\\phi;\\psi_+=%.6g)$$', psi_plus_s1_alt));
     end
     plot(psi_scan_values, Gamma1_from_sine, '--', 'LineWidth', 1.8, ...
-        'DisplayName', 'z(\phi)=cos(\phi+\pi-0.6\pi)');
+        'DisplayName', '$$z(\phi)=\cos(\phi+\pi-0.6\pi)$$');
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
     xticks([-pi, -pi/2, 0, pi/2, pi]);
     xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlabel('\psi');
-    ylabel('\Gamma_1(\psi)');
-    legend('Location', 'best');
-    title('\Gamma_1(\psi) = (1/(2\pi))\int_0^{2\pi} z(\phi)s_1(\phi,\phi-\psi)d\phi');
+    xlabel('$$\psi$$');
+    ylabel('$$\Gamma_1(\psi)$$');
+    show_legend_if_multiple(gca);
+    title('$$\Gamma_1(\psi) = \frac{1}{2\pi}\int_0^{2\pi} z(\phi)s_1(\phi,\phi-\psi)\,d\phi$$');
     tuneFigure;
 end
 
 if processing_modes.s2
     figure('Color', 'w');
     plot(psi_scan_values, Gamma2_from_w, 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('z_2(\\phi)=W_2(\\phi;\\psi_+=%.6g)', psi_plus_s2));
+        'DisplayName', sprintf('$$z_2(\\phi)=W_2(\\phi;\\psi_+=%.6g)$$', psi_plus_s2));
     hold on;
     if has_symmetric_peak_s2
         plot(psi_scan_values, Gamma2_from_w_alt, 'LineWidth', 1.4, ...
-            'DisplayName', sprintf('z_2(\\phi)=W_2(\\phi;\\psi_+=%.6g)', psi_plus_s2_alt));
+            'DisplayName', sprintf('$$z_2(\\phi)=W_2(\\phi;\\psi_+=%.6g)$$', psi_plus_s2_alt));
     end
     plot(psi_scan_values, Gamma2_from_sine, '--', 'LineWidth', 1.8, ...
-        'DisplayName', 'z(\phi)=cos(\phi+\pi-0.6\pi)');
+        'DisplayName', '$$z(\phi)=\cos(\phi+\pi-0.6\pi)$$');
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
     xticks([-pi, -pi/2, 0, pi/2, pi]);
     xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlabel('\psi');
-    ylabel('\Gamma_2(\psi)');
-    legend('Location', 'best');
-    title('\Gamma_2(\psi) = (1/(2\pi))\int_0^{2\pi} z(\phi)s_2(\phi-\psi,\phi)d\phi');
+    xlabel('$$\psi$$');
+    ylabel('$$\Gamma_2(\psi)$$');
+    show_legend_if_multiple(gca);
+    title('$$\Gamma_2(\psi) = \frac{1}{2\pi}\int_0^{2\pi} z(\phi)s_2(\phi-\psi,\phi)\,d\phi$$');
     tuneFigure;
 end
 
 if processing_modes.s1
     figure('Color', 'w');
     plot(psi_scan_values, Gamma1_odd_from_w, 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('\\Gamma_1(\\psi)-\\Gamma_1(-\\psi), z_1=W_1(\\psi_+=%.6g)', psi_plus_s1));
+        'DisplayName', sprintf('$$\\Gamma_1(\\psi)-\\Gamma_1(-\\psi),\ z_1=W_1(\\psi_+=%.6g)$$', psi_plus_s1));
     hold on;
     if has_symmetric_peak_s1
         plot(psi_scan_values, Gamma1_odd_from_w_alt, 'LineWidth', 1.4, ...
-            'DisplayName', sprintf('\\Gamma_1(\\psi)-\\Gamma_1(-\\psi), z_1=W_1(\\psi_+=%.6g)', psi_plus_s1_alt));
+            'DisplayName', sprintf('$$\\Gamma_1(\\psi)-\\Gamma_1(-\\psi),\ z_1=W_1(\\psi_+=%.6g)$$', psi_plus_s1_alt));
     end
     plot(psi_scan_values, Gamma1_odd_from_sine, '--', 'LineWidth', 1.8, ...
-        'DisplayName', '\Gamma_1(\psi)-\Gamma_1(-\psi), z=cos');
+        'DisplayName', '$$\Gamma_1(\psi)-\Gamma_1(-\psi),\ z=\cos$$');
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
     xticks([-pi, -pi/2, 0, pi/2, pi]);
     xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlabel('\psi');
-    ylabel('\Delta\Gamma_1(\psi)');
-    legend('Location', 'best');
-    title('\Delta\Gamma_1(\psi)=\Gamma_1(\psi)-\Gamma_1(-\psi)');
+    xlabel('$$\psi$$');
+    ylabel('$$\Delta\Gamma_1(\psi)$$');
+    show_legend_if_multiple(gca);
+    title('$$\Delta\Gamma_1(\psi)=\Gamma_1(\psi)-\Gamma_1(-\psi)$$');
     tuneFigure;
 end
 
 if processing_modes.s2
     figure('Color', 'w');
     plot(psi_scan_values, Gamma2_odd_from_w, 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('\\Gamma_2(\\psi)-\\Gamma_2(-\\psi), z_2=W_2(\\psi_+=%.6g)', psi_plus_s2));
+        'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
     hold on;
+    gamma2_odd_at_selected = interp1(psi_scan_values, Gamma2_odd_from_w, psi_plus_s2, 'pchip', 'extrap');
+    %plot(psi_plus_s2, gamma2_odd_at_selected, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, ...
+    %    'DisplayName', '$$\psi_+^*\ \mathrm{from\ previous\ plot}$$');
     if has_symmetric_peak_s2
         plot(psi_scan_values, Gamma2_odd_from_w_alt, 'LineWidth', 1.4, ...
-            'DisplayName', sprintf('\\Gamma_2(\\psi)-\\Gamma_2(-\\psi), z_2=W_2(\\psi_+=%.6g)', psi_plus_s2_alt));
+            'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_2^*$$');
+        gamma2_odd_at_selected_alt = interp1(psi_scan_values, Gamma2_odd_from_w_alt, psi_plus_s2_alt, 'pchip', 'extrap');
+        %plot(psi_plus_s2_alt, gamma2_odd_at_selected_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, ...
+        %    'DisplayName', '$$\mathrm{symmetric}\ \psi_+^*\ \mathrm{from\ previous\ plot}$$');
     end
-    plot(psi_scan_values, Gamma2_odd_from_sine, '--', 'LineWidth', 1.8, ...
-        'DisplayName', '\Gamma_2(\psi)-\Gamma_2(-\psi), z=cos');
+    plot(psi_scan_values, Gamma2_odd_from_sine, 'LineWidth', 1.8, ...
+        'DisplayName', '$$\sin(\phi+\tau)$$');
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
     xticks([-pi, -pi/2, 0, pi/2, pi]);
     xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-    xlabel('\psi');
-    ylabel('\Delta\Gamma_2(\psi)');
-    legend('Location', 'best');
-    title('\Delta\Gamma_2(\psi)=\Gamma_2(\psi)-\Gamma_2(-\psi)');
+    xlabel('$$\psi$$');
+    ylabel('$$\dot{\psi}$$');
+    show_legend_if_multiple(gca);
     tuneFigure;
 end
 
@@ -721,6 +727,50 @@ function s_shifted = evaluate_shifted_surface(phi_values, psi_value, coeff, basi
         otherwise
             error('Unsupported orientation: %s', orientation);
     end
+end
+
+function show_legend_if_multiple(ax)
+    if nargin < 1 || isempty(ax)
+        ax = gca;
+    end
+    line_handles = findobj(ax, 'Type', 'line', '-not', 'HandleVisibility', 'off');
+    if numel(line_handles) > 1
+        legend(ax, 'Location', 'best');
+    end
+end
+
+function add_y_margin_from_lines(ax, margin_ratio)
+    if nargin < 1 || isempty(ax)
+        ax = gca;
+    end
+    if nargin < 2 || ~isfinite(margin_ratio) || margin_ratio < 0
+        margin_ratio = 0.10;
+    end
+
+    line_handles = findobj(ax, 'Type', 'line', '-not', 'HandleVisibility', 'off');
+    if isempty(line_handles)
+        return;
+    end
+
+    y_all = [];
+    for k = 1:numel(line_handles)
+        yk = get(line_handles(k), 'YData');
+        y_all = [y_all; yk(:)]; %#ok<AGROW>
+    end
+    y_all = y_all(isfinite(y_all));
+    if isempty(y_all)
+        return;
+    end
+
+    y_min = min(y_all);
+    y_max = max(y_all);
+    y_span = y_max - y_min;
+    if y_span <= 0
+        y_span = max(abs(y_max), 1);
+    end
+
+    y_pad = margin_ratio * y_span;
+    ylim(ax, [y_min - y_pad, y_max + y_pad]);
 end
 
 function fit_data = get_fit_data_for_agent(gamma_export, agent_id, signal_role)
