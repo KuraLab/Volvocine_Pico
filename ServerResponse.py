@@ -22,7 +22,7 @@ PRC_SOURCE_DIR = os.environ.get(
     "PRC_SOURCE_DIR",
     os.path.join("EstimateQ", "Spring3", "255", "gamma_exports")
 )
-PRC_SOURCE_FILE = "prc_snippet_ref_w1.txt"
+PRC_SOURCE_FILE = "prc_snippet_ref_cos.txt"
 
 
 def load_prc_from_directory(source_dir, source_file=PRC_SOURCE_FILE):
