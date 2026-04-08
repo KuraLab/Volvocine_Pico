@@ -439,6 +439,7 @@ if n_w_tiles > 0
         %title(sprintf('$$s_2:\ W_2(\\phi)\ \mathrm{vs}\ \cos(\\phi+\\pi-0.6\\pi),\\ \psi_+^*=%.6g\ \mathrm{rad}$$', psi_plus_s2));
     end
     tuneFigure;
+    %saveFigure;
 end
 
 figure('Color', 'w');
