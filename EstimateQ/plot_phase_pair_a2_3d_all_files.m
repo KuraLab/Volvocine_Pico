@@ -83,6 +83,8 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     enable_save_figure = false;
 
     gamma_ratio = [1 1];
+    %tau = 0.6 * pi;
+    tau = 3.246312408709;
 
     % Ignore legacy weighted-fit arguments if they are still passed.
     if ~isempty(varargin)
@@ -93,10 +95,10 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     % ===== Derived-signal definition: edit here =====
-    derived_signal_expression = '+cos(phase_target + pi - 0.6*pi) .* a2_normalized';
-    derived_signal_display_name = 'cos(phi_target + pi - 0.6*pi) * a2_norm';
-    derived_signal_axis_label = 'cos(phi_target + pi - 0.6*pi) * a2_{norm}';
-    derived_signal_func = @(phase_target, a2_normalized) +5*cos(phase_target + 0.6*pi) .* a2_normalized;
+    derived_signal_expression = sprintf('+sin(phase_target + %.12g) .* a2_normalized', tau);
+    derived_signal_display_name = sprintf('sin(phi_target + %.12g) * a2_norm', tau);
+    derived_signal_axis_label = sprintf('sin(phi_target + %.12g) * a2_{norm}', tau);
+    derived_signal_func = @(phase_target, a2_normalized) +5*sin(phase_target + tau) .* a2_normalized;
 
     sample_dt = 0.01;
     if ~isscalar(analysis_duration_sec) || analysis_duration_sec <= 0 || ~isfinite(analysis_duration_sec)
@@ -185,7 +187,8 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     out.derived_signal = struct( ...
         'expression', derived_signal_expression, ...
         'display_name', derived_signal_display_name, ...
-        'axis_label', derived_signal_axis_label);
+        'axis_label', derived_signal_axis_label, ...
+        'tau', tau);
     out.point_color = point_color;
     out.marker_size = marker_size;
     out.marker_alpha = marker_alpha;
@@ -203,7 +206,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     out.point_cloud = unwrap_scalar_field(primary_analysis.point_cloud);
     out.fourier_fit = unwrap_scalar_field(primary_analysis.fourier_fit);
     out.fourier_fit_sin_phi2_a2 = unwrap_scalar_field(primary_analysis.fourier_fit_sin_phi2_a2);
-    out.gamma_export = export_gamma_results(dirpath, out, derived_signal_func);
+    out.gamma_export = export_gamma_results(dirpath, out, derived_signal_func, tau);
 
     if nargout == 0
         display_phase_agent_mean_omega_summary(out.phase_agent_mean_omega);
@@ -702,7 +705,7 @@ function xClipped = clip_values(x, lower_bound, upper_bound)
     xClipped = min(max(x, lower_bound), upper_bound);
 end
 
-function export_info = export_gamma_results(dirpath, out, phase_sensitivity_func)
+function export_info = export_gamma_results(dirpath, out, phase_sensitivity_func, tau)
     export_info = struct( ...
         'available', false, ...
         'reason', '', ...
@@ -725,7 +728,7 @@ function export_info = export_gamma_results(dirpath, out, phase_sensitivity_func
         save(latest_mat_file, 'gamma_export');
 
         curve_files = write_gamma_curve_exports(export_dir, gamma_export);
-        prc_snippet_files = write_prc_snippet_exports(export_dir, dirpath, phase_sensitivity_func, out.derived_signal.display_name, gamma_export, 10);
+        prc_snippet_files = write_prc_snippet_exports(export_dir, dirpath, phase_sensitivity_func, out.derived_signal.display_name, gamma_export, 10, tau);
 
         export_info.available = true;
         export_info.directory = export_dir;
@@ -741,17 +744,21 @@ function export_info = export_gamma_results(dirpath, out, phase_sensitivity_func
     end
 end
 
-function snippet_files = write_prc_snippet_exports(export_dir, dirpath, ~, ~, ~, max_harmonics)
+function snippet_files = write_prc_snippet_exports(export_dir, dirpath, ~, ~, ~, max_harmonics, tau)
     if nargin < 6 || isempty(max_harmonics)
         max_harmonics = 10;
+    end
+    if nargin < 7 || isempty(tau)
+        tau = 0.6;
     end
 
     snippet_files = struct('label', {}, 'file_path', {});
 
     % Reference snippets matching plot_psi_with_desined_Z first overlay source.
-    delta = 0.6 * pi;
+    delta = tau;
     cos_ref_file = fullfile(export_dir, 'prc_snippet_ref_cos.txt');
-    if write_direct_coeff_prc_snippet(cos_ref_file, cos(delta), -sin(delta), 'cos(phi + 0.6*pi) reference', max_harmonics)
+    source_label = sprintf('sin(phi + %.12g) reference', tau);
+    if write_direct_coeff_prc_snippet(cos_ref_file, sin(delta), cos(delta), source_label, max_harmonics)
         snippet_files(end + 1) = struct('label', 'ref_cos', 'file_path', cos_ref_file); %#ok<AGROW>
     end
 

@@ -4,8 +4,21 @@
 clearvars;
 close all;
 
+script_dir = fileparts(mfilename('fullpath'));
+if isempty(script_dir)
+    script_dir = pwd;
+end
+
+if ~isempty(dir(fullfile(script_dir, 'Spring*')))
+    estimateq_root = script_dir;
+elseif isfolder(fullfile(script_dir, 'EstimateQ'))
+    estimateq_root = fullfile(script_dir, 'EstimateQ');
+else
+    estimateq_root = script_dir;
+end
+
 % --- User settings ---
-mat_path = '';          % '' -> auto-pick newest gamma_export_latest.mat under EstimateQ
+mat_path = '';          % '' -> auto-pick newest gamma_export_latest.mat under estimateq_root
 signal_role = 'a2';     % 'a2' or 'derived'
 n_grid = 121;
 n_phi_line = 401;       % sampling count for 1D W(phi) plot
@@ -13,6 +26,12 @@ n_phi_integral = 2001;  % sampling count for numerical integral over phi
 n_psi_scan = 101;       % sampling count for psi_+ sweep in R(psi_+)
 psi_scan_min = -pi;
 psi_scan_max = pi;
+optimize_sine_tau_for_s2 = true;
+n_tau_scan = 181;
+tau_scan_min = 0;
+tau_scan_max = 2 * pi;
+tau_default_sine = 1.1 * pi;
+tau_progress_print_interval = 10; % print progress every N tau samples
 export_fourier_params = true;  % true -> print/save fitted Fourier parameters
 fourier_param_output_dir = ''; % '' -> use the folder that contains mat_path
 processing_modes = struct('s1', false, 's2', true);  % enable/disable per-s processing
@@ -21,9 +40,16 @@ if ~processing_modes.s1 && ~processing_modes.s2
     error('At least one of processing_modes.s1 or processing_modes.s2 must be true.');
 end
 
+if ~isempty(mat_path) && ~isfile(mat_path)
+    candidate_mat_path = fullfile(estimateq_root, mat_path);
+    if isfile(candidate_mat_path)
+        mat_path = candidate_mat_path;
+    end
+end
+
 if isempty(mat_path)
-    files = dir(fullfile('EstimateQ', 'Spring*', '*', 'gamma_exports', 'gamma_export_latest.mat'));
-    assert(~isempty(files), 'No gamma_export_latest.mat was found under EstimateQ.');
+    files = dir(fullfile(estimateq_root, 'Spring*', '*', 'gamma_exports', 'gamma_export_latest.mat'));
+    assert(~isempty(files), 'No gamma_export_latest.mat was found under estimateq_root.');
     [~, newest_idx] = max([files.datenum]);
     mat_path = fullfile(files(newest_idx).folder, files(newest_idx).name);
 end
@@ -318,18 +344,77 @@ if processing_modes.s2
         z2_candidate_from_w_alt = scale_w2_alt * compute_w_profile(phi_integral, psi_plus_s2_alt, coeff_s2, basis_types_s2, m_order_s2, n_order_s2, 's2');
     end
 end
-z_candidate_sine = cos(phi_integral + pi - 0.6 * pi);
+z_candidate_sine_s1 = cos(phi_integral + pi - 0.6 * pi);
+z_candidate_sine_s2 = [];
+z_candidate_sine_s2_pair = [];
+tau_scan_values = [];
+delta_gamma2_span_vs_tau = [];
+idx_tau_best_s2 = NaN;
+tau_best_s2 = tau_default_sine;
+tau_pair_s2 = wrap_phase_to_interval(tau_best_s2 + pi, tau_scan_min, tau_scan_max);
+delta_gamma2_span_best = NaN;
+delta_gamma2_span_pair = NaN;
+
+if processing_modes.s2
+    if optimize_sine_tau_for_s2
+        tau_scan_values = linspace(tau_scan_min, tau_scan_max, n_tau_scan);
+        delta_gamma2_span_vs_tau = nan(size(tau_scan_values));
+        tau_tic = tic;
+        fprintf('Starting fast tau sweep for DeltaGamma_2 range: %d samples\n', numel(tau_scan_values));
+
+        % Linearity in z: for z(phi)=sin(phi+tau),
+        % Gamma_tau = cos(tau)*Gamma_sin + sin(tau)*Gamma_cos.
+        gamma2_from_sin_base = compute_gamma_curve_from_z(psi_scan_values, phi_integral, sin(phi_integral), ...
+            coeff_s2, basis_types_s2, m_order_s2, n_order_s2, z_mean_s2, 's2');
+        gamma2_from_cos_base = compute_gamma_curve_from_z(psi_scan_values, phi_integral, cos(phi_integral), ...
+            coeff_s2, basis_types_s2, m_order_s2, n_order_s2, z_mean_s2, 's2');
+
+        gamma2_from_sin_base_neg = interp1(psi_scan_values, gamma2_from_sin_base, -psi_scan_values, 'pchip', 'extrap');
+        gamma2_from_cos_base_neg = interp1(psi_scan_values, gamma2_from_cos_base, -psi_scan_values, 'pchip', 'extrap');
+        delta_gamma2_sin_base = gamma2_from_sin_base - gamma2_from_sin_base_neg;
+        delta_gamma2_cos_base = gamma2_from_cos_base - gamma2_from_cos_base_neg;
+
+        fprintf('tau sweep progress: %4d/%4d (%.1f%%), elapsed %.1fs, ETA %.1fs\n', ...
+            0, numel(tau_scan_values), 0, toc(tau_tic), NaN);
+
+        for i_tau = 1:numel(tau_scan_values)
+            tau_i = tau_scan_values(i_tau);
+            delta_gamma2_tau = cos(tau_i) * delta_gamma2_sin_base + sin(tau_i) * delta_gamma2_cos_base;
+            delta_gamma2_span_vs_tau(i_tau) = max(delta_gamma2_tau) - min(delta_gamma2_tau);
+
+            if i_tau == 1 || i_tau == numel(tau_scan_values) || mod(i_tau, max(1, tau_progress_print_interval)) == 0
+                elapsed_sec = toc(tau_tic);
+                frac = i_tau / numel(tau_scan_values);
+                eta_sec = max(elapsed_sec / max(frac, eps) - elapsed_sec, 0);
+                fprintf('tau sweep progress: %4d/%4d (%.1f%%), elapsed %.1fs, ETA %.1fs\n', ...
+                    i_tau, numel(tau_scan_values), 100 * frac, elapsed_sec, eta_sec);
+            end
+        end
+
+        [delta_gamma2_span_best, idx_tau_best_s2] = max(delta_gamma2_span_vs_tau);
+        tau_best_s2 = tau_scan_values(idx_tau_best_s2);
+        tau_pair_s2 = wrap_phase_to_interval(tau_best_s2 + pi, tau_scan_min, tau_scan_max);
+        delta_gamma2_pair = cos(tau_pair_s2) * delta_gamma2_sin_base + sin(tau_pair_s2) * delta_gamma2_cos_base;
+        delta_gamma2_span_pair = max(delta_gamma2_pair) - min(delta_gamma2_pair);
+        fprintf('Completed fast tau sweep in %.1fs\n', toc(tau_tic));
+    end
+    z_candidate_sine_s2 = sin(phi_integral + tau_best_s2);
+    z_candidate_sine_s2_pair = sin(phi_integral + tau_pair_s2);
+end
+reference_sine_s2 = sin(phi_line + tau_best_s2);
+reference_sine_s2_pair = sin(phi_line + tau_pair_s2);
 
 Gamma1_from_w = nan(size(psi_scan_values));
 Gamma1_from_sine = nan(size(psi_scan_values));
 Gamma2_from_w = nan(size(psi_scan_values));
 Gamma2_from_sine = nan(size(psi_scan_values));
+Gamma2_from_sine_pair = nan(size(psi_scan_values));
 Gamma1_from_w_alt = nan(size(psi_scan_values));
 Gamma2_from_w_alt = nan(size(psi_scan_values));
 if processing_modes.s1
     Gamma1_from_w = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z1_candidate_from_w, ...
         coeff_s1, basis_types_s1, m_order_s1, n_order_s1, z_mean_s1, 's1');
-    Gamma1_from_sine = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z_candidate_sine, ...
+    Gamma1_from_sine = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z_candidate_sine_s1, ...
         coeff_s1, basis_types_s1, m_order_s1, n_order_s1, z_mean_s1, 's1');
     if has_symmetric_peak_s1
         Gamma1_from_w_alt = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z1_candidate_from_w_alt, ...
@@ -339,7 +424,9 @@ end
 if processing_modes.s2
     Gamma2_from_w = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z2_candidate_from_w, ...
         coeff_s2, basis_types_s2, m_order_s2, n_order_s2, z_mean_s2, 's2');
-    Gamma2_from_sine = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z_candidate_sine, ...
+    Gamma2_from_sine = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z_candidate_sine_s2, ...
+        coeff_s2, basis_types_s2, m_order_s2, n_order_s2, z_mean_s2, 's2');
+    Gamma2_from_sine_pair = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z_candidate_sine_s2_pair, ...
         coeff_s2, basis_types_s2, m_order_s2, n_order_s2, z_mean_s2, 's2');
     if has_symmetric_peak_s2
         Gamma2_from_w_alt = compute_gamma_curve_from_z(psi_scan_values, phi_integral, z2_candidate_from_w_alt, ...
@@ -357,6 +444,7 @@ Gamma1_from_w_neg = nan(size(psi_scan_values));
 Gamma1_from_sine_neg = nan(size(psi_scan_values));
 Gamma2_from_w_neg = nan(size(psi_scan_values));
 Gamma2_from_sine_neg = nan(size(psi_scan_values));
+Gamma2_from_sine_pair_neg = nan(size(psi_scan_values));
 Gamma1_from_w_alt_neg = nan(size(psi_scan_values));
 Gamma2_from_w_alt_neg = nan(size(psi_scan_values));
 
@@ -370,6 +458,7 @@ end
 if processing_modes.s2
     Gamma2_from_w_neg = interp1(psi_scan_values, Gamma2_from_w, -psi_scan_values, 'pchip', 'extrap');
     Gamma2_from_sine_neg = interp1(psi_scan_values, Gamma2_from_sine, -psi_scan_values, 'pchip', 'extrap');
+    Gamma2_from_sine_pair_neg = interp1(psi_scan_values, Gamma2_from_sine_pair, -psi_scan_values, 'pchip', 'extrap');
     if has_symmetric_peak_s2
         Gamma2_from_w_alt_neg = interp1(psi_scan_values, Gamma2_from_w_alt, -psi_scan_values, 'pchip', 'extrap');
     end
@@ -379,6 +468,7 @@ Gamma1_odd_from_w = Gamma1_from_w - Gamma1_from_w_neg;
 Gamma1_odd_from_sine = Gamma1_from_sine - Gamma1_from_sine_neg;
 Gamma2_odd_from_w = Gamma2_from_w - Gamma2_from_w_neg;
 Gamma2_odd_from_sine = Gamma2_from_sine - Gamma2_from_sine_neg;
+Gamma2_odd_from_sine_pair = Gamma2_from_sine_pair - Gamma2_from_sine_pair_neg;
 Gamma1_odd_from_w_alt = Gamma1_from_w_alt - Gamma1_from_w_alt_neg;
 Gamma2_odd_from_w_alt = Gamma2_from_w_alt - Gamma2_from_w_alt_neg;
 
@@ -426,7 +516,10 @@ if n_w_tiles > 0
             %plot(phi_line, fourier_fit_w2_alt.y_fit, '-.', 'LineWidth', 1.2, ...
             %    'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_2\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s2, psi_plus_s2_alt));
         end
-        plot(phi_line, reference_cos, 'LineWidth', 1.6, 'DisplayName', '$$\sin(\theta+\tau)$$');
+        plot(phi_line, reference_sine_s2, 'LineWidth', 1.6, ...
+            'DisplayName', sprintf('$$\\sin(\\theta+\\tau),\\ \\tau=%.6g$$', tau_best_s2));
+        plot(phi_line, reference_sine_s2_pair, '--', 'LineWidth', 1.4, ...
+            'DisplayName', sprintf('$$\\sin(\\theta+\\tau_2),\\ \\tau_2=%.6g$$', tau_pair_s2));
         grid on;
         box on;
         xlim([-pi, pi]);
@@ -491,6 +584,27 @@ if processing_modes.s1
     tuneFigure;
 end
 
+if processing_modes.s2 && optimize_sine_tau_for_s2
+    figure('Color', 'w');
+    plot(tau_scan_values, delta_gamma2_span_vs_tau, 'LineWidth', 1.8, ...
+        'DisplayName', '$$\max_\psi\Delta\Gamma_2(\psi)-\min_\psi\Delta\Gamma_2(\psi)$$');
+    hold on;
+    plot(tau_best_s2, delta_gamma2_span_best, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, ...
+        'DisplayName', sprintf('$$\\tau^*=%.6g$$', tau_best_s2));
+    plot(tau_pair_s2, delta_gamma2_span_pair, 's', 'MarkerSize', 7, 'LineWidth', 1.2, ...
+        'DisplayName', sprintf('$$\\tau_2^*=\\tau^*+\\pi=%.6g$$', tau_pair_s2));
+    grid on;
+    box on;
+    xlim([tau_scan_min, tau_scan_max]);
+    xticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    xticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    xlabel('$$\tau$$');
+    ylabel('$$\max_\psi\Delta\Gamma_2(\psi)-\min_\psi\Delta\Gamma_2(\psi)$$');
+    show_legend_if_multiple(gca);
+    title('$$\tau\ \mathrm{optimization\ for}\ z(\phi)=\sin(\phi+\tau)$$');
+    tuneFigure;
+end
+
 if processing_modes.s2
     figure('Color', 'w');
     plot(psi_scan_values, Gamma2_from_w, 'LineWidth', 1.8, ...
@@ -501,7 +615,9 @@ if processing_modes.s2
             'DisplayName', sprintf('$$z_2(\\phi)=W_2(\\phi;\\psi_+=%.6g)$$', psi_plus_s2_alt));
     end
     plot(psi_scan_values, Gamma2_from_sine, '--', 'LineWidth', 1.8, ...
-        'DisplayName', '$$z(\phi)=\cos(\phi+\pi-0.6\pi)$$');
+        'DisplayName', sprintf('$$z(\\phi)=\\sin(\\phi+\\tau^*),\\ \\tau^*=%.6g$$', tau_best_s2));
+    plot(psi_scan_values, Gamma2_from_sine_pair, ':', 'LineWidth', 1.8, ...
+        'DisplayName', sprintf('$$z(\\phi)=\\sin(\\phi+\\tau_2^*),\\ \\tau_2^*=%.6g$$', tau_pair_s2));
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
@@ -553,7 +669,9 @@ if processing_modes.s2
         %    'DisplayName', '$$\mathrm{symmetric}\ \psi_+^*\ \mathrm{from\ previous\ plot}$$');
     end
     plot(psi_scan_values, Gamma2_odd_from_sine, 'LineWidth', 1.8, ...
-        'DisplayName', '$$\sin(\phi+\tau)$$');
+        'DisplayName', sprintf('$$\\sin(\\phi+\\tau^*),\\ \\tau^*=%.6g$$', tau_best_s2));
+    plot(psi_scan_values, Gamma2_odd_from_sine_pair, '--', 'LineWidth', 1.8, ...
+        'DisplayName', sprintf('$$\\sin(\\phi+\\tau_2^*),\\ \\tau_2^*=%.6g$$', tau_pair_s2));
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
@@ -655,10 +773,26 @@ if processing_modes.s1
 end
 if processing_modes.s2
     fprintf('Gamma_2 at psi_plus^* (z=W_2) = %.12f\n', Gamma2_from_w(idx_max_s2));
-    fprintf('Gamma_2 at psi_plus^* (z=cos) = %.12f\n', Gamma2_from_sine(idx_max_s2));
+    fprintf('Gamma_2 at psi_plus^* (z=sin(phi+tau^*)) = %.12f\n', Gamma2_from_sine(idx_max_s2));
+    fprintf('Gamma_2 at psi_plus^* (z=sin(phi+tau_2^*)) = %.12f\n', Gamma2_from_sine_pair(idx_max_s2));
     if has_symmetric_peak_s2
         fprintf('Gamma_2 at symmetric psi_plus^* (z=W_2) = %.12f\n', Gamma2_from_w_alt(idx_max_s2_alt));
     end
+    fprintf('Best tau for z(phi)=sin(phi+tau) from DeltaGamma_2 range = %.12f rad\n', tau_best_s2);
+    fprintf('Paired tau_2 = tau+pi (wrapped) = %.12f rad\n', tau_pair_s2);
+    if optimize_sine_tau_for_s2
+        fprintf('Objective value at best tau (max-min of DeltaGamma_2) = %.12f\n', delta_gamma2_span_best);
+        fprintf('Objective value at tau_2 (max-min of DeltaGamma_2) = %.12f\n', delta_gamma2_span_pair);
+    end
+end
+
+function tau_wrapped = wrap_phase_to_interval(tau_value, interval_min, interval_max)
+    period = interval_max - interval_min;
+    if ~isfinite(period) || period <= 0
+        tau_wrapped = tau_value;
+        return;
+    end
+    tau_wrapped = mod(tau_value - interval_min, period) + interval_min;
 end
 
 function [r_max, idx_max, idx_alt, has_symmetric_peak, r_alt] = find_symmetric_max_candidate(r_values, psi_grid)
