@@ -516,10 +516,10 @@ if n_w_tiles > 0
             %plot(phi_line, fourier_fit_w2_alt.y_fit, '-.', 'LineWidth', 1.2, ...
             %    'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_2\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s2, psi_plus_s2_alt));
         end
+        plot(phi_line, reference_sine_s2_pair, 'LineWidth', 1.6, ...
+            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
         plot(phi_line, reference_sine_s2, 'LineWidth', 1.6, ...
-            'DisplayName', sprintf('$$\\sin(\\theta+\\tau),\\ \\tau=%.6g$$', tau_best_s2));
-        plot(phi_line, reference_sine_s2_pair, '--', 'LineWidth', 1.4, ...
-            'DisplayName', sprintf('$$\\sin(\\theta+\\tau_2),\\ \\tau_2=%.6g$$', tau_pair_s2));
+            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
         grid on;
         box on;
         xlim([-pi, pi]);
@@ -529,6 +529,10 @@ if n_w_tiles > 0
         ylabel('$$z(\theta)$$');
         add_y_margin_from_lines(gca, 0.12);
         show_legend_if_multiple(gca);
+        lgd = legend(gca);
+        if ~isempty(lgd) && isgraphics(lgd)
+            lgd.Location = 'eastoutside';
+        end
         %title(sprintf('$$s_2:\ W_2(\\phi)\ \mathrm{vs}\ \cos(\\phi+\\pi-0.6\\pi),\\ \psi_+^*=%.6g\ \mathrm{rad}$$', psi_plus_s2));
     end
     tuneFigure;
@@ -668,19 +672,31 @@ if processing_modes.s2
         %plot(psi_plus_s2_alt, gamma2_odd_at_selected_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, ...
         %    'DisplayName', '$$\mathrm{symmetric}\ \psi_+^*\ \mathrm{from\ previous\ plot}$$');
     end
+    plot(psi_scan_values, Gamma2_odd_from_sine_pair, 'LineWidth', 1.8, ...
+            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
     plot(psi_scan_values, Gamma2_odd_from_sine, 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('$$\\sin(\\phi+\\tau^*),\\ \\tau^*=%.6g$$', tau_best_s2));
-    plot(psi_scan_values, Gamma2_odd_from_sine_pair, '--', 'LineWidth', 1.8, ...
-        'DisplayName', sprintf('$$\\sin(\\phi+\\tau_2^*),\\ \\tau_2^*=%.6g$$', tau_pair_s2));
+            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
     xticks([-pi, -pi/2, 0, pi/2, pi]);
     xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
     xlabel('$$\psi$$');
-    ylabel('$$\dot{\psi}$$');
+    ylabel('$$g[z](\psi)$$');
     show_legend_if_multiple(gca);
+    lgd = legend(gca);
+    if ~isempty(lgd) && isgraphics(lgd)
+        lgd.Location = 'eastoutside';
+    end
     tuneFigure;
+
+    % Export specific lines for cross-plot overlay in runner script.
+    overlay_data_s2 = struct();
+    overlay_data_s2.psi_scan_values = psi_scan_values(:);
+    overlay_data_s2.gamma2_odd_from_w = Gamma2_odd_from_w(:);
+    overlay_data_s2.gamma2_odd_from_sine_pair = Gamma2_odd_from_sine_pair(:);
+    overlay_data_s2.tau_pair_s2 = tau_pair_s2;
+    assignin('base', 'overlay_data_s2_gamma2_odd', overlay_data_s2);
 end
 
 if processing_modes.s1

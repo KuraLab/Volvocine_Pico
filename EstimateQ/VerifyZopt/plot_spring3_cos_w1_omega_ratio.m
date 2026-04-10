@@ -1,4 +1,4 @@
-function plot_spring3_cos_w1_omega_ratio()
+function plot_spring3_cos_w1_omega_ratio(enable_save_figure)
 % Plot omega ratio curves for both:
 %   EstimateQ/VerifyZopt/Spring3/cos/**/merged_*.csv
 %   EstimateQ/VerifyZopt/Spring3/w1/**/merged_*.csv
@@ -7,13 +7,22 @@ function plot_spring3_cos_w1_omega_ratio()
 t_start = 60;
 t_end = 120;
 t_start_series = 0;  % start time for time-series overlay only
-enable_save_figure = false;
+mean_phase_band_half_width_rad = 0.10*pi;
+if nargin < 1 || isempty(enable_save_figure)
+    enable_save_figure = false;
+end
+
+% Clear any existing figures before generating new plots.
+close all;
 
 rootDirCos = fullfile(pwd, 'EstimateQ', 'VerifyZopt', 'Spring3', 'cos');
 rootDirW1  = fullfile(pwd, 'EstimateQ', 'VerifyZopt', 'Spring3', 'w1');
 
-[xCos, yCos, phaseStatsCos] = local_collect_ratio_curve(rootDirCos, t_start, t_end);
-[xW1, yW1, phaseStatsW1]  = local_collect_ratio_curve(rootDirW1, t_start, t_end);
+[xCos, yCos, phaseStatsCos, folderLabelsCos] = local_collect_ratio_curve(rootDirCos, t_start, t_end);
+[xW1, yW1, phaseStatsW1, folderLabelsW1]  = local_collect_ratio_curve(rootDirW1, t_start, t_end);
+
+isConvergedCos = local_build_folder_convergence_mask(folderLabelsCos, phaseStatsCos, mean_phase_band_half_width_rad);
+isConvergedW1 = local_build_folder_convergence_mask(folderLabelsW1, phaseStatsW1, mean_phase_band_half_width_rad);
 
 fprintf('\n[INFO] Per-file phase-difference stats for Spring3/cos (window %.2f-%.2f s)\n', t_start, t_end);
 if isempty(phaseStatsCos)
@@ -30,9 +39,23 @@ else
 end
 
 figure('Color', 'w');
-plot(xCos, yCos, '-o', 'LineWidth', 1.5, 'MarkerSize', 4, 'MarkerFaceColor', 'auto', 'DisplayName', 'Spring3/cos');
+hW1Trend = plot(xW1, yW1, '-', 'LineWidth', 1.2, 'Color', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), \psi^*$');
 hold on;
-plot(xW1, yW1, '-s', 'LineWidth', 1.5, 'MarkerSize', 4, 'MarkerFaceColor', 'auto', 'DisplayName', 'Spring3/w1');
+hCosTrend = plot(xCos, yCos, '-', 'LineWidth', 1.2, 'Color', [0.0, 0.4470, 0.7410], 'DisplayName', '$z_{\mathrm{sin}}(\theta), \tau_1^*$');
+
+hW1Conv = plot(xW1(isConvergedW1), yW1(isConvergedW1), 'p', ...
+    'LineStyle', 'none', 'MarkerSize', 10, 'MarkerFaceColor', [0.8500, 0.3250, 0.0980], ...
+    'MarkerEdgeColor', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), \psi^*$ converged');
+plot(xW1(~isConvergedW1), yW1(~isConvergedW1), 's', ...
+    'LineStyle', 'none', 'MarkerSize', 5, 'MarkerFaceColor', 'none', ...
+    'MarkerEdgeColor', [0.8500, 0.3250, 0.0980]);
+
+hCosConv = plot(xCos(isConvergedCos), yCos(isConvergedCos), 'd', ...
+    'LineStyle', 'none', 'MarkerSize', 6, 'MarkerFaceColor', [0.0, 0.4470, 0.7410], ...
+    'MarkerEdgeColor', [0.0, 0.4470, 0.7410], 'DisplayName', '$z_{\mathrm{sin}}(\theta), \tau_1^*$ converged');
+plot(xCos(~isConvergedCos), yCos(~isConvergedCos), 'o', ...
+    'LineStyle', 'none', 'MarkerSize', 5, 'MarkerFaceColor', 'none', ...
+    'MarkerEdgeColor', [0.0, 0.4470, 0.7410]);
 grid on;
 x_limits = [min([xCos(:); xW1(:)]), max([xCos(:); xW1(:)])];
 xlim(x_limits);
@@ -41,17 +64,19 @@ xtick_max = ceil(x_limits(2) * 10) / 10;
 xticks(xtick_min:0.1:xtick_max);
 xlabel('$$\Delta\omega$$');
 ylabel('$$\bar{\dot{\phi_2}} / \bar{\dot{\phi_1}}$$');
-legend('Location', 'best');
+legend([hCosTrend, hW1Trend, hCosConv, hW1Conv], 'Location', 'best', 'Interpreter', 'latex');
+lgd = legend(gca);
+if ~isempty(lgd) && isgraphics(lgd)
+    lgd.Location = 'eastoutside';
+end
 hold off;
 
 if exist('tuneFigure', 'file') == 2
     tuneFigure;
 end
 
-local_plot_variance_vs_delta_omega(phaseStatsCos, phaseStatsW1);
-variance_threshold = 0.1;
-local_plot_mean_phase_vs_delta_omega(phaseStatsCos, phaseStatsW1, variance_threshold);
-local_plot_low_variance_phase_evolution(phaseStatsCos, phaseStatsW1, t_start_series, t_end, variance_threshold);
+local_plot_mean_phase_vs_delta_omega(phaseStatsCos, phaseStatsW1, mean_phase_band_half_width_rad);
+local_plot_phase_evolution_in_mean_band(phaseStatsCos, phaseStatsW1, t_start_series, t_end, mean_phase_band_half_width_rad);
 
 if enable_save_figure
     if exist('saveFigure', 'file') == 2
@@ -63,7 +88,7 @@ end
 end
 
 
-function [x, y, phase_stats] = local_collect_ratio_curve(rootDir, t_start, t_end)
+function [x, y, phase_stats, folder_labels] = local_collect_ratio_curve(rootDir, t_start, t_end)
 if ~isfolder(rootDir)
     error('Folder not found: %s', rootDir);
 end
@@ -96,8 +121,10 @@ end
 omega2 = (labelsNum ./ 100) * pi;
 x = omega2 - 2.5 * pi;  % DeltaOmega
 y = nan(size(x));
+folder_labels = labelsNum(:);
 phase_rows = struct('folder_label', {}, 'file', {}, 'base_agent_id', {}, 'target_agent_id', {}, ...
-    'mean_phase_diff_rad', {}, 'mean_phase_diff_deg', {}, 'circular_variance', {}, 'n_samples', {}, 'status', {});
+    'mean_phase_diff_rad', {}, 'mean_phase_diff_deg', {}, ...
+    'max_abs_phase_deviation_rad', {}, 'n_samples', {}, 'status', {});
 
 for i = 1:numel(dirs)
     folderPath = fullfile(rootDir, dirs(i).name);
@@ -144,6 +171,50 @@ else
 end
 end
 
+function is_converged = local_build_folder_convergence_mask(folder_labels, phase_stats, mean_phase_band_half_width_rad)
+folder_labels = folder_labels(:);
+is_converged = false(size(folder_labels));
+
+if isempty(folder_labels) || isempty(phase_stats) || ~istable(phase_stats)
+    return;
+end
+
+required = {'folder_label', 'max_abs_phase_deviation_rad', 'status'};
+if ~all(ismember(required, phase_stats.Properties.VariableNames))
+    return;
+end
+
+status_col = phase_stats.status;
+if iscell(status_col)
+    ok_mask = strcmp(status_col, 'ok');
+elseif isstring(status_col)
+    ok_mask = strcmp(cellstr(status_col), 'ok');
+else
+    ok_mask = false(height(phase_stats), 1);
+end
+
+stats_folder = double(phase_stats.folder_label);
+max_dev = double(phase_stats.max_abs_phase_deviation_rad);
+valid = ok_mask & isfinite(stats_folder) & isfinite(max_dev);
+if ~any(valid)
+    return;
+end
+
+stats_folder = stats_folder(valid);
+max_dev = max_dev(valid);
+
+for ii = 1:numel(folder_labels)
+    mask_i = (stats_folder == folder_labels(ii));
+    if ~any(mask_i)
+        continue;
+    end
+
+    % A folder is treated as converged only when all valid files in it
+    % satisfy the phase-band condition.
+    is_converged(ii) = all(max_dev(mask_i) <= mean_phase_band_half_width_rad);
+end
+end
+
 function stats = local_compute_phase_diff_stats(csvPath, t_start, t_end)
 stats = struct( ...
     'folder_label', NaN, ...
@@ -152,7 +223,7 @@ stats = struct( ...
     'target_agent_id', NaN, ...
     'mean_phase_diff_rad', NaN, ...
     'mean_phase_diff_deg', NaN, ...
-    'circular_variance', NaN, ...
+    'max_abs_phase_deviation_rad', NaN, ...
     'n_samples', 0, ...
     'status', 'unknown');
 
@@ -223,11 +294,11 @@ if isempty(delta_phase)
 end
 
 mean_phase = atan2(mean(sin(delta_phase)), mean(cos(delta_phase)));
-R = abs(mean(exp(1i * delta_phase)));
+phase_dev = atan2(sin(delta_phase - mean_phase), cos(delta_phase - mean_phase));
 
 stats.mean_phase_diff_rad = mean_phase;
 stats.mean_phase_diff_deg = mean_phase * (180 / pi);
-stats.circular_variance = 1 - R;
+stats.max_abs_phase_deviation_rad = max(abs(phase_dev));
 stats.n_samples = numel(delta_phase);
 stats.status = 'ok';
 end
@@ -259,108 +330,13 @@ if ischar(value)
 end
 end
 
-function local_plot_variance_vs_delta_omega(phaseStatsCos, phaseStatsW1)
-figure('Color', 'w');
-hold on;
-grid on;
-
-[xCosRaw, yCosRaw, xCosMean, yCosMean] = local_extract_variance_series(phaseStatsCos);
-[xW1Raw, yW1Raw, xW1Mean, yW1Mean] = local_extract_variance_series(phaseStatsW1);
-
-if ~isempty(xCosRaw)
-    scatter(xCosRaw, yCosRaw, 20, 'o', 'MarkerEdgeColor', [0.0, 0.4470, 0.7410], ...
-        'MarkerFaceColor', 'none', 'DisplayName', 'Spring3/cos per-file');
-end
-if ~isempty(xW1Raw)
-    scatter(xW1Raw, yW1Raw, 20, 's', 'MarkerEdgeColor', [0.8500, 0.3250, 0.0980], ...
-        'MarkerFaceColor', 'none', 'DisplayName', 'Spring3/w1 per-file');
-end
-if ~isempty(xCosMean)
-    plot(xCosMean, yCosMean, '-o', 'LineWidth', 1.5, 'MarkerSize', 4, ...
-        'MarkerFaceColor', 'auto', 'DisplayName', 'Spring3/cos mean');
-end
-if ~isempty(xW1Mean)
-    plot(xW1Mean, yW1Mean, '-s', 'LineWidth', 1.5, 'MarkerSize', 4, ...
-        'MarkerFaceColor', 'auto', 'DisplayName', 'Spring3/w1 mean');
+function local_plot_mean_phase_vs_delta_omega(phaseStatsCos, phaseStatsW1, mean_phase_band_half_width_rad)
+if nargin < 3 || isempty(mean_phase_band_half_width_rad)
+    mean_phase_band_half_width_rad = 0.2;
 end
 
-x_all = [xCosRaw(:); xW1Raw(:); xCosMean(:); xW1Mean(:)];
-if ~isempty(x_all)
-    x_limits = [min(x_all), max(x_all)];
-    xlim(x_limits);
-    xtick_min = floor(x_limits(1) * 10) / 10;
-    xtick_max = ceil(x_limits(2) * 10) / 10;
-    xticks(xtick_min:0.1:xtick_max);
-end
-
-ylim([0, 1]);
-xlabel('$$\Delta\omega$$');
-ylabel('Circular variance of phase difference');
-legend('Location', 'best');
-hold off;
-
-if exist('tuneFigure', 'file') == 2
-    tuneFigure;
-end
-end
-
-function [x_raw, y_raw, x_mean, y_mean] = local_extract_variance_series(phase_stats)
-x_raw = [];
-y_raw = [];
-x_mean = [];
-y_mean = [];
-
-if isempty(phase_stats) || ~istable(phase_stats)
-    return;
-end
-
-required = {'folder_label', 'circular_variance', 'status'};
-if ~all(ismember(required, phase_stats.Properties.VariableNames))
-    return;
-end
-
-status_col = phase_stats.status;
-if iscell(status_col)
-    ok_mask = strcmp(status_col, 'ok');
-elseif isstring(status_col)
-    ok_mask = strcmp(cellstr(status_col), 'ok');
-else
-    ok_mask = false(height(phase_stats), 1);
-end
-
-v = double(phase_stats.circular_variance);
-folder_label = double(phase_stats.folder_label);
-ok_mask = ok_mask & isfinite(v) & isfinite(folder_label);
-if ~any(ok_mask)
-    return;
-end
-
-folder_ok = folder_label(ok_mask);
-v_ok = v(ok_mask);
-
-x_raw = (folder_ok ./ 100) * pi - 2.5 * pi;
-y_raw = v_ok;
-
-u = unique(folder_ok(:).');
-x_mean = nan(size(u));
-y_mean = nan(size(u));
-for i = 1:numel(u)
-    mask_i = folder_ok == u(i);
-    if ~any(mask_i)
-        continue;
-    end
-    x_mean(i) = (u(i) / 100) * pi - 2.5 * pi;
-    y_mean(i) = mean(v_ok(mask_i));
-end
-end
-
-function local_plot_mean_phase_vs_delta_omega(phaseStatsCos, phaseStatsW1, variance_threshold)
-if nargin < 3 || isempty(variance_threshold)
-    variance_threshold = 0.1;
-end
-
-[filesCos, ~] = local_select_low_variance_files(phaseStatsCos, variance_threshold, 'cos');
-[filesW1, ~] = local_select_low_variance_files(phaseStatsW1, variance_threshold, 'w1');
+[filesCos, ~] = local_select_mean_band_files(phaseStatsCos, mean_phase_band_half_width_rad, 'cos');
+[filesW1, ~] = local_select_mean_band_files(phaseStatsW1, mean_phase_band_half_width_rad, 'w1');
 phaseStatsCosFiltered = local_filter_phase_stats_by_files(phaseStatsCos, filesCos);
 phaseStatsW1Filtered = local_filter_phase_stats_by_files(phaseStatsW1, filesW1);
 
@@ -388,6 +364,13 @@ if ~isempty(xW1Mean)
         'MarkerFaceColor', 'auto', 'DisplayName', 'Spring3/w1 mean');
 end
 
+overlay_data_phase_mean = struct();
+overlay_data_phase_mean.xCosMean = xCosMean(:);
+overlay_data_phase_mean.yCosMean = yCosMean(:);
+overlay_data_phase_mean.xW1Mean = xW1Mean(:);
+overlay_data_phase_mean.yW1Mean = yW1Mean(:);
+assignin('base', 'overlay_data_spring3_phase_mean', overlay_data_phase_mean);
+
 x_all = [xCosRaw(:); xW1Raw(:); xCosMean(:); xW1Mean(:)];
 if ~isempty(x_all)
     x_limits = [min(x_all), max(x_all)];
@@ -403,7 +386,7 @@ yticklabels({'-\pi', '0', '\pi'});
 set(gca, 'TickLabelInterpreter', 'latex');
 xlabel('$$\Delta\omega$$');
 ylabel('$$\langle\phi_{\mathrm{target}}-\phi_{\mathrm{base}}\rangle$$');
-title(sprintf('Mean phase difference for low-variance files (variance <= %.3f)', variance_threshold), 'Interpreter', 'none');
+title(sprintf('Mean phase difference for files within mean phase band (|\Delta\phi-\mu| \le %.3f rad)', mean_phase_band_half_width_rad), 'Interpreter', 'none');
 legend('Location', 'best');
 hold off;
 
@@ -489,12 +472,12 @@ for i = 1:numel(u)
 end
 end
 
-function local_plot_low_variance_phase_evolution(phaseStatsCos, phaseStatsW1, t_start, t_end, variance_threshold)
-[filesCos, labelsCos] = local_select_low_variance_files(phaseStatsCos, variance_threshold, 'cos');
-[filesW1, labelsW1] = local_select_low_variance_files(phaseStatsW1, variance_threshold, 'w1');
+function local_plot_phase_evolution_in_mean_band(phaseStatsCos, phaseStatsW1, t_start, t_end, mean_phase_band_half_width_rad)
+[filesCos, labelsCos] = local_select_mean_band_files(phaseStatsCos, mean_phase_band_half_width_rad, 'cos');
+[filesW1, labelsW1] = local_select_mean_band_files(phaseStatsW1, mean_phase_band_half_width_rad, 'w1');
 
 if isempty(filesCos) && isempty(filesW1)
-    fprintf('[INFO] No files found with circular_variance <= %.3f.\n', variance_threshold);
+    fprintf('[INFO] No files found with max phase deviation from mean <= %.3f rad.\n', mean_phase_band_half_width_rad);
     return;
 end
 
@@ -542,7 +525,7 @@ yticklabels(ax, {'-\pi', '0', '\pi'});
 set(ax, 'TickLabelInterpreter', 'latex');
 xlabel(ax, 'Time since t_{start} (s)', 'Interpreter', 'latex');
 ylabel(ax, '$$\phi_{\mathrm{target}}-\phi_{\mathrm{base}}$$', 'Interpreter', 'latex');
-title(ax, sprintf('Phase-difference overlays (circular variance \le %.2f)', variance_threshold), 'Interpreter', 'none');
+title(ax, sprintf('Phase-difference overlays (|\Delta\phi-\mu| \le %.2f rad)', mean_phase_band_half_width_rad), 'Interpreter', 'none');
 grid(ax, 'on');
 
 if ~isempty(line_handles)
@@ -555,19 +538,19 @@ if exist('tuneFigure', 'file') == 2
     tuneFigure;
 end
 
-fprintf('[INFO] Overlayed low-variance files: cos=%d, w1=%d\n', numel(filesCos), numel(filesW1));
+fprintf('[INFO] Overlayed mean-band files: cos=%d, w1=%d\n', numel(filesCos), numel(filesW1));
 
 if ~isempty(labelsCos)
-    fprintf('[INFO] cos files (variance<=%.3f):\n', variance_threshold);
+    fprintf('[INFO] cos files (max |phase-mean| <= %.3f rad):\n', mean_phase_band_half_width_rad);
     disp(labelsCos(:));
 end
 if ~isempty(labelsW1)
-    fprintf('[INFO] w1 files (variance<=%.3f):\n', variance_threshold);
+    fprintf('[INFO] w1 files (max |phase-mean| <= %.3f rad):\n', mean_phase_band_half_width_rad);
     disp(labelsW1(:));
 end
 end
 
-function [file_paths, labels] = local_select_low_variance_files(phase_stats, variance_threshold, prefix_label)
+function [file_paths, labels] = local_select_mean_band_files(phase_stats, mean_phase_band_half_width_rad, prefix_label)
 file_paths = {};
 labels = {};
 
@@ -575,7 +558,7 @@ if isempty(phase_stats) || ~istable(phase_stats)
     return;
 end
 
-required = {'file', 'circular_variance', 'status'};
+required = {'file', 'max_abs_phase_deviation_rad', 'status'};
 if ~all(ismember(required, phase_stats.Properties.VariableNames))
     return;
 end
@@ -589,8 +572,8 @@ else
     ok_mask = false(height(phase_stats), 1);
 end
 
-v = double(phase_stats.circular_variance);
-valid_mask = ok_mask & isfinite(v) & (v <= variance_threshold);
+max_dev = double(phase_stats.max_abs_phase_deviation_rad);
+valid_mask = ok_mask & isfinite(max_dev) & (max_dev <= mean_phase_band_half_width_rad);
 if ~any(valid_mask)
     return;
 end
@@ -606,7 +589,7 @@ for i = 1:numel(rows)
         continue;
     end
     file_paths{end + 1} = file_path; %#ok<AGROW>
-    labels{end + 1} = sprintf('%s | var=%.4f | %s', prefix_label, v(idx), file_path); %#ok<AGROW>
+    labels{end + 1} = sprintf('%s | max|phase-mean|=%.4f rad | %s', prefix_label, max_dev(idx), file_path); %#ok<AGROW>
 end
 
 if isempty(file_paths)

@@ -1,0 +1,179 @@
+function run_plot_fitted_surface_and_spring3_ratio(run_surface_plot, run_ratio_plot, run_overlay_plot)
+% Run both analysis scripts in one entry point:
+%   1) EstimateQ/plot_fitted_surface_from_export.m
+%   2) EstimateQ/VerifyZopt/plot_spring3_cos_w1_omega_ratio.m
+%
+% Usage:
+%   run_plot_fitted_surface_and_spring3_ratio
+%   run_plot_fitted_surface_and_spring3_ratio(true, true)
+%   run_plot_fitted_surface_and_spring3_ratio(true, false)
+%   run_plot_fitted_surface_and_spring3_ratio(false, true)
+%   run_plot_fitted_surface_and_spring3_ratio(true, true, true)
+
+if nargin < 1 || isempty(run_surface_plot)
+    run_surface_plot = true;
+end
+if nargin < 2 || isempty(run_ratio_plot)
+    run_ratio_plot = true;
+end
+if nargin < 3 || isempty(run_overlay_plot)
+    run_overlay_plot = true;
+end
+
+if ~run_surface_plot && ~run_ratio_plot
+    warning('Nothing to run: both run_surface_plot and run_ratio_plot are false.');
+    return;
+end
+
+this_dir = fileparts(mfilename('fullpath'));
+if isempty(this_dir)
+    this_dir = pwd;
+end
+
+surface_script = fullfile(this_dir, 'plot_fitted_surface_from_export.m');
+ratio_func_dir = fullfile(this_dir, 'VerifyZopt');
+ratio_func_name = 'plot_spring3_cos_w1_omega_ratio';
+
+if run_surface_plot
+    if ~isfile(surface_script)
+        error('Surface script not found: %s', surface_script);
+    end
+    fprintf('[RUN] %s\n', surface_script);
+
+    % Keep this first because the script internally calls close all.
+    % Run in a helper function workspace so clearvars in the script does not
+    % clear this function's local variables.
+    local_run_script_in_isolated_workspace(surface_script);
+end
+
+if run_ratio_plot
+    if ~isfolder(ratio_func_dir)
+        error('Function directory not found: %s', ratio_func_dir);
+    end
+
+    old_path = path;
+    cleanup_obj = onCleanup(@() path(old_path)); %#ok<NASGU>
+    addpath(ratio_func_dir);
+
+    if exist(ratio_func_name, 'file') ~= 2
+        error('Function not found on path: %s', ratio_func_name);
+    end
+
+    fprintf('[RUN] %s (%s)\n', ratio_func_name, ratio_func_dir);
+    plot_spring3_cos_w1_omega_ratio();
+end
+
+if run_overlay_plot
+    local_plot_requested_overlay();
+end
+
+fprintf('[DONE] run_plot_fitted_surface_and_spring3_ratio finished.\n');
+end
+
+function local_run_script_in_isolated_workspace(script_path)
+run(script_path);
+end
+
+function local_plot_requested_overlay()
+have_s2 = evalin('base', 'exist(''overlay_data_s2_gamma2_odd'', ''var'') == 1');
+have_phase_mean = evalin('base', 'exist(''overlay_data_spring3_phase_mean'', ''var'') == 1');
+
+if ~(have_s2 && have_phase_mean)
+    warning(['Overlay plot skipped: required data were not found in base workspace. ', ...
+        'Run both source analyses in this session before overlay.']);
+    return;
+end
+
+s2 = evalin('base', 'overlay_data_s2_gamma2_odd');
+pm = evalin('base', 'overlay_data_spring3_phase_mean');
+
+if ~isstruct(s2) || ~isstruct(pm)
+    warning('Overlay plot skipped: exported overlay data format is invalid.');
+    return;
+end
+
+required_s2 = {'psi_scan_values', 'gamma2_odd_from_w', 'gamma2_odd_from_sine_pair'};
+required_pm = {'xCosMean', 'yCosMean', 'xW1Mean', 'yW1Mean'};
+if ~all(isfield(s2, required_s2)) || ~all(isfield(pm, required_pm))
+    warning('Overlay plot skipped: exported overlay data is missing required fields.');
+    return;
+end
+
+figure('Color', 'w');
+hold on;
+grid on;
+
+psi_scan = s2.psi_scan_values(:);
+gamma_opt = s2.gamma2_odd_from_w(:);
+gamma_sine_pair = s2.gamma2_odd_from_sine_pair(:);
+
+% Requested preprocessing for 6th-plot lines:
+% cut data from max(y)-index to min(y)-index, then swap x/y.
+[psi_opt_cut, gamma_opt_cut] = local_cut_series_from_max_to_min(psi_scan, gamma_opt);
+[psi_sine_cut, gamma_sine_cut] = local_cut_series_from_max_to_min(psi_scan, gamma_sine_pair);
+
+% Requested: use the 6th-plot line data with x/y swapped after the cut.
+plot(gamma_opt_cut, psi_opt_cut, '-', 'LineWidth', 1.8, ...
+    'DisplayName', '6th: z_opt(theta), psi_1^* (x/y swapped)');
+plot(gamma_sine_cut, psi_sine_cut, '--', 'LineWidth', 1.8, ...
+    'DisplayName', '6th: sin(phi+tau_2^*) (x/y swapped)');
+
+% 9th-plot mean lines as-is.
+plot(pm.xCosMean(:), -pm.yCosMean(:), '-o', 'LineWidth', 1.5, 'MarkerSize', 4, ...
+    'MarkerFaceColor', 'auto', 'DisplayName', '9th: Spring3/cos mean');
+plot(pm.xW1Mean(:), -pm.yW1Mean(:), '-s', 'LineWidth', 1.5, 'MarkerSize', 4, ...
+    'MarkerFaceColor', 'auto', 'DisplayName', '9th: Spring3/w1 mean');
+
+xlabel('x (swapped for 6th lines)');
+ylabel('y (swapped for 6th lines)');
+title('Overlay: selected lines from 6th and 9th plots', 'Interpreter', 'none');
+legend('Location', 'best');
+hold off;
+
+if exist('tuneFigure', 'file') == 2
+    tuneFigure;
+end
+
+fprintf('[RUN] Overlay figure created (6th lines swapped x/y + 9th mean lines).\n');
+end
+
+function [x_cut, y_cut] = local_cut_series_from_max_to_min(x, y)
+x = x(:);
+y = y(:);
+
+n = min(numel(x), numel(y));
+if n == 0
+    x_cut = x;
+    y_cut = y;
+    return;
+end
+x = x(1:n);
+y = y(1:n);
+
+finite_mask = isfinite(x) & isfinite(y);
+if nnz(finite_mask) < 2
+    x_cut = x;
+    y_cut = y;
+    return;
+end
+
+idx_finite = find(finite_mask);
+y_finite = y(idx_finite);
+
+[~, idx_max_local] = max(y_finite);
+[~, idx_min_local] = min(y_finite);
+
+idx_max = idx_finite(idx_max_local);
+idx_min = idx_finite(idx_min_local);
+
+step = sign(idx_min - idx_max);
+if step == 0
+    x_cut = x(idx_max);
+    y_cut = y(idx_max);
+    return;
+end
+
+idx_range = idx_max:step:idx_min;
+x_cut = x(idx_range);
+y_cut = y(idx_range);
+end
