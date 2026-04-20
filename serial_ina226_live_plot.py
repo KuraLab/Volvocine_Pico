@@ -1,14 +1,23 @@
 import argparse
 import queue
 import re
+import sys
 import threading
 import time
 from collections import deque
 
+import matplotlib
+matplotlib.use("TkAgg", force=True)
+matplotlib.rcParams["path.simplify"] = False
+matplotlib.rcParams["agg.path.chunksize"] = 0
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-import serial  # type: ignore
-from serial.tools import list_ports  # type: ignore
+try:
+    import serial  # type: ignore
+    from serial.tools import list_ports  # type: ignore
+except ModuleNotFoundError:
+    serial = None
+    list_ports = None
 
 
 LINE_RE = re.compile(
@@ -20,6 +29,21 @@ LINE_RE = re.compile(
 
 
 def parse_line(line: str):
+    # Fast path for compact CSV: current_mA,vbus_V,power_mW[,timestamp_us]
+    if "," in line and "I=" not in line:
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 3:
+            try:
+                current_ma = float(parts[0])
+                vbus_v = float(parts[1])
+                power_mw = float(parts[2])
+                src_time_s = None
+                if len(parts) >= 4:
+                    src_time_s = float(parts[3]) * 1e-6
+                return current_ma, vbus_v, power_mw, src_time_s
+            except ValueError:
+                pass
+
     match = LINE_RE.search(line)
     if not match:
         return None
@@ -33,10 +57,16 @@ def parse_line(line: str):
     else:
         power_mw = float(match.group("power_mw"))
 
-    return current_ma, vbus_v, power_mw
+    return current_ma, vbus_v, power_mw, None
 
 
 def choose_port(port_arg: str | None, list_only: bool) -> str | None:
+    if list_ports is None:
+        print("[ERROR] pyserial is not installed in this Python environment.")
+        print(f"[HINT] Current Python: {sys.executable}")
+        print("[HINT] Install with: python -m pip install pyserial")
+        return None
+
     ports = list(list_ports.comports())
 
     if list_only:
@@ -65,11 +95,20 @@ def choose_port(port_arg: str | None, list_only: bool) -> str | None:
         text = f"{p.device} {p.description} {getattr(p, 'hwid', '')}".lower()
         score = 0
 
-        # Prefer USB/serial adapter ports, avoid legacy motherboard COM ports.
+        # Prefer USB CDC/UART adapters and de-prioritize legacy onboard serial ports.
         if "usb" in text or "ch340" in text or "cp210" in text or "ftdi" in text:
             score += 100
         if "arduino" in text or "serial device" in text:
             score += 50
+
+        dev_lower = p.device.lower()
+        if dev_lower.startswith("/dev/ttyacm") or dev_lower.startswith("/dev/ttyusb"):
+            score += 120
+        if dev_lower.startswith("/dev/ttys"):
+            score -= 300
+        if dev_lower.startswith("/dev/cu.usb"):
+            score += 120
+
         if p.device.upper() == "COM1":
             score -= 200
         return score
@@ -83,29 +122,62 @@ def choose_port(port_arg: str | None, list_only: bool) -> str | None:
     return best.device
 
 
-def open_serial_port(port: str, baudrate: int, timeout: float):
-    try:
-        return serial.Serial(port, baudrate, timeout=timeout)
-    except serial.SerialException as exc:
-        msg = str(exc)
-        print(f"[ERROR] Failed to open {port}: {msg}")
-
-        access_denied = (
-            "PermissionError(13" in msg
-            or "Access is denied" in msg
-            or "access is denied" in msg
-            or "\u30a2\u30af\u30bb\u30b9\u304c\u62d2\u5426" in msg
-        )
-
-        if access_denied:
-            print("[HINT] The port is likely in use by another app.")
-            print("[HINT] Close Arduino IDE/Serial Monitor/Thonny/TeraTerm and retry.")
-            print("[HINT] If needed, unplug/replug USB and run with --port COMx.")
-
+def open_serial_port(
+    port: str,
+    baudrate: int,
+    timeout: float,
+    retries: int = 5,
+    retry_delay: float = 0.4,
+):
+    if serial is None:
+        print("[ERROR] pyserial is not installed in this Python environment.")
+        print(f"[HINT] Current Python: {sys.executable}")
+        print("[HINT] Install with: python -m pip install pyserial")
         return None
 
+    attempts = max(1, retries + 1)
+    for attempt in range(1, attempts + 1):
+        try:
+            return serial.Serial(port, baudrate, timeout=timeout)
+        except serial.SerialException as exc:
+            msg = str(exc)
+            print(f"[ERROR] Failed to open {port}: {msg}")
 
-def serial_reader_loop(ser, stop_event: threading.Event, line_queue: queue.Queue[str]):
+            access_denied = (
+                "PermissionError(13" in msg
+                or "Access is denied" in msg
+                or "access is denied" in msg
+                or "\u30a2\u30af\u30bb\u30b9\u304c\u62d2\u5426" in msg
+            )
+
+            if access_denied:
+                print("[HINT] The port is likely in use by another app.")
+                print("[HINT] Close Arduino IDE/Serial Monitor/Thonny/TeraTerm and retry.")
+                print("[HINT] If needed, unplug/replug USB and run with --port COMx.")
+
+            busy_on_linux = "Device or resource busy" in msg or "Errno 16" in msg
+            if busy_on_linux:
+                print(f"[HINT] Linux detected port busy. Check holder with: lsof {port}")
+                print(f"[HINT] You can also try: fuser -v {port}")
+                print("[HINT] If ModemManager grabs the device, stop it temporarily and retry.")
+
+            if busy_on_linux and attempt < attempts:
+                print(
+                    f"[INFO] Retrying open ({attempt}/{attempts - 1}) in {retry_delay:.1f}s..."
+                )
+                time.sleep(retry_delay)
+                continue
+
+            break
+
+    return None
+
+
+def serial_reader_loop(
+    ser,
+    stop_event: threading.Event,
+    line_queue: queue.Queue[tuple[float, str]],
+):
     while not stop_event.is_set():
         try:
             raw = ser.readline()
@@ -115,22 +187,50 @@ def serial_reader_loop(ser, stop_event: threading.Event, line_queue: queue.Queue
         if not raw:
             continue
 
+        received_at = time.monotonic()
         text = raw.decode("utf-8", errors="ignore").strip()
         if text:
-            line_queue.put(text)
+            line_queue.put((received_at, text))
 
 
 def main():
+    if serial is None:
+        print("[ERROR] Missing dependency: pyserial")
+        print(f"[HINT] Current Python: {sys.executable}")
+        print("[HINT] Install with: python -m pip install pyserial")
+        return
+
     parser = argparse.ArgumentParser(
         description="Plot INA226 current/voltage/power from serial logs in real time."
     )
     parser.add_argument("--port", default=None, help="Serial port (e.g. COM5)")
-    parser.add_argument("--baudrate", type=int, default=115200, help="Baudrate")
+    parser.add_argument("--baudrate", type=int, default=921600, help="Baudrate")
     parser.add_argument(
-        "--window", type=int, default=100, help="Number of points kept on the graph"
+        "--window",
+        type=int,
+        default=0,
+        help="Max retained points (0 = unlimited; recommended for fixed x-span)",
     )
     parser.add_argument(
-        "--interval-ms", type=int, default=40, help="Plot update interval in milliseconds"
+        "--interval-ms", type=int, default=5, help="Plot update interval in milliseconds"
+    )
+    parser.add_argument(
+        "--x-span-sec",
+        type=float,
+        default=3.0,
+        help="Fixed x-axis span in seconds",
+    )
+    parser.add_argument(
+        "--avg-sec",
+        type=float,
+        default=0.1,
+        help="Time window in seconds for moving-average overlay (0 to disable)",
+    )
+    parser.add_argument(
+        "--autoscale-every",
+        type=int,
+        default=50,
+        help="Recompute y-axis autoscale every N frames (0 to disable)",
     )
     parser.add_argument(
         "--verbose", action="store_true", help="Print lines that fail to parse"
@@ -151,12 +251,22 @@ def main():
     ser.reset_input_buffer()
 
     print(f"[INFO] Opened {port} @ {args.baudrate} baud")
+    print(f"[INFO] Matplotlib backend: {matplotlib.get_backend()}")
 
-    t_data = deque(maxlen=args.window)
-    i_data = deque(maxlen=args.window)
-    v_data = deque(maxlen=args.window)
-    p_data = deque(maxlen=args.window)
-    line_queue: queue.Queue[str] = queue.Queue()
+    point_limit = args.window if args.window > 0 else None
+    t_data = deque(maxlen=point_limit)
+    i_data = deque(maxlen=point_limit)
+    v_data = deque(maxlen=point_limit)
+    p_data = deque(maxlen=point_limit)
+    i_avg_data = deque(maxlen=point_limit)
+    v_avg_data = deque(maxlen=point_limit)
+    p_avg_data = deque(maxlen=point_limit)
+
+    avg_window = deque()
+    avg_sum_i = 0.0
+    avg_sum_v = 0.0
+    avg_sum_p = 0.0
+    line_queue: queue.Queue[tuple[float, str]] = queue.Queue()
     stop_event = threading.Event()
     reader_thread = threading.Thread(
         target=serial_reader_loop,
@@ -167,31 +277,47 @@ def main():
 
     frame_count = 0
     start = time.monotonic()
+    device_time_base_s = None
 
     fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
     (line_i,) = axes[0].plot([], [], lw=2, color="tab:blue")
     (line_v,) = axes[1].plot([], [], lw=2, color="tab:green")
     (line_p,) = axes[2].plot([], [], lw=2, color="tab:red")
+    (line_i_avg,) = axes[0].plot([], [], lw=2, color="tab:orange", alpha=0.9)
+    (line_v_avg,) = axes[1].plot([], [], lw=2, color="tab:orange", alpha=0.9)
+    (line_p_avg,) = axes[2].plot([], [], lw=2, color="tab:orange", alpha=0.9)
 
     axes[0].set_ylabel("Current [mA]")
     axes[1].set_ylabel("Vbus [V]")
     axes[2].set_ylabel("Power [mW]")
     axes[2].set_xlabel("Time [s]")
+    axes[1].set_ylim(0.0, 8.0)
+    axes[2].set_xlim(0.0, max(1e-6, args.x_span_sec))
 
     for ax in axes:
         ax.grid(True, alpha=0.3)
+
+    if args.avg_sec > 0:
+        axes[0].legend([line_i, line_i_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
+        axes[1].legend([line_v, line_v_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
+        axes[2].legend([line_p, line_p_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
 
     fig.suptitle("INA226 Live Monitor")
 
     def update(_frame):
         nonlocal frame_count
+        nonlocal avg_sum_i, avg_sum_v, avg_sum_p
+        nonlocal device_time_base_s
 
-        lines_processed = 0
-        while lines_processed < 1000:
+        while True:
             try:
-                text = line_queue.get_nowait()
+                received_at, text = line_queue.get_nowait()
             except queue.Empty:
                 break
+
+            if text.startswith("[PROF]"):
+                print(text)
+                continue
 
             parsed = parse_line(text)
             if parsed is None:
@@ -199,35 +325,107 @@ def main():
                     print(f"[SKIP] {text}")
                 continue
 
-            current_ma, vbus_v, power_mw = parsed
-            now = time.monotonic() - start
+            current_ma, vbus_v, power_mw, source_time_s = parsed
+            if source_time_s is not None:
+                if device_time_base_s is None:
+                    device_time_base_s = source_time_s
+                now = source_time_s - device_time_base_s
+                if now < -1.0:
+                    # Handle wraparound/reboot by re-basing source time.
+                    device_time_base_s = source_time_s
+                    now = 0.0
+            else:
+                now = received_at - start
+
+            # Guard against out-of-order timestamps that can create apparent gaps.
+            if t_data and now <= t_data[-1]:
+                now = t_data[-1] + 1e-6
 
             t_data.append(now)
             i_data.append(current_ma)
             v_data.append(vbus_v)
             p_data.append(power_mw)
-            lines_processed += 1
+
+            if args.avg_sec > 0:
+                avg_window.append((now, current_ma, vbus_v, power_mw))
+                avg_sum_i += current_ma
+                avg_sum_v += vbus_v
+                avg_sum_p += power_mw
+
+                cutoff = now - args.avg_sec
+                while avg_window and avg_window[0][0] < cutoff:
+                    _, old_i, old_v, old_p = avg_window.popleft()
+                    avg_sum_i -= old_i
+                    avg_sum_v -= old_v
+                    avg_sum_p -= old_p
+
+                count = len(avg_window)
+                if count > 0:
+                    i_avg_data.append(avg_sum_i / count)
+                    v_avg_data.append(avg_sum_v / count)
+                    p_avg_data.append(avg_sum_p / count)
+                else:
+                    i_avg_data.append(current_ma)
+                    v_avg_data.append(vbus_v)
+                    p_avg_data.append(power_mw)
+            else:
+                i_avg_data.append(current_ma)
+                v_avg_data.append(vbus_v)
+                p_avg_data.append(power_mw)
 
         if not t_data:
-            return line_i, line_v, line_p
+            return line_i, line_v, line_p, line_i_avg, line_v_avg, line_p_avg
 
         x = list(t_data)
         line_i.set_data(x, list(i_data))
         line_v.set_data(x, list(v_data))
         line_p.set_data(x, list(p_data))
+        if args.avg_sec > 0:
+            line_i_avg.set_data(x, list(i_avg_data))
+            line_v_avg.set_data(x, list(v_avg_data))
+            line_p_avg.set_data(x, list(p_avg_data))
+        else:
+            line_i_avg.set_data([], [])
+            line_v_avg.set_data([], [])
+            line_p_avg.set_data([], [])
 
-        # Update x-limits each frame for scrolling view, but throttle y autoscale.
-        x_min = x[0]
-        x_max = x[-1] if x[-1] > x_min else x_min + 1e-6
+        # Keep a fixed-width time window on the x-axis.
+        x_max = x[-1]
+        x_span = max(1e-6, args.x_span_sec)
+        x_min = max(0.0, x_max - x_span)
+        if x_max <= x_min:
+            x_max = x_min + 1e-6
+
+        # If point_limit is unlimited, keep at least the current visible span.
+        if point_limit is None:
+            while t_data and t_data[0] < x_min:
+                t_data.popleft()
+                i_data.popleft()
+                v_data.popleft()
+                p_data.popleft()
+                i_avg_data.popleft()
+                v_avg_data.popleft()
+                p_avg_data.popleft()
+
+            x = list(t_data)
+            line_i.set_data(x, list(i_data))
+            line_v.set_data(x, list(v_data))
+            line_p.set_data(x, list(p_data))
+            if args.avg_sec > 0:
+                line_i_avg.set_data(x, list(i_avg_data))
+                line_v_avg.set_data(x, list(v_avg_data))
+                line_p_avg.set_data(x, list(p_avg_data))
+
         axes[2].set_xlim(x_min, x_max)
 
         frame_count += 1
-        if frame_count % 5 == 0:
+        if args.autoscale_every > 0 and frame_count % args.autoscale_every == 0:
             for ax in axes:
                 ax.relim()
                 ax.autoscale_view(scalex=False, scaley=True)
+            axes[1].set_ylim(0.0, 8.0)
 
-        return line_i, line_v, line_p
+        return line_i, line_v, line_p, line_i_avg, line_v_avg, line_p_avg
 
     def cleanup_serial():
         stop_event.set()
@@ -250,6 +448,7 @@ def main():
         print("[INFO] Serial port closed")
 
     fig.canvas.mpl_connect("close_event", handle_close)
+    plt.ioff()
     anim = FuncAnimation(
         fig,
         update,
@@ -259,7 +458,11 @@ def main():
     )
     plt.tight_layout()
     try:
-        plt.show()
+        # VS Code debug launcher環境では block=True だけだと描画されない場合があるため、
+        # 非ブロッキング表示 + 手動イベントループで確実にウィンドウ更新を回す。
+        plt.show(block=False)
+        while plt.fignum_exists(fig.number):
+            plt.pause(0.05)
     except KeyboardInterrupt:
         plt.close(fig)
     finally:
