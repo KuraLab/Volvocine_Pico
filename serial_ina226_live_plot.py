@@ -29,7 +29,7 @@ LINE_RE = re.compile(
 
 
 def parse_line(line: str):
-    # Fast path for compact CSV: current_mA,vbus_V,power_mW[,timestamp_us]
+    # Fast path for compact CSV: current_mA,vbus_V,power_mW[,timestamp_us[,a1_raw,a2_raw]]
     if "," in line and "I=" not in line:
         parts = [p.strip() for p in line.split(",")]
         if len(parts) >= 3:
@@ -38,9 +38,14 @@ def parse_line(line: str):
                 vbus_v = float(parts[1])
                 power_mw = float(parts[2])
                 src_time_s = None
+                a1_raw = None
+                a2_raw = None
                 if len(parts) >= 4:
                     src_time_s = float(parts[3]) * 1e-6
-                return current_ma, vbus_v, power_mw, src_time_s
+                if len(parts) >= 6:
+                    a1_raw = float(parts[4])
+                    a2_raw = float(parts[5])
+                return current_ma, vbus_v, power_mw, src_time_s, a1_raw, a2_raw
             except ValueError:
                 pass
 
@@ -57,7 +62,7 @@ def parse_line(line: str):
     else:
         power_mw = float(match.group("power_mw"))
 
-    return current_ma, vbus_v, power_mw, None
+    return current_ma, vbus_v, power_mw, None, None, None
 
 
 def choose_port(port_arg: str | None, list_only: bool) -> str | None:
@@ -259,16 +264,22 @@ def main():
     v_data = deque(maxlen=point_limit)
     p_data = deque(maxlen=point_limit)
     dt_data = deque(maxlen=point_limit)
+    a1_data = deque(maxlen=point_limit)
+    a2_data = deque(maxlen=point_limit)
     i_avg_data = deque(maxlen=point_limit)
     v_avg_data = deque(maxlen=point_limit)
     p_avg_data = deque(maxlen=point_limit)
     dt_avg_data = deque(maxlen=point_limit)
+    a1_avg_data = deque(maxlen=point_limit)
+    a2_avg_data = deque(maxlen=point_limit)
 
     avg_window = deque()
     avg_sum_i = 0.0
     avg_sum_v = 0.0
     avg_sum_p = 0.0
     avg_sum_dt = 0.0
+    avg_sum_a1 = 0.0
+    avg_sum_a2 = 0.0
     line_queue: queue.Queue[tuple[float, str]] = queue.Queue()
     stop_event = threading.Event()
     reader_thread = threading.Thread(
@@ -283,23 +294,31 @@ def main():
     device_time_base_s = None
     prev_now = None
 
-    fig, axes = plt.subplots(4, 1, figsize=(10, 10), sharex=True)
+    fig, axes = plt.subplots(6, 1, figsize=(10, 12), sharex=True)
     (line_i,) = axes[0].plot([], [], lw=2, color="tab:blue")
     (line_v,) = axes[1].plot([], [], lw=2, color="tab:green")
     (line_p,) = axes[2].plot([], [], lw=2, color="tab:red")
     (line_dt,) = axes[3].plot([], [], lw=2, color="tab:purple")
+    (line_a1,) = axes[4].plot([], [], lw=2, color="tab:brown")
+    (line_a2,) = axes[5].plot([], [], lw=2, color="tab:gray")
     (line_i_avg,) = axes[0].plot([], [], lw=2, color="tab:orange", alpha=0.9)
     (line_v_avg,) = axes[1].plot([], [], lw=2, color="tab:orange", alpha=0.9)
     (line_p_avg,) = axes[2].plot([], [], lw=2, color="tab:orange", alpha=0.9)
     (line_dt_avg,) = axes[3].plot([], [], lw=2, color="tab:orange", alpha=0.9)
+    (line_a1_avg,) = axes[4].plot([], [], lw=2, color="tab:orange", alpha=0.9)
+    (line_a2_avg,) = axes[5].plot([], [], lw=2, color="tab:orange", alpha=0.9)
 
     axes[0].set_ylabel("Current [mA]")
     axes[1].set_ylabel("Vbus [V]")
     axes[2].set_ylabel("Power [mW]")
     axes[3].set_ylabel("dt [ms]")
-    axes[3].set_xlabel("Time [s]")
+    axes[4].set_ylabel("A1 raw")
+    axes[5].set_ylabel("A2 raw")
+    axes[5].set_xlabel("Time [s]")
     axes[1].set_ylim(0.0, 8.0)
-    axes[3].set_xlim(0.0, max(1e-6, args.x_span_sec))
+    axes[4].set_ylim(0.0, 4095.0)
+    axes[5].set_ylim(0.0, 4095.0)
+    axes[5].set_xlim(0.0, max(1e-6, args.x_span_sec))
 
     for ax in axes:
         ax.grid(True, alpha=0.3)
@@ -309,12 +328,14 @@ def main():
         axes[1].legend([line_v, line_v_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
         axes[2].legend([line_p, line_p_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
         axes[3].legend([line_dt, line_dt_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
+        axes[4].legend([line_a1, line_a1_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
+        axes[5].legend([line_a2, line_a2_avg], ["Raw", f"Avg {args.avg_sec:g}s"], loc="upper left")
 
     fig.suptitle("INA226 Live Monitor")
 
     def update(_frame):
         nonlocal frame_count
-        nonlocal avg_sum_i, avg_sum_v, avg_sum_p, avg_sum_dt
+        nonlocal avg_sum_i, avg_sum_v, avg_sum_p, avg_sum_dt, avg_sum_a1, avg_sum_a2
         nonlocal device_time_base_s
         nonlocal prev_now
 
@@ -334,7 +355,7 @@ def main():
                     print(f"[SKIP] {text}")
                 continue
 
-            current_ma, vbus_v, power_mw, source_time_s = parsed
+            current_ma, vbus_v, power_mw, source_time_s, a1_raw, a2_raw = parsed
             if source_time_s is not None:
                 if device_time_base_s is None:
                     device_time_base_s = source_time_s
@@ -361,21 +382,29 @@ def main():
             v_data.append(vbus_v)
             p_data.append(power_mw)
             dt_data.append(dt_ms)
+            a1_value = current_ma if a1_raw is None else a1_raw
+            a2_value = vbus_v if a2_raw is None else a2_raw
+            a1_data.append(a1_value)
+            a2_data.append(a2_value)
 
             if args.avg_sec > 0:
-                avg_window.append((now, current_ma, vbus_v, power_mw, dt_ms))
+                avg_window.append((now, current_ma, vbus_v, power_mw, dt_ms, a1_value, a2_value))
                 avg_sum_i += current_ma
                 avg_sum_v += vbus_v
                 avg_sum_p += power_mw
                 avg_sum_dt += dt_ms
+                avg_sum_a1 += a1_value
+                avg_sum_a2 += a2_value
 
                 cutoff = now - args.avg_sec
                 while avg_window and avg_window[0][0] < cutoff:
-                    _, old_i, old_v, old_p, old_dt = avg_window.popleft()
+                    _, old_i, old_v, old_p, old_dt, old_a1, old_a2 = avg_window.popleft()
                     avg_sum_i -= old_i
                     avg_sum_v -= old_v
                     avg_sum_p -= old_p
                     avg_sum_dt -= old_dt
+                    avg_sum_a1 -= old_a1
+                    avg_sum_a2 -= old_a2
 
                 count = len(avg_window)
                 if count > 0:
@@ -383,35 +412,60 @@ def main():
                     v_avg_data.append(avg_sum_v / count)
                     p_avg_data.append(avg_sum_p / count)
                     dt_avg_data.append(avg_sum_dt / count)
+                    a1_avg_data.append(avg_sum_a1 / count)
+                    a2_avg_data.append(avg_sum_a2 / count)
                 else:
                     i_avg_data.append(current_ma)
                     v_avg_data.append(vbus_v)
                     p_avg_data.append(power_mw)
                     dt_avg_data.append(dt_ms)
+                    a1_avg_data.append(a1_value)
+                    a2_avg_data.append(a2_value)
             else:
                 i_avg_data.append(current_ma)
                 v_avg_data.append(vbus_v)
                 p_avg_data.append(power_mw)
                 dt_avg_data.append(dt_ms)
+                a1_avg_data.append(a1_value)
+                a2_avg_data.append(a2_value)
 
         if not t_data:
-            return line_i, line_v, line_p, line_dt, line_i_avg, line_v_avg, line_p_avg, line_dt_avg
+            return (
+                line_i,
+                line_v,
+                line_p,
+                line_dt,
+                line_a1,
+                line_a2,
+                line_i_avg,
+                line_v_avg,
+                line_p_avg,
+                line_dt_avg,
+                line_a1_avg,
+                line_a2_avg,
+            )
 
         x = list(t_data)
         line_i.set_data(x, list(i_data))
         line_v.set_data(x, list(v_data))
         line_p.set_data(x, list(p_data))
         line_dt.set_data(x, list(dt_data))
+        line_a1.set_data(x, list(a1_data))
+        line_a2.set_data(x, list(a2_data))
         if args.avg_sec > 0:
             line_i_avg.set_data(x, list(i_avg_data))
             line_v_avg.set_data(x, list(v_avg_data))
             line_p_avg.set_data(x, list(p_avg_data))
             line_dt_avg.set_data(x, list(dt_avg_data))
+            line_a1_avg.set_data(x, list(a1_avg_data))
+            line_a2_avg.set_data(x, list(a2_avg_data))
         else:
             line_i_avg.set_data([], [])
             line_v_avg.set_data([], [])
             line_p_avg.set_data([], [])
             line_dt_avg.set_data([], [])
+            line_a1_avg.set_data([], [])
+            line_a2_avg.set_data([], [])
 
         # Keep a fixed-width time window on the x-axis.
         x_max = x[-1]
@@ -428,23 +482,31 @@ def main():
                 v_data.popleft()
                 p_data.popleft()
                 dt_data.popleft()
+                a1_data.popleft()
+                a2_data.popleft()
                 i_avg_data.popleft()
                 v_avg_data.popleft()
                 p_avg_data.popleft()
                 dt_avg_data.popleft()
+                a1_avg_data.popleft()
+                a2_avg_data.popleft()
 
             x = list(t_data)
             line_i.set_data(x, list(i_data))
             line_v.set_data(x, list(v_data))
             line_p.set_data(x, list(p_data))
             line_dt.set_data(x, list(dt_data))
+            line_a1.set_data(x, list(a1_data))
+            line_a2.set_data(x, list(a2_data))
             if args.avg_sec > 0:
                 line_i_avg.set_data(x, list(i_avg_data))
                 line_v_avg.set_data(x, list(v_avg_data))
                 line_p_avg.set_data(x, list(p_avg_data))
                 line_dt_avg.set_data(x, list(dt_avg_data))
+                line_a1_avg.set_data(x, list(a1_avg_data))
+                line_a2_avg.set_data(x, list(a2_avg_data))
 
-        axes[3].set_xlim(x_min, x_max)
+        axes[5].set_xlim(x_min, x_max)
 
         frame_count += 1
         if args.autoscale_every > 0 and frame_count % args.autoscale_every == 0:
@@ -452,8 +514,23 @@ def main():
                 ax.relim()
                 ax.autoscale_view(scalex=False, scaley=True)
             axes[1].set_ylim(0.0, 8.0)
+            axes[4].set_ylim(0.0, 4095.0)
+            axes[5].set_ylim(0.0, 4095.0)
 
-        return line_i, line_v, line_p, line_dt, line_i_avg, line_v_avg, line_p_avg, line_dt_avg
+        return (
+            line_i,
+            line_v,
+            line_p,
+            line_dt,
+            line_a1,
+            line_a2,
+            line_i_avg,
+            line_v_avg,
+            line_p_avg,
+            line_dt_avg,
+            line_a1_avg,
+            line_a2_avg,
+        )
 
     def cleanup_serial():
         stop_event.set()

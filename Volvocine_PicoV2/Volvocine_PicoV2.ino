@@ -7,6 +7,8 @@ Servo myServo;
 // Volvocine_Pico.ino と同じサーボピン
 const int servoPin = 1;
 const int switchPin = 4;
+const int analogPin1 = 27;
+const int analogPin2 = 28;
 
 // 動作パラメータ
 const int centerAngle = 90;
@@ -116,7 +118,7 @@ bool readIna226Measurement(float &currentmA, float &busVoltV, float &powermW) {
   return true;
 }
 
-void sendIna226Measurement(float currentmA, float busVoltV, float powermW, uint32_t timestampUs) {
+void sendIna226Measurement(float currentmA, float busVoltV, float powermW, uint32_t timestampUs, uint16_t adc1, uint16_t adc2) {
 
   // CSV形式で送ってシリアル帯域と受信パース負荷を下げる
   Serial.print(currentmA, 2);
@@ -126,6 +128,10 @@ void sendIna226Measurement(float currentmA, float busVoltV, float powermW, uint3
   Serial.print(powermW, 2);
   Serial.print(',');
   Serial.print(timestampUs);
+  Serial.print(',');
+  Serial.print(adc1);
+  Serial.print(',');
+  Serial.print(adc2);
   Serial.println();
 }
 
@@ -144,6 +150,7 @@ void setup() {
   }
 
   pinMode(switchPin, INPUT);
+  analogReadResolution(12);
   myServo.attach(servoPin);
   myServo.write(centerAngle);
   lastPhaseUpdateMs = millis();
@@ -204,6 +211,8 @@ void loop() {
       unsigned long readStartUs = micros();
       if (readIna226Measurement(currentmA, busVoltV, powermW)) {
         inaReadUs = micros() - readStartUs;
+        uint16_t adc1 = (uint16_t)analogRead(analogPin1);
+        uint16_t adc2 = (uint16_t)analogRead(analogPin2);
         currentSummA += currentmA;
         busSumV += busVoltV;
         powerSummW += powermW;
@@ -214,7 +223,7 @@ void loop() {
           float invN = 1.0f / (float)inaSampleCount;
           uint32_t avgTimestampUs = (uint32_t)(timeSumUs / (unsigned long long)inaSampleCount);
           unsigned long txStartUs = micros();
-          sendIna226Measurement(currentSummA * invN, busSumV * invN, powerSummW * invN, avgTimestampUs);
+          sendIna226Measurement(currentSummA * invN, busSumV * invN, powerSummW * invN, avgTimestampUs, adc1, adc2);
           txUs = micros() - txStartUs;
           currentSummA = 0.0f;
           busSumV = 0.0f;
