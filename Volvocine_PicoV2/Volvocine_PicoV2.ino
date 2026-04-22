@@ -29,7 +29,6 @@ const unsigned long profilerReportIntervalMs = 5000;
 
 float currentSummA = 0.0f;
 float busSumV = 0.0f;
-float powerSummW = 0.0f;
 uint8_t inaSampleCount = 0;
 unsigned long long timeSumUs = 0;
 
@@ -102,7 +101,7 @@ bool detectIna226Address() {
   return false;
 }
 
-bool readIna226Measurement(float &currentmA, float &busVoltV, float &powermW) {
+bool readIna226Measurement(float &currentmA, float &busVoltV) {
   uint16_t shuntRawU16 = 0;
   uint16_t busRawU16 = 0;
 
@@ -120,16 +119,15 @@ bool readIna226Measurement(float &currentmA, float &busVoltV, float &powermW) {
   float currentA = shuntVoltV / SHUNT_OHMS;
   currentmA = currentA * 1000.0f;
   busVoltV = (float)busRawU16 * 1.25e-3f;     // 1.25mV/bit
-  powermW = busVoltV * currentA * 1000.0f;
 
   return true;
 }
 
-bool sendIna226Measurement(float currentmA, float busVoltV, float powermW, uint32_t timestampUs, uint16_t adc1, uint16_t adc2) {
+bool sendIna226Measurement(float currentmA, float busVoltV, uint32_t timestampUs, uint16_t adc1, uint16_t adc2) {
   // 送信でループが止まらないよう、空きが足りない時はこのサンプルをスキップする
   char line[80];
-  int lineLen = snprintf(line, sizeof(line), "%.2f,%.3f,%.2f,%lu,%u,%u\n",
-                         currentmA, busVoltV, powermW, (unsigned long)timestampUs,
+  int lineLen = snprintf(line, sizeof(line), "%.2f,%.3f,%lu,%u,%u\n",
+                         currentmA, busVoltV, (unsigned long)timestampUs,
                          (unsigned int)adc1, (unsigned int)adc2);
   if (lineLen <= 0 || lineLen >= (int)sizeof(line)) {
     return false;
@@ -214,16 +212,14 @@ void loop() {
     if (inaReady) {
       float currentmA = 0.0f;
       float busVoltV = 0.0f;
-      float powermW = 0.0f;
 
       unsigned long readStartUs = micros();
-      if (readIna226Measurement(currentmA, busVoltV, powermW)) {
+      if (readIna226Measurement(currentmA, busVoltV)) {
         inaReadUs = micros() - readStartUs;
         uint16_t adc1 = (uint16_t)analogRead(analogPin1);
         uint16_t adc2 = (uint16_t)analogRead(analogPin2);
         currentSummA += currentmA;
         busSumV += busVoltV;
-        powerSummW += powermW;
         timeSumUs += readStartUs;
         inaSampleCount++;
 
@@ -231,12 +227,11 @@ void loop() {
           float invN = 1.0f / (float)inaSampleCount;
           uint32_t avgTimestampUs = (uint32_t)(timeSumUs / (unsigned long long)inaSampleCount);
           unsigned long txStartUs = micros();
-          sendIna226Measurement(currentSummA * invN, busSumV * invN, powerSummW * invN, avgTimestampUs, adc1, adc2);
+          sendIna226Measurement(currentSummA * invN, busSumV * invN, avgTimestampUs, adc1, adc2);
           txUs = micros() - txStartUs;
           // 送信成否に関わらず蓄積をクリアし、古いデータの滞留を防ぐ
           currentSummA = 0.0f;
           busSumV = 0.0f;
-          powerSummW = 0.0f;
           timeSumUs = 0;
           inaSampleCount = 0;
         }

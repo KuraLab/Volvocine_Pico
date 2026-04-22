@@ -29,22 +29,36 @@ LINE_RE = re.compile(
 
 
 def parse_line(line: str):
-    # Fast path for compact CSV: current_mA,vbus_V,power_mW[,timestamp_us[,a1_raw,a2_raw]]
+    # Fast path for compact CSV:
+    # new: current_mA,vbus_V,timestamp_us,a1_raw,a2_raw
+    # old: current_mA,vbus_V,power_mW[,timestamp_us[,a1_raw,a2_raw]]
     if "," in line and "I=" not in line:
         parts = [p.strip() for p in line.split(",")]
         if len(parts) >= 3:
             try:
                 current_ma = float(parts[0])
                 vbus_v = float(parts[1])
-                power_mw = float(parts[2])
+                power_mw = current_ma * vbus_v
                 src_time_s = None
                 a1_raw = None
                 a2_raw = None
-                if len(parts) >= 4:
-                    src_time_s = float(parts[3]) * 1e-6
+
                 if len(parts) >= 6:
+                    # old 6-col: current,vbus,power,timestamp,a1,a2
+                    power_mw = float(parts[2])
+                    src_time_s = float(parts[3]) * 1e-6
                     a1_raw = float(parts[4])
                     a2_raw = float(parts[5])
+                elif len(parts) == 5:
+                    # new 5-col: current,vbus,timestamp,a1,a2
+                    src_time_s = float(parts[2]) * 1e-6
+                    a1_raw = float(parts[3])
+                    a2_raw = float(parts[4])
+                elif len(parts) >= 4:
+                    # old 4-col: current,vbus,power,timestamp
+                    power_mw = float(parts[2])
+                    src_time_s = float(parts[3]) * 1e-6
+
                 return current_ma, vbus_v, power_mw, src_time_s, a1_raw, a2_raw
             except ValueError:
                 pass
