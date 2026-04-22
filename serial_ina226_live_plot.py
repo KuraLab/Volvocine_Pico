@@ -217,7 +217,7 @@ def main():
         help="Max retained points (0 = unlimited; recommended for fixed x-span)",
     )
     parser.add_argument(
-        "--interval-ms", type=int, default=5, help="Plot update interval in milliseconds"
+        "--interval-ms", type=int, default=10, help="Plot update interval in milliseconds"
     )
     parser.add_argument(
         "--x-span-sec",
@@ -228,13 +228,13 @@ def main():
     parser.add_argument(
         "--avg-sec",
         type=float,
-        default=0.1,
+        default=0.0,
         help="Time window in seconds for moving-average overlay (0 to disable)",
     )
     parser.add_argument(
         "--autoscale-every",
         type=int,
-        default=50,
+        default=0,
         help="Recompute y-axis autoscale every N frames (0 to disable)",
     )
     parser.add_argument(

@@ -1,6 +1,7 @@
 #include <Servo.h>
 #include <Wire.h>
 #include <math.h>
+#include <stdio.h>
 
 Servo myServo;
 
@@ -19,8 +20,9 @@ const float frequencyHz = 1.25f;  // 0.5Hz = 2秒で1往復
 uint8_t ina226Addr = 0x40;
 const float SHUNT_OHMS = 0.056f;  // 実測系のシャント抵抗値
 unsigned long lastInaPrintMs = 0;
-const unsigned long inaPrintIntervalMs = 1;
+const unsigned long inaPrintIntervalMs = 2;
 const uint8_t inaSamplesPerSend = 1;
+const unsigned long inaReadErrorLogIntervalMs = 1000;
 
 const bool enableLoopProfiler = false;
 const unsigned long profilerReportIntervalMs = 5000;
@@ -53,6 +55,7 @@ const unsigned long debounceMs = 200;
 float phase = 0.0f;
 unsigned long lastPhaseUpdateMs = 0;
 bool inaReady = false;
+unsigned long lastInaReadErrorLogMs = 0;
 
 bool inaWriteReg16(uint8_t reg, uint16_t value) {
   Wire1.beginTransmission(ina226Addr);
@@ -104,7 +107,11 @@ bool readIna226Measurement(float &currentmA, float &busVoltV, float &powermW) {
   uint16_t busRawU16 = 0;
 
   if (!inaReadReg16(0x01, shuntRawU16) || !inaReadReg16(0x02, busRawU16)) {
-    Serial.println("[INA226] read error (check wiring/pull-up/address)");
+    unsigned long nowMs = millis();
+    if (nowMs - lastInaReadErrorLogMs >= inaReadErrorLogIntervalMs) {
+      lastInaReadErrorLogMs = nowMs;
+      Serial.println("[INA226] read error (check wiring/pull-up/address)");
+    }
     return false;
   }
 
@@ -118,21 +125,22 @@ bool readIna226Measurement(float &currentmA, float &busVoltV, float &powermW) {
   return true;
 }
 
-void sendIna226Measurement(float currentmA, float busVoltV, float powermW, uint32_t timestampUs, uint16_t adc1, uint16_t adc2) {
+bool sendIna226Measurement(float currentmA, float busVoltV, float powermW, uint32_t timestampUs, uint16_t adc1, uint16_t adc2) {
+  // 送信でループが止まらないよう、空きが足りない時はこのサンプルをスキップする
+  char line[80];
+  int lineLen = snprintf(line, sizeof(line), "%.2f,%.3f,%.2f,%lu,%u,%u\n",
+                         currentmA, busVoltV, powermW, (unsigned long)timestampUs,
+                         (unsigned int)adc1, (unsigned int)adc2);
+  if (lineLen <= 0 || lineLen >= (int)sizeof(line)) {
+    return false;
+  }
 
-  // CSV形式で送ってシリアル帯域と受信パース負荷を下げる
-  Serial.print(currentmA, 2);
-  Serial.print(',');
-  Serial.print(busVoltV, 3);
-  Serial.print(',');
-  Serial.print(powermW, 2);
-  Serial.print(',');
-  Serial.print(timestampUs);
-  Serial.print(',');
-  Serial.print(adc1);
-  Serial.print(',');
-  Serial.print(adc2);
-  Serial.println();
+  if (Serial.availableForWrite() < lineLen) {
+    return false;
+  }
+
+  size_t written = Serial.write((const uint8_t *)line, (size_t)lineLen);
+  return written == (size_t)lineLen;
 }
 
 void setup() {
@@ -225,6 +233,7 @@ void loop() {
           unsigned long txStartUs = micros();
           sendIna226Measurement(currentSummA * invN, busSumV * invN, powerSummW * invN, avgTimestampUs, adc1, adc2);
           txUs = micros() - txStartUs;
+          // 送信成否に関わらず蓄積をクリアし、古いデータの滞留を防ぐ
           currentSummA = 0.0f;
           busSumV = 0.0f;
           powerSummW = 0.0f;
