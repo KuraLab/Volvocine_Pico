@@ -472,7 +472,7 @@ Gamma2_odd_from_sine_pair = Gamma2_from_sine_pair - Gamma2_from_sine_pair_neg;
 Gamma1_odd_from_w_alt = Gamma1_from_w_alt - Gamma1_from_w_alt_neg;
 Gamma2_odd_from_w_alt = Gamma2_from_w_alt - Gamma2_from_w_alt_neg;
 
-n_w_tiles = double(processing_modes.s1) + double(processing_modes.s2);
+n_w_tiles = double(processing_modes.s1) + 2 * double(processing_modes.s2);
 if n_w_tiles > 0
     figure('Color', 'w');
     tiledlayout(n_w_tiles, 1, 'TileSpacing', 'compact');
@@ -504,20 +504,34 @@ if n_w_tiles > 0
     end
 
     if processing_modes.s2
+        % Split into two subplots: zopt and zsin
         nexttile;
         plot(phi_line, w2_values, 'LineWidth', 1.8, ...
             'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
         hold on;
-        %plot(phi_line, fourier_fit_w2.y_fit, '-.', 'LineWidth', 1.6, ...
-        %    'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_2\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s2, psi_plus_s2));
         if has_symmetric_peak_s2
             plot(phi_line, w2_values_alt, 'LineWidth', 1.4, ...
                 'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_2^*$$');
-            %plot(phi_line, fourier_fit_w2_alt.y_fit, '-.', 'LineWidth', 1.2, ...
-            %    'DisplayName', sprintf('$$\\mathrm{Fourier\ fit}\ W_2\ (N=%d,\\ \\psi_+=%.6g)$$', fit_order_s2, psi_plus_s2_alt));
         end
+        grid on;
+        box on;
+        xlim([-pi, pi]);
+        xticks([-pi, -pi/2, 0, pi/2, pi]);
+        xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+        xlabel('$$\theta$$');
+        ylabel('$$z(\theta)$$');
+        add_y_margin_from_lines(gca, 0.12);
+        show_legend_if_multiple(gca);
+        lgd = legend(gca);
+        if ~isempty(lgd) && isgraphics(lgd)
+            lgd.Location = 'eastoutside';
+        end
+        title('$$z_{\mathrm{opt}}(\theta)$$');
+
+        nexttile;
         plot(phi_line, reference_sine_s2_pair, 'LineWidth', 1.6, ...
             'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
+        hold on;
         plot(phi_line, reference_sine_s2, 'LineWidth', 1.6, ...
             'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
         grid on;
@@ -533,7 +547,7 @@ if n_w_tiles > 0
         if ~isempty(lgd) && isgraphics(lgd)
             lgd.Location = 'eastoutside';
         end
-        %title(sprintf('$$s_2:\ W_2(\\phi)\ \mathrm{vs}\ \cos(\\phi+\\pi-0.6\\pi),\\ \psi_+^*=%.6g\ \mathrm{rad}$$', psi_plus_s2));
+        title('$$z_{\mathrm{sin}}(\theta)$$');
     end
     tuneFigure;
     %saveFigure;
@@ -659,23 +673,17 @@ end
 
 if processing_modes.s2
     figure('Color', 'w');
+    tiledlayout(2, 1, 'TileSpacing', 'compact');
+
+    % zopt subplot
+    nexttile;
     plot(psi_scan_values, Gamma2_odd_from_w, 'LineWidth', 1.8, ...
         'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
     hold on;
-    gamma2_odd_at_selected = interp1(psi_scan_values, Gamma2_odd_from_w, psi_plus_s2, 'pchip', 'extrap');
-    %plot(psi_plus_s2, gamma2_odd_at_selected, 'o', 'MarkerSize', 7, 'LineWidth', 1.2, ...
-    %    'DisplayName', '$$\psi_+^*\ \mathrm{from\ previous\ plot}$$');
     if has_symmetric_peak_s2
         plot(psi_scan_values, Gamma2_odd_from_w_alt, 'LineWidth', 1.4, ...
             'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_2^*$$');
-        gamma2_odd_at_selected_alt = interp1(psi_scan_values, Gamma2_odd_from_w_alt, psi_plus_s2_alt, 'pchip', 'extrap');
-        %plot(psi_plus_s2_alt, gamma2_odd_at_selected_alt, 's', 'MarkerSize', 7, 'LineWidth', 1.2, ...
-        %    'DisplayName', '$$\mathrm{symmetric}\ \psi_+^*\ \mathrm{from\ previous\ plot}$$');
     end
-    plot(psi_scan_values, Gamma2_odd_from_sine_pair, 'LineWidth', 1.8, ...
-            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
-    plot(psi_scan_values, Gamma2_odd_from_sine, 'LineWidth', 1.8, ...
-            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
@@ -688,6 +696,29 @@ if processing_modes.s2
     if ~isempty(lgd) && isgraphics(lgd)
         lgd.Location = 'eastoutside';
     end
+    title('$$g[z_{\mathrm{opt}}](\psi)$$');
+
+    % zsin subplot
+    nexttile;
+    plot(psi_scan_values, Gamma2_odd_from_sine_pair, 'LineWidth', 1.8, ...
+        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
+    hold on;
+    plot(psi_scan_values, Gamma2_odd_from_sine, 'LineWidth', 1.8, ...
+        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
+    grid on;
+    box on;
+    xlim([psi_scan_min, psi_scan_max]);
+    xticks([-pi, -pi/2, 0, pi/2, pi]);
+    xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+    xlabel('$$\psi$$');
+    ylabel('$$g[z](\psi)$$');
+    show_legend_if_multiple(gca);
+    lgd = legend(gca);
+    if ~isempty(lgd) && isgraphics(lgd)
+        lgd.Location = 'eastoutside';
+    end
+    title('$$g[z_{\mathrm{sin}}](\psi)$$');
+
     tuneFigure;
 
     % Export specific lines for cross-plot overlay in runner script.
@@ -697,6 +728,23 @@ if processing_modes.s2
     overlay_data_s2.gamma2_odd_from_sine_pair = Gamma2_odd_from_sine_pair(:);
     overlay_data_s2.tau_pair_s2 = tau_pair_s2;
     assignin('base', 'overlay_data_s2_gamma2_odd', overlay_data_s2);
+
+    % Plot g[z_opt] with y-axis shift and y-intercept label
+    figure('Color', 'w');
+    plot(psi_scan_values, Gamma2_odd_from_w + 0.05, 'LineWidth', 1.8, ...
+        'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
+    hold on;
+    
+    
+    grid on;
+    box on;
+    xlim([psi_scan_min, psi_scan_max]);
+    xticks([-pi, -pi/2, 0, pi/2, pi]);
+    xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+    xlabel('$$\psi$$');
+    ylabel('$$g[z_{\mathrm{opt}}](\psi) + 0.05$$');
+    show_legend_if_multiple(gca);
+    tuneFigure;
 end
 
 if processing_modes.s1
