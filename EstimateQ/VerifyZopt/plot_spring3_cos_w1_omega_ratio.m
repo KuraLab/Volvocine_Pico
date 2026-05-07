@@ -9,7 +9,7 @@ t_end = 120;
 t_start_series = 0;  % start time for time-series overlay only
 mean_phase_band_half_width_rad = 0.10*pi;
 if nargin < 1 || isempty(enable_save_figure)
-    enable_save_figure = false;
+    enable_save_figure = true;
 end
 
 % Clear any existing figures before generating new plots.
@@ -39,13 +39,13 @@ else
 end
 
 figure('Color', 'w');
-hW1Trend = plot(xW1, yW1, '-', 'LineWidth', 1.2, 'Color', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), \psi^*$');
+hW1Trend = plot(xW1, yW1, '-', 'LineWidth', 1.2, 'Color', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), q^*$');
 hold on;
 hCosTrend = plot(xCos, yCos, '-', 'LineWidth', 1.2, 'Color', [0.0, 0.4470, 0.7410], 'DisplayName', '$z_{\mathrm{sin}}(\theta), \tau_1^*$');
 
 hW1Conv = plot(xW1(isConvergedW1), yW1(isConvergedW1), 'p', ...
     'LineStyle', 'none', 'MarkerSize', 10, 'MarkerFaceColor', [0.8500, 0.3250, 0.0980], ...
-    'MarkerEdgeColor', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), \psi^*$ converged');
+    'MarkerEdgeColor', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), q^*$ converged');
 plot(xW1(~isConvergedW1), yW1(~isConvergedW1), 's', ...
     'LineStyle', 'none', 'MarkerSize', 5, 'MarkerFaceColor', 'none', ...
     'MarkerEdgeColor', [0.8500, 0.3250, 0.0980]);
@@ -73,6 +73,13 @@ hold off;
 
 if exist('tuneFigure', 'file') == 2
     tuneFigure;
+end
+if enable_save_figure
+    if exist('saveFigure', 'file') == 2
+        saveFigure();
+    else
+        warning('enable_save_figure is true, but saveFigure.m was not found.');
+    end
 end
 
 local_plot_mean_phase_vs_delta_omega(phaseStatsCos, phaseStatsW1, mean_phase_band_half_width_rad);
