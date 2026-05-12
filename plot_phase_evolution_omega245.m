@@ -16,7 +16,7 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
 %   overlay_mode = true (true: overlay all chunks, false: separate figures for each chunk)
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('merged_chunks_organized','2026-05-07');
+        dirpath = fullfile('merged_chunks_organized','2026-05-12');
         %dirpath = fullfile('EstimateF','Spring5/250');
         %dirpath = fullfile('EstimateQ','VerifyZopt/Spring3/w1/250');
     end
@@ -94,6 +94,11 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
         if ~ismember('chunk_id', T.Properties.VariableNames)
             T.chunk_id = ones(height(T),1);
         end
+        T = T(T.agent_id ~= 99, :);
+        if isempty(T)
+            warning('Skipping %s: only agent_id == 99 found after filtering.', file_list{i});
+            continue;
+        end
         file_tables{i} = T(:,{'time_pc_sec_abs','a0','agent_id','chunk_id'});
         % Apply overflow / chunk-start corrections per-file (same logic as original)
         file_tables{i} = correct_large_jump_matlab(file_tables{i}, threshold_sec, jump_sec);
@@ -108,6 +113,25 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
     agent_sets = agent_sets(valid_idx);
     if isempty(file_tables)
         error('No valid data files to plot.');
+    end
+    
+    % Skip CSV files with fewer than 2 agents
+    agent_counts = cellfun(@numel, agent_sets);
+    valid_agent_idx = agent_counts >= 2;
+    
+    % Display information about skipped files
+    for i = find(~valid_agent_idx)
+        [~, name] = fileparts(file_list{i});
+        fprintf('[INFO] Skipping %s: only %d agent(s) found (need at least 2).\n', ...
+            name, agent_counts(i));
+    end
+    
+    file_tables = file_tables(valid_agent_idx);
+    file_list = file_list(valid_agent_idx);
+    agent_sets = agent_sets(valid_agent_idx);
+    if isempty(file_tables)
+        warning('No CSV files with 2 or more agents found. Exiting.');
+        return;
     end
 
     % Determine agents common to all files; if none, fall back to per-file reference
@@ -144,23 +168,16 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
 
     % Prepare per-file phase series using original pipeline
     allow_missing_agents = 1;
-    max_agent_id = max(cellfun(@max, agent_sets));
     phase_series_by_file = cell(numel(file_tables), 1);
     for f = 1:numel(file_tables)
         phase_series_by_file{f} = compute_phase_series_for_file( ...
             file_tables{f}, base_agent_per_file(f), n_seconds_to_cut, plot_duration, ...
-            allow_missing_agents, apply_filter, filter_window_size, max_agent_id, n_sync, m_sync);
+            allow_missing_agents, apply_filter, filter_window_size, n_sync, m_sync);
     end
 
     % Common plotting parameters
     line_styles = {'-','--',':','-.'};
     max_plot_time = min(plot_duration - n_seconds_to_cut, 120);
-
-    if use_dynamic_reference
-        ref_label = '\mathrm{ref}';
-    else
-        ref_label = sprintf('%d', base_agent);
-    end
 
     % Display label for modified phase-combination using n:m notation
     y_label_str = sprintf('$$%d\\phi_{1} - %d\\phi_{2}$$', m_sync, n_sync);
@@ -190,13 +207,14 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
             ls = line_styles{ mod(p-1, numel(line_styles)) + 1 };
             for f = 1:numel(file_list)
                 series_struct = phase_series_by_file{f};
-                if ag > numel(series_struct)
+                series_entry = get_agent_series_entry(series_struct, ag);
+                if isempty(series_entry)
                     continue;
                 end
-                if isempty(series_struct(ag).time) || isempty(series_struct(ag).phase)
+                if isempty(series_entry.time) || isempty(series_entry.phase)
                     continue;
                 end
-                h = plot(ax, series_struct(ag).time, series_struct(ag).phase, ...
+                h = plot(ax, series_entry.time, series_entry.phase, ...
                     'Color', colors(f,:), 'LineWidth', 0.8, 'LineStyle', ls);
                 if ~isgraphics(line_handles(f))
                     line_handles(f) = h;
@@ -215,7 +233,9 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
             %    'Location','eastoutside','Interpreter','latex');
         end
 
-        tuneFigure();
+        if exist('tuneFigure', 'file') == 2 || exist('tuneFigure', 'builtin')
+            tuneFigure();
+        end
 
     else
         % ===== SEPARATE MODE: Each chunk in its own figure =====
@@ -243,13 +263,14 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
             for p = 1:numel(agents_to_plot)
                 ag = agents_to_plot(p);
                 ls = line_styles{ mod(p-1, numel(line_styles)) + 1 };
-                if ag > numel(series_struct)
+                series_entry = get_agent_series_entry(series_struct, ag);
+                if isempty(series_entry)
                     continue;
                 end
-                if isempty(series_struct(ag).time) || isempty(series_struct(ag).phase)
+                if isempty(series_entry.time) || isempty(series_entry.phase)
                     continue;
                 end
-                h = plot(ax, series_struct(ag).time, series_struct(ag).phase, ...
+                h = plot(ax, series_entry.time, series_entry.phase, ...
                     'Color', colors(p,:), 'LineWidth', 0.8, 'LineStyle', ls);
                 line_handles_sep = [line_handles_sep; h];
                 agent_legend = [agent_legend; {sprintf('Agent %d', ag)}];
@@ -265,13 +286,15 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
                     'Location','eastoutside','Interpreter','latex');
             end
 
-            tuneFigure();
+            if exist('tuneFigure', 'file') == 2 || exist('tuneFigure', 'builtin')
+                tuneFigure();
+            end
         end
     end
 
     cluster_info = cluster_phase_window_means(phase_series_by_file, agents_to_plot, sample_window, CLUSTER_VAR_THRESHOLD);
 
-    if do_save_figure
+    if do_save_figure && (exist('saveFigure', 'file') == 2 || exist('saveFigure', 'builtin'))
         saveFigure();
     end
 
@@ -294,11 +317,12 @@ function cluster_info = cluster_phase_window_means(phase_series_by_file, agents_
             continue;
         end
         for ag = agents_to_plot(:).'
-            if ag > numel(series_struct)
+            series_entry = get_agent_series_entry(series_struct, ag);
+            if isempty(series_entry)
                 continue;
             end
-            times = series_struct(ag).time;
-            phases = series_struct(ag).phase;
+            times = series_entry.time;
+            phases = series_entry.phase;
             if isempty(times) || isempty(phases)
                 continue;
             end
@@ -368,7 +392,7 @@ function cluster_info = cluster_phase_window_means(phase_series_by_file, agents_
     end
 end
 
-function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_seconds_to_cut, plot_duration, allow_missing_agents, apply_filter, filter_window_size, max_agent_id, n_sync, m_sync)
+function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_seconds_to_cut, plot_duration, allow_missing_agents, apply_filter, filter_window_size, n_sync, m_sync)
     if nargin < 5 || isempty(allow_missing_agents)
         allow_missing_agents = 1;
     end
@@ -378,9 +402,6 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
     if nargin < 7 || isempty(filter_window_size)
         filter_window_size = 1;
     end
-    if nargin < 8 || isempty(max_agent_id)
-        max_agent_id = max(df_all.agent_id);
-    end
     if nargin < 9 || isempty(n_sync)
         n_sync = 2;
     end
@@ -388,14 +409,14 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
         m_sync = 1;
     end
 
-    series_struct = repmat(struct('time', [], 'phase', []), 1, max_agent_id);
-
     if isempty(df_all)
+        series_struct = struct('agent_id', {}, 'time', {}, 'phase', {});
         return;
     end
 
     df_main = df_all(df_all.agent_id ~= 99, :);
     if isempty(df_main)
+        series_struct = struct('agent_id', {}, 'time', {}, 'phase', {});
         return;
     end
 
@@ -416,8 +437,16 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
     end
 
     start_time_abs = min_time + n_seconds_to_cut;
-    new_time_series = (start_time_abs:0.01:max_time) - start_time_abs;
+    max_allowed_time = plot_duration - n_seconds_to_cut;
+    candidate_end_abs = min(max_time, start_time_abs + max_allowed_time);
+    if candidate_end_abs < start_time_abs
+        series_struct = struct('agent_id', {}, 'time', {}, 'phase', {});
+        return;
+    end
+
+    new_time_series = (start_time_abs:0.01:candidate_end_abs) - start_time_abs;
     if isempty(new_time_series)
+        series_struct = struct('agent_id', {}, 'time', {}, 'phase', {});
         return;
     end
 
@@ -430,19 +459,17 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
     min_valid = length(agents) - allow_missing_agents;
     valid_idx = find(valid_counts >= min_valid);
     if isempty(valid_idx)
+        series_struct = struct('agent_id', {}, 'time', {}, 'phase', {});
         return;
     end
 
     new_time_series = new_time_series(valid_idx);
-
-    max_allowed_time = plot_duration - n_seconds_to_cut;
-    time_mask = new_time_series <= max_allowed_time;
-    new_time_series = new_time_series(time_mask);
     if isempty(new_time_series)
+        series_struct = struct('agent_id', {}, 'time', {}, 'phase', {});
         return;
     end
 
-    interpolated_data = struct();
+    interpolated_data = containers.Map('KeyType', 'double', 'ValueType', 'any');
     for i = 1:length(agents)
         agent_id = agents(i);
         sub = df_main(df_main.agent_id == agent_id, :);
@@ -458,16 +485,18 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
         if apply_filter
             interp_a0 = movmean(interp_a0, filter_window_size, 'omitnan');
         end
-        interpolated_data(agent_id).a0 = interp_a0;
+        interpolated_data(agent_id) = struct('a0', interp_a0);
     end
 
     base_agent_a0 = interpolated_data(base_agent_id).a0;
+
+    series_struct = repmat(struct('agent_id', [], 'time', [], 'phase', []), 1, numel(agents));
 
     for i = 1:length(agents)
         agent_id = agents(i);
         % Use m_sync*phi_base - n_sync*phi_agent for n:m synchronization checks
         phase_raw = m_sync * base_agent_a0 - n_sync * interpolated_data(agent_id).a0;
-    phase_diff = mod(phase_raw + 128, 256) - 128;
+        phase_diff = mod(phase_raw + 128, 256) - 128;
         phase_diff = phase_diff * (2*pi/256);
         phase_diff_with_nan = phase_diff;
         for j = 2:length(phase_diff_with_nan)
@@ -478,11 +507,12 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
                 phase_diff_with_nan(j) = NaN;
             end
         end
-        series_struct(agent_id).time = new_time_series;
+        series_struct(i).agent_id = agent_id;
+        series_struct(i).time = new_time_series;
         if agent_id == base_agent_id
-            series_struct(agent_id).phase = zeros(size(new_time_series));
+            series_struct(i).phase = zeros(size(new_time_series));
         else
-            series_struct(agent_id).phase = phase_diff_with_nan;
+            series_struct(i).phase = phase_diff_with_nan;
         end
     end
 end
@@ -531,30 +561,35 @@ end
 
 function df_all = correct_chunk_start_times_matlab(df_all, threshold_sec, jump_sec)
 
-    [G, chunk_keys] = findgroups(df_all.agent_id, df_all.chunk_id);
-    chunk_start = splitapply(@(x) min(x), df_all.time_pc_sec_abs, G);
+    [G, agent_keys, chunk_keys] = findgroups(df_all.agent_id, df_all.chunk_id);
+    chunk_start = splitapply(@min, df_all.time_pc_sec_abs, G);
     median_start = median(chunk_start);
-
-    has_chunk_id = size(chunk_keys, 2) >= 2;
 
     for i = 1:max(G)
         idx = find(G == i);
         if isempty(idx)
             continue;  % 空グループスキップ
         end
-        start_time = df_all.time_pc_sec_abs(idx(1));
+        start_time = min(df_all.time_pc_sec_abs(idx));
         if start_time - median_start > threshold_sec
             df_all.time_pc_sec_abs(idx) = df_all.time_pc_sec_abs(idx) - jump_sec;
-            % agent_id, chunk_idの表示（chunk_idが無い場合も対応）
-            if has_chunk_id
-                aid = chunk_keys(i,1);
-                cid = chunk_keys(i,2);
-            else
-                aid = chunk_keys(i);
-                cid = -1;  % または NaN
-            end
+            aid = agent_keys(i);
+            cid = chunk_keys(i);
             fprintf('[FIX] Corrected chunk time for agent %d, chunk %d: %.3f → %.3f\n', ...
                 aid, cid, start_time, start_time - jump_sec);
         end
     end
+end
+
+function series_entry = get_agent_series_entry(series_struct, agent_id)
+    series_entry = [];
+    if isempty(series_struct)
+        return;
+    end
+    agent_ids = [series_struct.agent_id];
+    match_idx = find(agent_ids == agent_id, 1, 'first');
+    if isempty(match_idx)
+        return;
+    end
+    series_entry = series_struct(match_idx);
 end

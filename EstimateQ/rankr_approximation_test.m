@@ -26,6 +26,20 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
 %   [rank_analysis([rank_analysis.agent_id] == 2).rank]
 %   [rank_analysis([rank_analysis.agent_id] == 4).rank]
 %
+%   % Imaginary-part check example
+%   rank_analysis = rankr_approximation_test( ...
+%       'Spring3/255', [2, 4], ...
+%       'M', 20, 'N', 20, ...
+%       'SignalField', 'sin_phi2_a2_agent', ...
+%       'ProfileRank', 3, ...
+%       'RemoveSelfOnly', true, ...
+%       'RemoveConstant', true, ...
+%       'RemoveOtherOnly', false, ...
+%       'PlotSelfOnlyProfile', true, ...
+%       'CheckImaginaryParts', true, ...
+%       'ImagTolAbs', 1e-10, ...
+%       'ImagTolRel', 1e-8);
+%
 % ========== SETTINGS (Edit here to change defaults) ==========
     DEFAULT_M = 20;                              % Fourier order M
     DEFAULT_N = 20;                              % Fourier order N
@@ -39,6 +53,9 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
     DEFAULT_REMOVE_CONSTANT = true;            % Remove constant term (m=0, n=0)
     DEFAULT_REMOVE_OTHER_ONLY = false;          % Remove other-phase-only terms
     DEFAULT_PLOT_SELF_ONLY_PROFILE = true;      % Plot self-phase-only profile
+    DEFAULT_CHECK_IMAGINARY_PARTS = true;       % Check whether imaginary parts are numerical noise
+    DEFAULT_IMAG_TOL_ABS = 1e-10;               % Absolute tolerance for imaginary-part checks
+    DEFAULT_IMAG_TOL_REL = 1e-8;                % Relative tolerance for imaginary-part checks
 % =============================================================="
 
     if nargin < 1 || isempty(dirpath)
@@ -60,6 +77,9 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
     addParameter(parser, 'RemoveConstant', DEFAULT_REMOVE_CONSTANT, @islogical);
     addParameter(parser, 'RemoveOtherOnly', DEFAULT_REMOVE_OTHER_ONLY, @islogical);
     addParameter(parser, 'PlotSelfOnlyProfile', DEFAULT_PLOT_SELF_ONLY_PROFILE, @islogical);
+    addParameter(parser, 'CheckImaginaryParts', DEFAULT_CHECK_IMAGINARY_PARTS, @islogical);
+    addParameter(parser, 'ImagTolAbs', DEFAULT_IMAG_TOL_ABS, @isnumeric);
+    addParameter(parser, 'ImagTolRel', DEFAULT_IMAG_TOL_REL, @isnumeric);
 
     parse(parser, varargin{:});
 
@@ -71,6 +91,9 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
     remove_constant = parser.Results.RemoveConstant;
     remove_other_only = parser.Results.RemoveOtherOnly;
     flag_plot_self_only_profile = parser.Results.PlotSelfOnlyProfile;
+    check_imaginary_parts = parser.Results.CheckImaginaryParts;
+    imag_tol_abs = parser.Results.ImagTolAbs;
+    imag_tol_rel = parser.Results.ImagTolRel;
     
     % Extract data inline - for all agents
     out_full = extract_phase_pairs_for_rank_analysis_inline(dirpath, phase_agent_ids, [], ...
@@ -175,10 +198,11 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
         expected_result_count = expected_result_count + n_rank_to_test;
         
         % Build separable components once for all ranks
-        components_all = build_separable_components(U, S, V, m_values, n_values, min(5, numel(sigma)));
+        components_all = build_separable_components(U, S, V, m_values, n_values, min(5, numel(sigma)), imag_tol_abs, imag_tol_rel);
+        component_imag_checks = get_component_imag_checks(components_all);
         
         % Compute self-only profile once for this agent
-        self_profile = compute_self_only_profile(C_full, m_values, n_values, target_agent_id, out_full.phase_agent_ids);
+        self_profile = compute_self_only_profile(C_full, m_values, n_values, target_agent_id, out_full.phase_agent_ids, imag_tol_abs, imag_tol_rel);
         
         % Extract energy metrics from removed_info
         total_coeff_energy = removed_info.total_coeff_energy;
@@ -233,6 +257,14 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
             result.removed_info = removed_info;
             result.self_profile = self_profile;
             result.components = components_all(1:min(R, numel(components_all)));
+            result.imag_check = struct();
+            result.imag_check.self_profile = struct( ...
+                'max_abs_imag', self_profile.max_abs_imag, ...
+                'max_abs_real', self_profile.max_abs_real, ...
+                'relative_imag', self_profile.relative_imag, ...
+                'imag_is_small', self_profile.imag_is_small);
+            result.imag_check.components = component_imag_checks;
+            result.imag_check.all_ok = self_profile.imag_is_small && all([component_imag_checks.a_imag_is_small]) && all([component_imag_checks.b_imag_is_small]);
             
             % Append to rank_results
             if isempty(rank_results)
@@ -249,6 +281,23 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
             end
         end
         fprintf('\n');
+        if check_imaginary_parts
+            fprintf('  [Imaginary-part check]\n');
+            fprintf('    Self-only q_%d: max|imag| = %.3e, relative = %.3e, %s\n', ...
+                signal_index, self_profile.max_abs_imag, self_profile.relative_imag, ok_ng(self_profile.imag_is_small));
+            for rr = 1:numel(components_all)
+                comp_check = component_imag_checks(rr);
+                fprintf('    r=%d: a max|imag| = %.3e, rel = %.3e, %s; b max|imag| = %.3e, rel = %.3e, %s\n', ...
+                    rr, comp_check.a_max_abs_imag, comp_check.a_relative_imag, ok_ng(comp_check.a_imag_is_small), ...
+                    comp_check.b_max_abs_imag, comp_check.b_relative_imag, ok_ng(comp_check.b_imag_is_small));
+            end
+            if self_profile.imag_is_small && all([component_imag_checks.a_imag_is_small]) && all([component_imag_checks.b_imag_is_small])
+                fprintf('  All checked imaginary parts are at numerical-noise level.\n');
+            else
+                fprintf('  Warning: Some separated profiles have non-negligible imaginary parts.\n');
+            end
+            fprintf('\n');
+        end
         
         % Plot colormap for ranks 1, 2, 3
         if numel(rank_results) >= 3
@@ -808,12 +857,13 @@ function plot_rank_approximations_3d(phi1_all, phi2_all, y_all, rank_results, m_
     end
 end
 
-function components = build_separable_components(U, S, V, m_values, n_values, profile_rank)
+function components = build_separable_components(U, S, V, m_values, n_values, profile_rank, imag_tol_abs, imag_tol_rel)
     % Build separable components from SVD
     % Output: structure array with fields .alpha, .beta, .sigma for each rank component
     
     components = struct('alpha', {}, 'beta', {}, 'sigma', {});
     n_ranks = min(profile_rank, size(U, 2));
+    phi_grid = linspace(0, 2*pi, 512).';
     
     for r = 1:n_ranks
         sigma_r = S(r, r);
@@ -821,16 +871,31 @@ function components = build_separable_components(U, S, V, m_values, n_values, pr
         beta_r = sqrt(sigma_r) * conj(V(:, r));
         
         % Phase adjustment: make maximum of |alpha_r| be positive real
-        phi_grid_temp = linspace(0, 2*pi, 512);
-        a_r_temp = exp(1i * phi_grid_temp(:) * m_values(:).') * alpha_r;
+        a_r_temp = exp(1i * phi_grid * m_values(:).') * alpha_r;
         [~, idx_max] = max(abs(a_r_temp));
         phase_shift = exp(-1i * angle(a_r_temp(idx_max)));
         alpha_r = phase_shift * alpha_r;
         beta_r = conj(phase_shift) * beta_r;
+
+        a_values = exp(1i * phi_grid * m_values(:).') * alpha_r;
+        b_values = exp(1i * phi_grid * n_values(:).') * beta_r;
+        a_stats = compute_imag_part_metrics(a_values, imag_tol_abs, imag_tol_rel);
+        b_stats = compute_imag_part_metrics(b_values, imag_tol_abs, imag_tol_rel);
         
         components(r).alpha = alpha_r;
         components(r).beta = beta_r;
         components(r).sigma = sigma_r;
+        components(r).phi_grid = phi_grid;
+        components(r).a_values = a_values;
+        components(r).b_values = b_values;
+        components(r).a_max_abs_imag = a_stats.max_abs_imag;
+        components(r).a_max_abs_real = a_stats.max_abs_real;
+        components(r).a_relative_imag = a_stats.relative_imag;
+        components(r).a_imag_is_small = a_stats.imag_is_small;
+        components(r).b_max_abs_imag = b_stats.max_abs_imag;
+        components(r).b_max_abs_real = b_stats.max_abs_real;
+        components(r).b_relative_imag = b_stats.relative_imag;
+        components(r).b_imag_is_small = b_stats.imag_is_small;
     end
 end
 
@@ -862,35 +927,25 @@ function plot_separable_profiles(components, m_values, n_values, agent_id, profi
         
         % Left subplot: a_r(phi1)
         ax_a = nexttile;
-        hold(ax_a, 'on');
-        plot(ax_a, phi_grid, real(a_r), '-', 'DisplayName', 'Real', 'LineWidth', 1.5);
-        plot(ax_a, phi_grid, imag(a_r), '--', 'DisplayName', 'Imag', 'LineWidth', 1.5);
-        plot(ax_a, phi_grid, abs(a_r), ':', 'DisplayName', 'Abs', 'LineWidth', 2);
-        hold(ax_a, 'off');
+        plot(ax_a, phi_grid, real(a_r), 'LineWidth', 1.5);
         
         xlabel(ax_a, '$$\phi_1$$', 'Interpreter', 'latex');
-        ylabel(ax_a, '$$a_r(\phi_1)$$', 'Interpreter', 'latex');
-        title(ax_a, sprintf('Rank %d: $a_{%d}(\\phi_1)$ ($\\sigma_{%d}=%.4e$)', r, r, r, sigma_r), 'Interpreter', 'latex');
+        ylabel(ax_a, '$$a_{j,r}(\phi_1)$$', 'Interpreter', 'latex');
+        title(ax_a, sprintf('$a_{%d,%d}(\\phi_1)$, $\\sigma = %.4e$', agent_id, r, sigma_r), 'Interpreter', 'latex');
         set(ax_a, 'XTick', [0, pi/2, pi, 3*pi/2, 2*pi]);
         set(ax_a, 'XTickLabel', {'0', '$\pi/2$', '$\pi$', '$3\pi/2$', '$2\pi$'}, 'TickLabelInterpreter', 'latex');
         grid(ax_a, 'on');
-        legend(ax_a, 'Location', 'best');
         
         % Right subplot: b_r(phi2)
         ax_b = nexttile;
-        hold(ax_b, 'on');
-        plot(ax_b, phi_grid, real(b_r), '-', 'DisplayName', 'Real', 'LineWidth', 1.5);
-        plot(ax_b, phi_grid, imag(b_r), '--', 'DisplayName', 'Imag', 'LineWidth', 1.5);
-        plot(ax_b, phi_grid, abs(b_r), ':', 'DisplayName', 'Abs', 'LineWidth', 2);
-        hold(ax_b, 'off');
+        plot(ax_b, phi_grid, real(b_r), 'LineWidth', 1.5);
         
         xlabel(ax_b, '$$\phi_2$$', 'Interpreter', 'latex');
-        ylabel(ax_b, '$$b_r(\phi_2)$$', 'Interpreter', 'latex');
-        title(ax_b, sprintf('Rank %d: $b_{%d}(\\phi_2)$', r, r), 'Interpreter', 'latex');
+        ylabel(ax_b, '$$b_{j,r}(\phi_2)$$', 'Interpreter', 'latex');
+        title(ax_b, sprintf('$b_{%d,%d}(\\phi_2)$, $\\sigma = %.4e$', agent_id, r, sigma_r), 'Interpreter', 'latex');
         set(ax_b, 'XTick', [0, pi/2, pi, 3*pi/2, 2*pi]);
         set(ax_b, 'XTickLabel', {'0', '$\pi/2$', '$\pi$', '$3\pi/2$', '$2\pi$'}, 'TickLabelInterpreter', 'latex');
         grid(ax_b, 'on');
-        legend(ax_b, 'Location', 'best');
     end
 end
 
@@ -1038,7 +1093,7 @@ function y_hat = evaluate_fourier_from_C(phi1, phi2, C, m_values, n_values)
     end
 end
 
-function self_profile = compute_self_only_profile(C_full, m_values, n_values, target_agent_id, phase_agent_ids)
+function self_profile = compute_self_only_profile(C_full, m_values, n_values, target_agent_id, phase_agent_ids, imag_tol_abs, imag_tol_rel)
     % Compute self-phase-only profile
     
     phi_grid = linspace(0, 2*pi, 512).';
@@ -1104,7 +1159,51 @@ function self_profile = compute_self_only_profile(C_full, m_values, n_values, ta
     self_profile.self_phase_index = self_phase_index;
     self_profile.target_agent_id = target_agent_id;
     self_profile.signal_index = signal_index;
-    self_profile.max_abs_imag = max(abs(imag(profile_values)));
+    imag_stats = compute_imag_part_metrics(profile_values, imag_tol_abs, imag_tol_rel);
+    self_profile.max_abs_imag = imag_stats.max_abs_imag;
+    self_profile.max_abs_real = imag_stats.max_abs_real;
+    self_profile.relative_imag = imag_stats.relative_imag;
+    self_profile.imag_is_small = imag_stats.imag_is_small;
+end
+
+function imag_stats = compute_imag_part_metrics(values, imag_tol_abs, imag_tol_rel)
+    values = values(:);
+    max_abs_imag = max(abs(imag(values)));
+    max_abs_real = max(abs(real(values)));
+    relative_imag = max_abs_imag / max(max_abs_real, eps);
+    imag_stats = struct();
+    imag_stats.max_abs_imag = max_abs_imag;
+    imag_stats.max_abs_real = max_abs_real;
+    imag_stats.relative_imag = relative_imag;
+    imag_stats.imag_is_small = (max_abs_imag < imag_tol_abs) || (relative_imag < imag_tol_rel);
+end
+
+function comp_checks = get_component_imag_checks(components)
+    comp_checks = struct('a_max_abs_imag', {}, 'a_max_abs_real', {}, 'a_relative_imag', {}, 'a_imag_is_small', {}, ...
+        'b_max_abs_imag', {}, 'b_max_abs_real', {}, 'b_relative_imag', {}, 'b_imag_is_small', {});
+    if isempty(components)
+        return;
+    end
+    comp_checks(1, numel(components)) = struct('a_max_abs_imag', [], 'a_max_abs_real', [], 'a_relative_imag', [], 'a_imag_is_small', [], ...
+        'b_max_abs_imag', [], 'b_max_abs_real', [], 'b_relative_imag', [], 'b_imag_is_small', []);
+    for k = 1:numel(components)
+        comp_checks(k).a_max_abs_imag = components(k).a_max_abs_imag;
+        comp_checks(k).a_max_abs_real = components(k).a_max_abs_real;
+        comp_checks(k).a_relative_imag = components(k).a_relative_imag;
+        comp_checks(k).a_imag_is_small = components(k).a_imag_is_small;
+        comp_checks(k).b_max_abs_imag = components(k).b_max_abs_imag;
+        comp_checks(k).b_max_abs_real = components(k).b_max_abs_real;
+        comp_checks(k).b_relative_imag = components(k).b_relative_imag;
+        comp_checks(k).b_imag_is_small = components(k).b_imag_is_small;
+    end
+end
+
+function s = ok_ng(tf)
+    if tf
+        s = 'OK';
+    else
+        s = 'NG';
+    end
 end
 
 function fig = plot_self_only_profile(self_profile)
@@ -1120,17 +1219,13 @@ function fig = plot_self_only_profile(self_profile)
         'Name', sprintf('Self-only Profile - s_%d (Agent %d)', signal_index, target_agent_id));
     
     ax = axes(fig);
-    hold(ax, 'on');
-    plot(ax, phi_grid, self_profile.real, '-', 'DisplayName', 'Real', 'LineWidth', 1.5);
-    plot(ax, phi_grid, self_profile.imag, '--', 'DisplayName', 'Imag', 'LineWidth', 1.5);
-    plot(ax, phi_grid, self_profile.abs, ':', 'DisplayName', 'Abs', 'LineWidth', 2);
-    hold(ax, 'off');
+    plot(ax, phi_grid, self_profile.real, 'LineWidth', 1.5);
     
     % Labels and title
     xlabel(ax, sprintf('$$%s$$', self_phase), 'Interpreter', 'latex');
     ylabel(ax, '$$s_{j,\mathrm{self}}$$', 'Interpreter', 'latex');
-    title(ax, sprintf('Self-only profile removed from $s_{%d}$ (Agent %d, self phase = %s, max |imag| = %.2e)', ...
-        signal_index, target_agent_id, self_phase, self_profile.max_abs_imag), ...
+    title(ax, sprintf('Self-only profile $q_{%d}(\\phi_{%d})$, max $|\\mathrm{imag}|$ = %.2e', ...
+        target_agent_id, self_phase_index_from_name(self_phase), self_profile.max_abs_imag), ...
         'Interpreter', 'latex');
     
     % X-axis ticks
@@ -1138,5 +1233,12 @@ function fig = plot_self_only_profile(self_profile)
     set(ax, 'XTickLabel', {'0', '$\pi/2$', '$\pi$', '$3\pi/2$', '$2\pi$'}, 'TickLabelInterpreter', 'latex');
     
     grid(ax, 'on');
-    legend(ax, 'Location', 'best');
+end
+
+function idx = self_phase_index_from_name(self_phase)
+    if strcmp(self_phase, 'phi1')
+        idx = 1;
+    else
+        idx = 2;
+    end
 end
