@@ -34,7 +34,7 @@ tau_default_sine = 1.1 * pi;
 tau_progress_print_interval = 10; % print progress every N tau samples
 export_fourier_params = true;  % true -> print/save fitted Fourier parameters
 fourier_param_output_dir = ''; % '' -> use the folder that contains mat_path
-processing_modes = struct('s1', false, 's2', true);  % enable/disable per-s processing
+processing_modes = struct('s1', true, 's2', true);  % enable/disable per-s processing
 
 if ~processing_modes.s1 && ~processing_modes.s2
     error('At least one of processing_modes.s1 or processing_modes.s2 must be true.');
@@ -92,17 +92,18 @@ if processing_modes.s1
     s1_values = evaluate_exported_s(Phi1, Phi2, coeff_s1, basis_types_s1, m_order_s1, n_order_s1) + z_mean_s1;
 
     figure('Color', 'w');
-    surf(Phi1, Phi2, s1_values, 'EdgeColor', 'none');
-    view(40, 30);
-    grid on;
-    box on;
-    axis tight;
+    imagesc(phi_values, phi_values, s1_values);
+    axis xy;  % y-axis points upward (default for imagesc is downward)
+    axis equal;  % Set aspect ratio to 1:1
     colormap(turbo);
     colorbar;
-    xlabel('\phi_1');
-    ylabel('\phi_2');
-    zlabel('s(\phi_1,\phi_2)');
-    title(sprintf('s_1(\\phi_1,\\phi_2) | agent %d | %s', agent_id_s1, mat_path), 'Interpreter', 'none');
+    xlabel('$$\phi_1$$');
+    ylabel('$$\phi_2$$');
+    title(sprintf('$$s_1(\\phi_1,\\phi_2)$$ | agent %d | %s', agent_id_s1, mat_path), 'Interpreter', 'none');
+    xticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    xticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    yticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    yticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
     tuneFigure;
 end
 
@@ -110,17 +111,18 @@ if processing_modes.s2
     s2_values = evaluate_exported_s(Phi1, Phi2, coeff_s2, basis_types_s2, m_order_s2, n_order_s2) + z_mean_s2;
 
     figure('Color', 'w');
-    surf(Phi1, Phi2, s2_values, 'EdgeColor', 'none');
-    view(40, 30);
-    grid on;
-    box on;
-    axis tight;
+    imagesc(phi_values, phi_values, s2_values);
+    axis xy;  % y-axis points upward (default for imagesc is downward)
+    axis equal;  % Set aspect ratio to 1:1
     colormap(turbo);
     colorbar;
-    xlabel('\phi_1');
-    ylabel('\phi_2');
-    zlabel('s(\phi_1,\phi_2)');
-    title(sprintf('s_2(\\phi_1,\\phi_2) | agent %d | %s', agent_id_s2, mat_path), 'Interpreter', 'none');
+    xlabel('$$\phi_1$$');
+    ylabel('$$\phi_2$$');
+    title(sprintf('$$s_2(\\phi_1,\\phi_2)$$ | agent %d | %s', agent_id_s2, mat_path), 'Interpreter', 'none');
+    xticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    xticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    yticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    yticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
     tuneFigure;
 end
 
@@ -472,7 +474,7 @@ Gamma2_odd_from_sine_pair = Gamma2_from_sine_pair - Gamma2_from_sine_pair_neg;
 Gamma1_odd_from_w_alt = Gamma1_from_w_alt - Gamma1_from_w_alt_neg;
 Gamma2_odd_from_w_alt = Gamma2_from_w_alt - Gamma2_from_w_alt_neg;
 
-n_w_tiles = double(processing_modes.s1) + 2 * double(processing_modes.s2);
+n_w_tiles = double(processing_modes.s1);
 if n_w_tiles > 0
     figure('Color', 'w');
     tiledlayout(n_w_tiles, 1, 'TileSpacing', 'compact');
@@ -502,55 +504,70 @@ if n_w_tiles > 0
         show_legend_if_multiple(gca);
         title(sprintf('$$s_1:\ W_1(\\phi)\ \mathrm{vs}\ \cos(\\phi+\\pi-0.6\\pi),\\ \psi_+^*=%.6g\ \mathrm{rad}$$', psi_plus_s1));
     end
-
-    if processing_modes.s2
-        % Split into two subplots: zopt and zsin
-        nexttile;
-        plot(phi_line, w2_values, 'LineWidth', 1.8, ...
-            'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
-        hold on;
-        if has_symmetric_peak_s2
-            plot(phi_line, w2_values_alt, 'LineWidth', 1.4, ...
-                'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_2^*$$');
-        end
-        grid on;
-        box on;
-        xlim([-pi, pi]);
-        xticks([-pi, -pi/2, 0, pi/2, pi]);
-        xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-        xlabel('$$\theta$$');
-        ylabel('$$z(\theta)$$');
-        add_y_margin_from_lines(gca, 0.12);
-        show_legend_if_multiple(gca);
-        lgd = legend(gca);
-        if ~isempty(lgd) && isgraphics(lgd)
-            lgd.Location = 'eastoutside';
-        end
-        title('$$z_{\mathrm{opt}}(\theta)$$');
-
-        nexttile;
-        plot(phi_line, reference_sine_s2_pair, 'LineWidth', 1.6, ...
-            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
-        hold on;
-        plot(phi_line, reference_sine_s2, 'LineWidth', 1.6, ...
-            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
-        grid on;
-        box on;
-        xlim([-pi, pi]);
-        xticks([-pi, -pi/2, 0, pi/2, pi]);
-        xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-        xlabel('$$\theta$$');
-        ylabel('$$z(\theta)$$');
-        add_y_margin_from_lines(gca, 0.12);
-        show_legend_if_multiple(gca);
-        lgd = legend(gca);
-        if ~isempty(lgd) && isgraphics(lgd)
-            lgd.Location = 'eastoutside';
-        end
-        title('$$z_{\mathrm{sin}}(\theta)$$');
-    end
+    
     tuneFigure;
-    %saveFigure;
+end
+
+if processing_modes.s2
+    % Plot z_opt separately (0 to 2π range, preserving data correspondence)
+    figure('Color', 'w');
+    % Remap [-π, π] to [0, 2π]: θ < 0 → θ + 2π
+    phi_remapped = phi_line;
+    phi_remapped(phi_remapped < 0) = phi_remapped(phi_remapped < 0) + 2*pi;
+    [phi_sorted, sort_idx] = sort(phi_remapped);
+    w2_sorted = w2_values(sort_idx);
+    plot(phi_sorted, w2_sorted, 'LineWidth', 1.8, ...
+        'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
+    hold on;
+    if has_symmetric_peak_s2
+        w2_alt_sorted = w2_values_alt(sort_idx);
+        plot(phi_sorted, w2_alt_sorted, 'LineWidth', 1.4, ...
+            'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_2^*$$');
+    end
+    grid on;
+    box on;
+    xlim([0, 2*pi]);
+    xticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    xticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    xlabel('$$\theta$$');
+    ylabel('$$z(\theta)$$');
+    add_y_margin_from_lines(gca, 0.12);
+    show_legend_if_multiple(gca);
+    lgd = legend(gca);
+    if ~isempty(lgd) && isgraphics(lgd)
+        lgd.Location = 'eastoutside';
+    end
+    title('$$z_{\mathrm{opt}}(\theta)$$');
+    tuneFigure;
+
+    % Plot z_sin separately (0 to 2π range, preserving data correspondence)
+    figure('Color', 'w');
+    % Remap [-π, π] to [0, 2π]: θ < 0 → θ + 2π
+    phi_remapped = phi_line;
+    phi_remapped(phi_remapped < 0) = phi_remapped(phi_remapped < 0) + 2*pi;
+    [phi_sorted, sort_idx] = sort(phi_remapped);
+    sine_pair_sorted = reference_sine_s2_pair(sort_idx);
+    sine_sorted = reference_sine_s2(sort_idx);
+    plot(phi_sorted, sine_pair_sorted, 'LineWidth', 1.6, ...
+        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
+    hold on;
+    plot(phi_sorted, sine_sorted, 'LineWidth', 1.6, ...
+        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
+    grid on;
+    box on;
+    xlim([0, 2*pi]);
+    xticks([0, pi/2, pi, 3*pi/2, 2*pi]);
+    xticklabels({'0', '\pi/2', '\pi', '3\pi/2', '2\pi'});
+    xlabel('$$\theta$$');
+    ylabel('$$z(\theta)$$');
+    add_y_margin_from_lines(gca, 0.12);
+    show_legend_if_multiple(gca);
+    lgd = legend(gca);
+    if ~isempty(lgd) && isgraphics(lgd)
+        lgd.Location = 'eastoutside';
+    end
+    title('$$z_{\mathrm{sin}}(\theta)$$');
+    tuneFigure;
 end
 
 figure('Color', 'w');
@@ -672,11 +689,8 @@ if processing_modes.s1
 end
 
 if processing_modes.s2
+    % Plot g[z_opt]
     figure('Color', 'w');
-    tiledlayout(2, 1, 'TileSpacing', 'compact');
-
-    % zopt subplot
-    nexttile;
     plot(psi_scan_values, Gamma2_odd_from_w, 'LineWidth', 1.8, ...
         'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
     hold on;
@@ -697,12 +711,15 @@ if processing_modes.s2
         lgd.Location = 'eastoutside';
     end
     title('$$g[z_{\mathrm{opt}}](\psi)$$');
+    tuneFigure;
 
-    % zsin subplot
-    nexttile;
-    plot(psi_scan_values, Gamma2_odd_from_sine_pair, 'LineWidth', 1.8, ...
-        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
-    hold on;
+    % Plot g[z_sin]
+    figure('Color', 'w');
+    if any(isfinite(Gamma2_odd_from_sine_pair))
+        plot(psi_scan_values, Gamma2_odd_from_sine_pair, 'LineWidth', 1.8, ...
+            'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
+        hold on;
+    end
     plot(psi_scan_values, Gamma2_odd_from_sine, 'LineWidth', 1.8, ...
         'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
     grid on;
@@ -718,7 +735,6 @@ if processing_modes.s2
         lgd.Location = 'eastoutside';
     end
     title('$$g[z_{\mathrm{sin}}](\psi)$$');
-
     tuneFigure;
 
     % Export specific lines for cross-plot overlay in runner script.
@@ -731,18 +747,43 @@ if processing_modes.s2
 
     % Plot g[z_opt] with y-axis shift and y-intercept label
     figure('Color', 'w');
-    plot(psi_scan_values, Gamma2_odd_from_w + 0.05, 'LineWidth', 1.8, ...
+    plot(psi_scan_values, Gamma2_odd_from_w - 0.04*pi, 'LineWidth', 1.8, ...
         'DisplayName', '$$z_{\mathrm{opt}}(\theta), \psi_1^*$$');
-    hold on;
-    
-    
     grid on;
     box on;
     xlim([psi_scan_min, psi_scan_max]);
     xticks([-pi, -pi/2, 0, pi/2, pi]);
     xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
     xlabel('$$\psi$$');
-    ylabel('$$g[z_{\mathrm{opt}}](\psi) + 0.05$$');
+    ylabel('$$g[z_{\mathrm{opt}}](\psi) -0.04\pi$$');
+    show_legend_if_multiple(gca);
+    tuneFigure;
+
+    % Plot g[z_sin] (tau_1*) with y-axis shift
+    figure('Color', 'w');
+    plot(psi_scan_values, Gamma2_odd_from_sine_pair - 0.04*pi, 'LineWidth', 1.8, ...
+        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_1^*$$');
+    grid on;
+    box on;
+    xlim([psi_scan_min, psi_scan_max]);
+    xticks([-pi, -pi/2, 0, pi/2, pi]);
+    xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+    xlabel('$$\psi$$');
+    ylabel('$$g[z_{\mathrm{sin}}](\psi) -0.04\pi$$');
+    show_legend_if_multiple(gca);
+    tuneFigure;
+
+    % Plot g[z_sin] (tau_2*) with y-axis shift
+    figure('Color', 'w');
+    plot(psi_scan_values, Gamma2_odd_from_sine - 0.04*pi, 'LineWidth', 1.8, ...
+        'DisplayName', '$$z_{\mathrm{sin}}(\theta), \tau_2^*$$');
+    grid on;
+    box on;
+    xlim([psi_scan_min, psi_scan_max]);
+    xticks([-pi, -pi/2, 0, pi/2, pi]);
+    xticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
+    xlabel('$$\psi$$');
+    ylabel('$$g[z_{\mathrm{sin}}](\psi) -0.04\pi$$');
     show_legend_if_multiple(gca);
     tuneFigure;
 end

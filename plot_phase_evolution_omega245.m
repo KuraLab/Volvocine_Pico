@@ -1,28 +1,30 @@
-function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure, n_sync, m_sync, sample_window)
-% Overlay phase-relationship time evolutions from all files in a directory
+function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, apply_filter, filter_window_size, do_save_figure, n_sync, m_sync, sample_window, overlay_mode)
+% Phase-relationship time evolutions from all files in a directory
 %
 % Usage:
-%   plot_phase_evolution_omega250()
-%   plot_phase_evolution_omega250(dirpath, n_seconds_to_cut, plot_duration)
+%   plot_phase_evolution_omega245()
+%   plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, plot_duration, [], [], [], [], [], [], overlay_mode)
 %
 % Defaults:
 %   dirpath = 'EstimateF/omega250'
 %   n_seconds_to_cut = 0
 %   plot_duration = 105
-save%   apply_filter = true
+%   apply_filter = true
 %   filter_window_size = 10
 %   do_save_figure = false
 %   sample_window = [50, 60]
+%   overlay_mode = true (true: overlay all chunks, false: separate figures for each chunk)
 
     if nargin < 1 || isempty(dirpath)
+        dirpath = fullfile('merged_chunks_organized','2026-05-07');
         %dirpath = fullfile('EstimateF','Spring5/250');
-        dirpath = fullfile('EstimateQ','VerifyZopt/Spring3/w1/250');
+        %dirpath = fullfile('EstimateQ','VerifyZopt/Spring3/w1/250');
     end
     if nargin < 2 || isempty(n_seconds_to_cut)
-        n_seconds_to_cut = 0;
+        n_seconds_to_cut = 10;
     end
     if nargin < 3 || isempty(plot_duration)
-        plot_duration = 105;
+        plot_duration = 1200;
     end
     if nargin < 4 || isempty(apply_filter)
         apply_filter = true;
@@ -41,6 +43,9 @@ save%   apply_filter = true
     end
     if nargin < 9 || isempty(sample_window)
         sample_window = [50, 60];
+    end
+    if nargin < 10 || isempty(overlay_mode)
+        overlay_mode = true;  % Default: overlay all chunks in one figure
     end
 
     if numel(sample_window) ~= 2
@@ -147,18 +152,9 @@ save%   apply_filter = true
             allow_missing_agents, apply_filter, filter_window_size, max_agent_id, n_sync, m_sync);
     end
 
-    % Prepare single axes and overlay all agents
-    figure('Visible','on');
-    ax = axes('Parent', gcf);
-    hold(ax,'on');
-    colors = lines(numel(file_list));
+    % Common plotting parameters
     line_styles = {'-','--',':','-.'};
-    max_plot_time = min(plot_duration - n_seconds_to_cut, 60);
-    line_handles = gobjects(numel(file_list),1);
-    legend_labels = cell(numel(file_list),1);
-    for f = 1:numel(file_list)
-        [~, legend_labels{f}] = fileparts(file_list{f});
-    end
+    max_plot_time = min(plot_duration - n_seconds_to_cut, 120);
 
     if use_dynamic_reference
         ref_label = '\mathrm{ref}';
@@ -167,48 +163,111 @@ save%   apply_filter = true
     end
 
     % Display label for modified phase-combination using n:m notation
-    y_label_str = sprintf('$$%d\\phi_{2} - %d\\phi_{1}$$', n_sync, m_sync);
+    y_label_str = sprintf('$$%d\\phi_{1} - %d\\phi_{2}$$', m_sync, n_sync);
 
-    ylabel(ax, y_label_str,'Interpreter','latex');
-    ylim(ax, [-pi, pi]);
-    yticks(ax, [-pi,0,pi]);
-    yticklabels(ax, {'-\pi','0','\pi'});
-    set(ax,'TickLabelInterpreter','latex');
-    yline(ax, 0, 'Color', [0.3 0.3 0.3], 'LineStyle', '--', 'LineWidth', 0.8);
-
-    for p = 1:numel(agents_to_plot)
-        ag = agents_to_plot(p);
-        ls = line_styles{ mod(p-1, numel(line_styles)) + 1 };
+    if overlay_mode
+        % ===== OVERLAY MODE: All chunks in one figure =====
+        figure('Visible','on');
+        ax = axes('Parent', gcf);
+        hold(ax,'on');
+        colors = lines(numel(file_list));
+        line_handles = gobjects(numel(file_list),1);
+        legend_labels = cell(numel(file_list),1);
         for f = 1:numel(file_list)
-            series_struct = phase_series_by_file{f};
-            if ag > numel(series_struct)
-                continue;
-            end
-            if isempty(series_struct(ag).time) || isempty(series_struct(ag).phase)
-                continue;
-            end
-            h = plot(ax, series_struct(ag).time, series_struct(ag).phase, ...
-                'Color', colors(f,:), 'LineWidth', 0.8, 'LineStyle', ls);
-            if ~isgraphics(line_handles(f))
-                line_handles(f) = h;
+            [~, legend_labels{f}] = fileparts(file_list{f});
+        end
+
+        ylabel(ax, y_label_str,'Interpreter','latex');
+        ylim(ax, [-pi, pi]);
+        yticks(ax, [-pi,0,pi]);
+        yticklabels(ax, {'-\pi','0','\pi'});
+        set(ax,'TickLabelInterpreter','latex');
+        yl = yline(ax, 0, 'Color', [0.3 0.3 0.3], 'LineStyle', '--', 'LineWidth', 0.8);
+        yl.Annotation.LegendInformation.IconDisplayStyle = 'off';
+
+        for p = 1:numel(agents_to_plot)
+            ag = agents_to_plot(p);
+            ls = line_styles{ mod(p-1, numel(line_styles)) + 1 };
+            for f = 1:numel(file_list)
+                series_struct = phase_series_by_file{f};
+                if ag > numel(series_struct)
+                    continue;
+                end
+                if isempty(series_struct(ag).time) || isempty(series_struct(ag).phase)
+                    continue;
+                end
+                h = plot(ax, series_struct(ag).time, series_struct(ag).phase, ...
+                    'Color', colors(f,:), 'LineWidth', 0.8, 'LineStyle', ls);
+                if ~isgraphics(line_handles(f))
+                    line_handles(f) = h;
+                end
             end
         end
+
+        xlim(ax, [0, max_plot_time]);
+        xlabel(ax, 'Time (s)','Interpreter','latex');
+        grid(ax, 'on');
+        hold(ax,'off');
+
+        valid_handles = isgraphics(line_handles);
+        if any(valid_handles)
+            %legend(ax, line_handles(valid_handles), legend_labels(valid_handles), ...
+            %    'Location','eastoutside','Interpreter','latex');
+        end
+
+        tuneFigure();
+
+    else
+        % ===== SEPARATE MODE: Each chunk in its own figure =====
+        for f = 1:numel(file_list)
+            figure('Visible','on');
+            ax = axes('Parent', gcf);
+            hold(ax,'on');
+            [~, file_label] = fileparts(file_list{f});
+            set(gcf, 'Name', sprintf('Chunk: %s', file_label));
+            
+            colors = lines(numel(agents_to_plot));
+
+            ylabel(ax, y_label_str,'Interpreter','latex');
+            ylim(ax, [-pi, pi]);
+            yticks(ax, [-pi,0,pi]);
+            yticklabels(ax, {'-\pi','0','\pi'});
+            set(ax,'TickLabelInterpreter','latex');
+            yl = yline(ax, 0, 'Color', [0.3 0.3 0.3], 'LineStyle', '--', 'LineWidth', 0.8);
+            yl.Annotation.LegendInformation.IconDisplayStyle = 'off';
+
+            series_struct = phase_series_by_file{f};
+            agent_legend = {};
+            line_handles_sep = [];
+            
+            for p = 1:numel(agents_to_plot)
+                ag = agents_to_plot(p);
+                ls = line_styles{ mod(p-1, numel(line_styles)) + 1 };
+                if ag > numel(series_struct)
+                    continue;
+                end
+                if isempty(series_struct(ag).time) || isempty(series_struct(ag).phase)
+                    continue;
+                end
+                h = plot(ax, series_struct(ag).time, series_struct(ag).phase, ...
+                    'Color', colors(p,:), 'LineWidth', 0.8, 'LineStyle', ls);
+                line_handles_sep = [line_handles_sep; h];
+                agent_legend = [agent_legend; {sprintf('Agent %d', ag)}];
+            end
+
+            xlim(ax, [0, max_plot_time]);
+            xlabel(ax, 'Time (s)','Interpreter','latex');
+            grid(ax, 'on');
+            hold(ax,'off');
+            
+            if ~isempty(line_handles_sep)
+                legend(ax, line_handles_sep, agent_legend, ...
+                    'Location','eastoutside','Interpreter','latex');
+            end
+
+            tuneFigure();
+        end
     end
-
-    xlim(ax, [0, max_plot_time]);
-    xlabel(ax, 'Time (s)','Interpreter','latex');
-    grid(ax, 'on');
-    hold(ax,'off');
-
-    valid_handles = isgraphics(line_handles);
-    if any(valid_handles)
-        %legend(ax, line_handles(valid_handles), legend_labels(valid_handles), ...
-        %    'Location','eastoutside','Interpreter','latex');
-    end
-
-    % legend placed outside plot area for readability
-
-    tuneFigure();
 
     cluster_info = cluster_phase_window_means(phase_series_by_file, agents_to_plot, sample_window, CLUSTER_VAR_THRESHOLD);
 
@@ -406,8 +465,8 @@ function series_struct = compute_phase_series_for_file(df_all, base_agent_id, n_
 
     for i = 1:length(agents)
         agent_id = agents(i);
-        % Use n_sync*phi_agent - m_sync*phi_base for n:m synchronization checks
-        phase_raw = n_sync * interpolated_data(agent_id).a0 - m_sync * base_agent_a0;
+        % Use m_sync*phi_base - n_sync*phi_agent for n:m synchronization checks
+        phase_raw = m_sync * base_agent_a0 - n_sync * interpolated_data(agent_id).a0;
     phase_diff = mod(phase_raw + 128, 256) - 128;
         phase_diff = phase_diff * (2*pi/256);
         phase_diff_with_nan = phase_diff;
