@@ -740,8 +740,14 @@ if processing_modes.s2
     % Export specific lines for cross-plot overlay in runner script.
     overlay_data_s2 = struct();
     overlay_data_s2.psi_scan_values = psi_scan_values(:);
+    overlay_data_s2.gamma1_odd_from_w = Gamma1_odd_from_w(:);
+    overlay_data_s2.gamma1_odd_from_w_alt = Gamma1_odd_from_w_alt(:);
+    overlay_data_s2.gamma1_odd_from_sine = Gamma1_odd_from_sine(:);
     overlay_data_s2.gamma2_odd_from_w = Gamma2_odd_from_w(:);
+    overlay_data_s2.gamma2_odd_from_w_alt = Gamma2_odd_from_w_alt(:);
+    overlay_data_s2.gamma2_odd_from_sine = Gamma2_odd_from_sine(:);
     overlay_data_s2.gamma2_odd_from_sine_pair = Gamma2_odd_from_sine_pair(:);
+    overlay_data_s2.tau_best_s2 = tau_best_s2;
     overlay_data_s2.tau_pair_s2 = tau_pair_s2;
     assignin('base', 'overlay_data_s2_gamma2_odd', overlay_data_s2);
 

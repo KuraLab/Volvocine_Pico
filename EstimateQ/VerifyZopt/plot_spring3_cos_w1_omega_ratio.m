@@ -9,7 +9,7 @@ t_end = 120;
 t_start_series = 0;  % start time for time-series overlay only
 mean_phase_band_half_width_rad = 0.10*pi;
 if nargin < 1 || isempty(enable_save_figure)
-    enable_save_figure = true;
+    enable_save_figure = false;
 end
 
 % Clear any existing figures before generating new plots.

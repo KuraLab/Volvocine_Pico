@@ -1,4 +1,4 @@
-function run_plot_fitted_surface_and_spring3_ratio(run_surface_plot, run_ratio_plot, run_overlay_plot)
+function run_plot_fitted_surface_and_spring3_ratio(run_surface_plot, run_ratio_plot, run_overlay_plot, run_overlay_s1, run_overlay_s2)
 % Run both analysis scripts in one entry point:
 %   1) EstimateQ/plot_fitted_surface_from_export.m
 %   2) EstimateQ/VerifyZopt/plot_spring3_cos_w1_omega_ratio.m
@@ -9,6 +9,7 @@ function run_plot_fitted_surface_and_spring3_ratio(run_surface_plot, run_ratio_p
 %   run_plot_fitted_surface_and_spring3_ratio(true, false)
 %   run_plot_fitted_surface_and_spring3_ratio(false, true)
 %   run_plot_fitted_surface_and_spring3_ratio(true, true, true)
+%   run_plot_fitted_surface_and_spring3_ratio(true, true, true, true, false)
 
 if nargin < 1 || isempty(run_surface_plot)
     run_surface_plot = true;
@@ -18,6 +19,12 @@ if nargin < 2 || isempty(run_ratio_plot)
 end
 if nargin < 3 || isempty(run_overlay_plot)
     run_overlay_plot = true;
+end
+if nargin < 4 || isempty(run_overlay_s1)
+    run_overlay_s1 = false;
+end
+if nargin < 5 || isempty(run_overlay_s2)
+    run_overlay_s2 = true;
 end
 
 if ~run_surface_plot && ~run_ratio_plot
@@ -64,7 +71,7 @@ if run_ratio_plot
 end
 
 if run_overlay_plot
-    local_plot_requested_overlay();
+    local_plot_requested_overlay(run_overlay_s1, run_overlay_s2);
 end
 
 fprintf('[DONE] run_plot_fitted_surface_and_spring3_ratio finished.\n');
@@ -74,7 +81,7 @@ function local_run_script_in_isolated_workspace(script_path)
 run(script_path);
 end
 
-function local_plot_requested_overlay()
+function local_plot_requested_overlay(run_overlay_s1, run_overlay_s2)
 have_s2 = evalin('base', 'exist(''overlay_data_s2_gamma2_odd'', ''var'') == 1');
 have_phase_mean = evalin('base', 'exist(''overlay_data_spring3_phase_mean'', ''var'') == 1');
 
@@ -92,7 +99,15 @@ if ~isstruct(s2) || ~isstruct(pm)
     return;
 end
 
-required_s2 = {'psi_scan_values', 'gamma2_odd_from_w', 'gamma2_odd_from_sine_pair'};
+if nargin < 1 || isempty(run_overlay_s1)
+    run_overlay_s1 = true;
+end
+if nargin < 2 || isempty(run_overlay_s2)
+    run_overlay_s2 = true;
+end
+
+required_s2 = {'psi_scan_values', 'gamma1_odd_from_w', 'gamma2_odd_from_w', ...
+    'gamma1_odd_from_sine', 'gamma2_odd_from_sine_pair'};
 required_pm = {'xCosMean', 'yCosMean', 'xW1Mean', 'yW1Mean'};
 if ~all(isfield(s2, required_s2)) || ~all(isfield(pm, required_pm))
     warning('Overlay plot skipped: exported overlay data is missing required fields.');
@@ -103,35 +118,62 @@ figure('Color', 'w');
 hold on;
 grid on;
 
+overlay_color_sin_cos = [0.0000, 0.4470, 0.7410];
+overlay_color_w_opt = [0.8500, 0.3250, 0.0980];
+
 psi_scan = s2.psi_scan_values(:);
-gamma_opt = s2.gamma2_odd_from_w(:);
-gamma_sine_pair = s2.gamma2_odd_from_sine_pair(:);
+gamma1_opt = s2.gamma1_odd_from_w(:);
+gamma2_opt = s2.gamma2_odd_from_w(:);
+gamma1_sine = s2.gamma1_odd_from_sine(:);
+gamma2_sine_pair = s2.gamma2_odd_from_sine_pair(:);
 
 % Requested preprocessing for 6th-plot lines:
 % cut data from max(y)-index to min(y)-index, then swap x/y.
-[psi_opt_cut, gamma_opt_cut] = local_cut_series_from_max_to_min(psi_scan, gamma_opt);
-[psi_sine_cut, gamma_sine_cut] = local_cut_series_from_max_to_min(psi_scan, gamma_sine_pair);
+if run_overlay_s1
+    [psi_opt_cut_s1, gamma_opt_cut_s1] = local_cut_series_from_max_to_min(psi_scan, gamma1_opt);
+    [psi_sine_cut_s1, gamma_sine_cut_s1] = local_cut_series_from_max_to_min(psi_scan, gamma1_sine);
+end
+if run_overlay_s2
+    [psi_opt_cut_s2, gamma_opt_cut_s2] = local_cut_series_from_max_to_min(psi_scan, gamma2_opt);
+    [psi_sine_cut_s2, gamma_sine_cut_s2] = local_cut_series_from_max_to_min(psi_scan, gamma2_sine_pair);
+end
 
 % Requested: use the 6th-plot line data with x/y swapped after the cut.
-plot(gamma_opt_cut, psi_opt_cut, '-', 'LineWidth', 1.8, ...
-    'DisplayName', '6th: z_opt(theta), psi_1^* (x/y swapped)');
-plot(gamma_sine_cut, psi_sine_cut, '--', 'LineWidth', 1.8, ...
-    'DisplayName', '6th: sin(phi+tau_2^*) (x/y swapped)');
+if run_overlay_s1
+    plot(gamma_sine_cut_s1, psi_sine_cut_s1, '-', 'LineWidth', 1.4, ...
+        'Color', overlay_color_sin_cos, ...
+        'DisplayName', '$$s_1, z_\sin(\theta)$$');
+    plot(gamma_opt_cut_s1, psi_opt_cut_s1, '-', 'LineWidth', 1.8, ...
+        'Color', overlay_color_w_opt, ...
+        'DisplayName', '$$s_1, z_{\mathrm{opt}}(\theta)$$');
+end
+if run_overlay_s2
+    plot(gamma_sine_cut_s2, psi_sine_cut_s2, '-', 'LineWidth', 1.4, ...
+        'Color', overlay_color_sin_cos, ...
+        'DisplayName', '$$z_{\sin}(\theta), \mathrm{predicted}$$');
+    plot(gamma_opt_cut_s2, psi_opt_cut_s2, '-', 'LineWidth', 1.8, ...
+        'Color', overlay_color_w_opt, ...
+        'DisplayName', '$$z_{\mathrm{opt}}(\theta), \mathrm{predicted}$$');
+end
 
 % 9th-plot mean lines as-is.
-plot(pm.xCosMean(:), -pm.yCosMean(:), '-o', 'LineWidth', 1.5, 'MarkerSize', 4, ...
-    'MarkerFaceColor', 'auto', 'DisplayName', '9th: Spring3/cos mean');
-plot(pm.xW1Mean(:), -pm.yW1Mean(:), '-s', 'LineWidth', 1.5, 'MarkerSize', 4, ...
-    'MarkerFaceColor', 'auto', 'DisplayName', '9th: Spring3/w1 mean');
+plot(pm.xCosMean(:), -pm.yCosMean(:), 'o', 'MarkerSize', 8, ...
+    'Color', overlay_color_sin_cos, 'MarkerFaceColor', overlay_color_sin_cos, ...
+    'DisplayName', '$$z_{\sin}(\theta), \mathrm{measured}$$');
+plot(pm.xW1Mean(:), -pm.yW1Mean(:), 's', 'MarkerSize', 8, ...
+    'Color', overlay_color_w_opt, 'MarkerFaceColor', overlay_color_w_opt, ...
+    'DisplayName', '$$z_{\mathrm{opt}}(\theta), \mathrm{measured}$$');
 
-xlabel('x (swapped for 6th lines)');
-ylabel('y (swapped for 6th lines)');
-title('Overlay: selected lines from 6th and 9th plots', 'Interpreter', 'none');
+xlabel('$$\Delta\omega$$','Interpreter', 'latex');
+ylabel('$$\psi$$','Interpreter', 'latex');
+yticks([-pi, -pi/2, 0, pi/2, pi]);
+yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
 legend('Location', 'best');
 hold off;
 
 if exist('tuneFigure', 'file') == 2
     tuneFigure;
+    saveFigure;
 end
 
 fprintf('[RUN] Overlay figure created (6th lines swapped x/y + 9th mean lines).\n');

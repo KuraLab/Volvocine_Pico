@@ -49,7 +49,7 @@ function rank_analysis = rankr_approximation_test(dirpath, phase_agent_ids, vara
     PLOT_SHOW_POINTS = false;                    % Show original data points on 3D plots (true/false)
     DEFAULT_COLORMAP = 'jet';                   % Default colormap: 'jet', 'parula', 'cool', 'hot', etc.
     DEFAULT_PROFILE_RANK = 3;                   % Number of rank components to profile (a_r, b_r)
-    DEFAULT_REMOVE_SELF_ONLY = true;            % Remove self-phase-only terms before rank analysis
+    DEFAULT_REMOVE_SELF_ONLY = false;            % Remove self-phase-only terms before rank analysis
     DEFAULT_REMOVE_CONSTANT = true;            % Remove constant term (m=0, n=0)
     DEFAULT_REMOVE_OTHER_ONLY = false;          % Remove other-phase-only terms
     DEFAULT_PLOT_SELF_ONLY_PROFILE = true;      % Plot self-phase-only profile
