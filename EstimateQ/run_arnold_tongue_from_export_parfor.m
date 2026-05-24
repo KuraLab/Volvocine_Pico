@@ -26,10 +26,6 @@ sim_dt = 0.01;              % fixed-step size for deterministic runtime
 deltaomega_values = linspace(-1, 1, 21);
 sigma_values = linspace(0, 5, 21);
 
-% ODE accuracy (loosen for speed if needed)
-ode_rel_tol = 1e-4; % kept for reconstruction helper
-ode_abs_tol = 1e-6; % kept for reconstruction helper
-
 % Reconstruction settings (single precompute)
 recon_opts = struct();
 recon_opts.signal_role = 'a2';
@@ -40,8 +36,6 @@ recon_opts.tspan = [0, 1];
 recon_opts.phi0 = phi0;
 recon_opts.n_phi_integral = 801;
 recon_opts.n_psi_scan = 41;
-recon_opts.ode_rel_tol = ode_rel_tol;
-recon_opts.ode_abs_tol = ode_abs_tol;
 
 %% Reconstruct s2 and z_opt from export
 recon = simulate_winfree_from_export(recon_opts);
