@@ -23,13 +23,15 @@ measure_window = 60;       % averaging window from the end [s]
 sim_dt = 0.01;              % fixed-step size for deterministic runtime
 
 % Sweep grids
-deltaomega_values = linspace(-1, 1, 21);
-sigma_values = linspace(0, 5, 21);
+deltaomega_values = linspace(-2, 2, 101);
+sigma_values = linspace(0, 10, 101);
 
 % Reconstruction settings (single precompute)
 recon_opts = struct();
 recon_opts.signal_role = 'a2';
 recon_opts.agent_mode = 'phase_id_2';
+% Use specific MAT file as requested
+recon_opts.mat_path = 'D:\\codes\\Volvocine_Pico\\EstimateQ\\Spring3\\255\\gamma_exports\\gamma_export_latest.mat';
 recon_opts.omega = [omega1, omega1];
 recon_opts.sigma = 0;
 recon_opts.tspan = [0, 1];
