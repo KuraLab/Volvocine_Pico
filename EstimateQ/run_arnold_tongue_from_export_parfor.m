@@ -145,6 +145,7 @@ axis xy;
 colormap(turbo);
 cb = colorbar;
 cb.Label.String = 'mean angular-velocity ratio  \omega_2 / \omega_1  (final 60 s)';
+set(gca, 'Layer', 'top');
 
 xlabel('$$\Delta\omega = \omega_2 - \omega_1$$', 'Interpreter', 'latex');
 ylabel('$$\sigma$$', 'Interpreter', 'latex');
@@ -152,8 +153,20 @@ title('Arnold tongue map (parfor) from reconstructed $$s_2$$ and $$z_{\mathrm{op
     'Interpreter', 'latex');
 
 hold on;
-contour(deltaomega_values, sigma_values, ratio_map, [1 1], 'k-', 'LineWidth', 1.2, ...
-    'DisplayName', '1:1 locking');
+deltaomega_fine = linspace(min(deltaomega_values), max(deltaomega_values), 201);
+sigma_fine = linspace(min(sigma_values), max(sigma_values), 201);
+[DWfine, SGfine] = meshgrid(deltaomega_fine, sigma_fine);
+ratio_fine = interp2(deltaomega_values, sigma_values, ratio_map, DWfine, SGfine, 'linear');
+lock_tol = 0.02;
+lock_mask = abs(ratio_fine - 1) <= lock_tol;
+h_lock = [];
+if any(lock_mask(:))
+    h_lock = contour(DWfine, SGfine, double(lock_mask), [0.5 0.5], 'k-', 'LineWidth', 2.0, ...
+        'DisplayName', '1:1 locking boundary');
+    if ~isempty(h_lock)
+        set(h_lock, 'LineColor', 'k');
+    end
+end
 legend('Location', 'best');
 
 fprintf('Done.\n');
