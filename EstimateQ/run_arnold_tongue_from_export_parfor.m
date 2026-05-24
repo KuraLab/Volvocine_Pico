@@ -23,8 +23,8 @@ measure_window = 60;       % averaging window from the end [s]
 sim_dt = 0.01;              % fixed-step size for deterministic runtime
 
 % Sweep grids
-deltaomega_values = linspace(-1, 1, 21);
-sigma_values = linspace(0, 5, 21);
+deltaomega_values = linspace(-2, 2, 21);
+sigma_values = linspace(0, 10, 21);
 
 % Reconstruction settings (single precompute)
 recon_opts = struct();
