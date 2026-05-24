@@ -110,25 +110,6 @@ for i_case = 1:n_cases
         eta = elapsed_case / max(frac, eps) - elapsed_case;
         fprintf('Progress: %d/%d (%.2f%%), elapsed %.1fs, ETA %.1fs\n', i_case, n_cases, 100 * frac, elapsed_case, max(eta, 0));
         drawnow;
-
-        % Write progress to file for external monitoring.
-        try
-            file_progress = struct();
-            file_progress.n_done = i_case;
-            file_progress.n_cases = n_cases;
-            file_progress.percent = 100 * frac;
-            file_progress.elapsed_sec = elapsed_case;
-            file_progress.eta_sec = max(eta, 0);
-            file_progress.timestamp = char(datetime('now'));
-            jsonstr = jsonencode(file_progress);
-            fid = fopen(fullfile(script_dir, 'arnold_tongue_progress.json'), 'w');
-            if fid > 0
-                fprintf(fid, '%s', jsonstr);
-                fclose(fid);
-            end
-        catch
-            % ignore file-write failures
-        end
     end
 end
 elapsed = toc;
@@ -153,7 +134,7 @@ title('Arnold tongue map (parfor) from reconstructed $$s_2$$ and $$z_{\mathrm{op
     'Interpreter', 'latex');
 
 hold on;
-lock_tol = 0.02;
+lock_tol = 0.01;
 lock_mask = isfinite(ratio_map) & abs(ratio_map - 1) <= lock_tol;
 h_lock = contour(deltaomega_values, sigma_values, double(lock_mask), [0.5 0.5], 'k-', 'LineWidth', 2.0);
 line_handles = findobj(h_lock, 'Type', 'Line');
