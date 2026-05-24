@@ -153,19 +153,31 @@ title('Arnold tongue map (parfor) from reconstructed $$s_2$$ and $$z_{\mathrm{op
     'Interpreter', 'latex');
 
 hold on;
-deltaomega_fine = linspace(min(deltaomega_values), max(deltaomega_values), 201);
-sigma_fine = linspace(min(sigma_values), max(sigma_values), 201);
-[DWfine, SGfine] = meshgrid(deltaomega_fine, sigma_fine);
-ratio_fine = interp2(deltaomega_values, sigma_values, ratio_map, DWfine, SGfine, 'linear');
 lock_tol = 0.02;
-lock_mask = abs(ratio_fine - 1) <= lock_tol;
-h_lock = [];
-if any(lock_mask(:))
-    h_lock = contour(DWfine, SGfine, double(lock_mask), [0.5 0.5], 'k-', 'LineWidth', 2.0, ...
-        'DisplayName', '1:1 locking boundary');
-    if ~isempty(h_lock)
-        set(h_lock, 'LineColor', 'k');
+lock_mask = isfinite(ratio_map) & abs(ratio_map - 1) <= lock_tol;
+h_lock = contour(deltaomega_values, sigma_values, double(lock_mask), [0.5 0.5], 'k-', 'LineWidth', 2.0);
+line_handles = findobj(h_lock, 'Type', 'Line');
+if numel(line_handles) > 1
+    line_lengths = arrayfun(@(h) numel(h.XData), line_handles);
+    [~, keep_idx] = max(line_lengths);
+    delete(line_handles(setdiff(1:numel(line_handles), keep_idx)));
+elseif isempty(line_handles)
+    set(h_lock, 'Visible', 'off');
+end
+if isgraphics(h_lock)
+    set(h_lock, 'LineColor', 'k');
+end
+display_name_set = false;
+if isgraphics(h_lock)
+    try
+        h_lock.DisplayName = '1:1 locking boundary';
+        display_name_set = true;
+    catch
     end
+end
+if ~display_name_set
+    legend_entry = plot(nan, nan, 'k-', 'LineWidth', 2.0, 'DisplayName', '1:1 locking boundary');
+    set(legend_entry, 'Visible', 'off');
 end
 legend('Location', 'best');
 
