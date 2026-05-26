@@ -23,15 +23,16 @@ measure_window = 60;       % averaging window from the end [s]
 sim_dt = 0.01;              % fixed-step size for deterministic runtime
 
 % Sweep grids
-deltaomega_values = linspace(-2, 2, 101);
-sigma_values = linspace(0, 10, 101);
+deltaomega_values = linspace(-5, 5, 201);
+sigma_values = linspace(0, 10, 201);
 
 % Reconstruction settings (single precompute)
 recon_opts = struct();
 recon_opts.signal_role = 'a2';
 recon_opts.agent_mode = 'phase_id_2';
 % Use specific MAT file as requested
-recon_opts.mat_path = 'D:\\codes\\Volvocine_Pico\\EstimateQ\\Spring3\\255\\gamma_exports\\gamma_export_latest.mat';
+% Use specific MAT file as requested (relative to this script directory)
+recon_opts.mat_path = fullfile(script_dir, 'Spring3', '255', 'gamma_exports', 'gamma_export_latest.mat');
 recon_opts.omega = [omega1, omega1];
 recon_opts.sigma = 0;
 recon_opts.tspan = [0, 1];
@@ -46,6 +47,29 @@ s2_eval = recon.s2_eval;
 fprintf('Reconstruction source : %s\n', recon.meta.mat_path);
 fprintf('Agent id (s2 fit)     : %d\n', recon.meta.agent_id);
 fprintf('psi_plus_opt          : %.12f rad\n', recon.psi_plus_opt);
+
+% Quick diagnostic plots for reconstructed s2 and z_opt
+try
+    n_plot = 121;
+    phi_plot = linspace(0, 2*pi, n_plot + 1);
+    phi_plot = phi_plot(1:end-1);
+    [P1p, P2p] = meshgrid(phi_plot, phi_plot);
+    Splot = s2_eval(P1p, P2p);
+
+    figure('Name', 'reconstructed s2', 'Color', 'w');
+    imagesc(phi_plot, phi_plot, Splot);
+    axis xy; axis tight;
+    colorbar; xlabel('phi_1'); ylabel('phi_2');
+    title('reconstructed s_2(\phi_1,\phi_2)');
+
+    figure('Name', 'reconstructed z_{opt}', 'Color', 'w');
+    plot(recon.z_opt_grid.theta, recon.z_opt_grid.value, '-k', 'LineWidth', 1.5);
+    xlabel('\theta'); ylabel('z_{opt}(\theta)');
+    title('reconstructed z_{opt}');
+catch
+    % plotting should not break the script
+    warning('Failed to produce diagnostic plots for s2 / z_opt.');
+end
 
 %% Precompute interpolants for fast evaluation inside ODEs
 % Build a coarse grid for s2 and z to avoid expensive basis evaluation in inner loop.
@@ -115,6 +139,16 @@ ratio_map = reshape(ratio_vec, [n_sigma, n_dw]);
 omega1_bar_map = reshape(omega1_bar_vec, [n_sigma, n_dw]);
 omega2_bar_map = reshape(omega2_bar_vec, [n_sigma, n_dw]);
 
+% Save results to a timestamped MAT file in the script directory
+try
+    out_name = sprintf('arnold_tongue_result_%s.mat', datestr(now, 'yyyymmdd_HHMMSS'));
+    out_path = fullfile(script_dir, out_name);
+    save(out_path, 'ratio_map', 'omega1_bar_map', 'omega2_bar_map', 'deltaomega_values', 'sigma_values', 'recon');
+    fprintf('Saved results to %s\n', out_path);
+catch ME
+    warning('ArnoldSave:Failed', 'Failed to save arnold tongue results: %s', ME.message);
+end
+
 %% Plot heatmap
 figure('Color', 'w');
 imagesc(deltaomega_values, sigma_values, ratio_map);
@@ -133,14 +167,24 @@ hold on;
 lock_tol = 0.01;
 lock_mask = isfinite(ratio_map) & abs(ratio_map - 1) <= lock_tol;
 h_lock = contour(deltaomega_values, sigma_values, double(lock_mask), [0.5 0.5], 'k-', 'LineWidth', 2.0);
-line_handles = findobj(h_lock, 'Type', 'Line');
-if numel(line_handles) > 1
-    line_lengths = arrayfun(@(h) numel(h.XData), line_handles);
-    [~, keep_idx] = max(line_lengths);
-    delete(line_handles(setdiff(1:numel(line_handles), keep_idx)));
-elseif isempty(line_handles)
-    set(h_lock, 'Visible', 'off');
+if isgraphics(h_lock)
+    line_handles = findobj(h_lock, 'Type', 'Line');
+else
+    line_handles = [];
 end
+
+if ~isempty(line_handles)
+    if numel(line_handles) > 1
+        line_lengths = arrayfun(@(h) numel(h.XData), line_handles);
+        [~, keep_idx] = max(line_lengths);
+        delete(line_handles(setdiff(1:numel(line_handles), keep_idx)));
+    end
+else
+    if isgraphics(h_lock)
+        set(h_lock, 'Visible', 'off');
+    end
+end
+
 if isgraphics(h_lock)
     set(h_lock, 'LineColor', 'k');
 end
@@ -202,7 +246,7 @@ function dy = phase_rhs(y, omega1, omega2, sigma, s2F, zF)
     th1 = mod(y(1), 2*pi);
     th2 = mod(y(2), 2*pi);
     dy = [ ...
-        omega1 + sigma * zF(th1) * s2F(th1, th2); ...
-        omega2 + sigma * zF(th2) * s2F(th2, th1) ...
+        omega1 + sigma * zF(th1) * s2F(th2, th1); ...
+        omega2 + sigma * zF(th2) * s2F(th1, th2) ...
         ];
 end
