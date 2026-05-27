@@ -26,7 +26,7 @@ SAVE_FOLDER = "saved_chunks"  # 保存用フォルダ名
 MERGED_BASE_FOLDER = "merged_chunks_organized"  # マージファイル保存用ベースフォルダ
 
 # ログレベル設定
-DEBUG_LOGS = True  # Trueにするとデバッグログが表示される
+DEBUG_LOGS = False  # Trueにするとデバッグログが表示される
 TIMEOUT_LOGS = False  # Trueにするとタイムアウトログが詳細表示される
 # 必要に応じて上記の設定をTrueに変更してください
 

@@ -21,13 +21,13 @@ int readAgentIdFromFile() {
     // Pico(W) 版 LittleFS では引数なしで begin()
     if(!LittleFS.begin()){
         Serial.println("LittleFS Mount Failed!");
-        return 0; // デフォルト値
+        return 4; // デフォルト値
     }
 
     File f = LittleFS.open("/config.txt", "r");
     if(!f){
         Serial.println("Failed to open /config.txt");
-        return 0; // デフォルト値
+        return 4; // デフォルト値
     }
 
     // シングルクォートに '\n' と書く
