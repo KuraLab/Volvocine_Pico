@@ -15,6 +15,7 @@ servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 65.0 # サーボ振幅
 stop_agent_id = 4      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
 stop_delay_seconds = 30000 # 停止までの秒数
+feedback_tau_sec = 1.0  # 一次遅れフィルタの時定数 [s]
 
 # PRCのフーリエ係数（0..prc_harmonics を使用）
 # z(psi) = Σ [ prc_a[n] * cos(n*psi) + prc_b[n] * sin(n*psi) ]
@@ -174,6 +175,7 @@ def handle_parameter_request(sock, data, addr):
                 f"omega:{omega:.2f},kappa:{kappa:.2f},"
                 f"center:{servo_center:.1f},amplitude:{servo_amplitude:.1f},"
                 f"stop_id:{stop_agent_id},stop_delay:{stop_delay_seconds},"
+                f"feedback_tau:{feedback_tau_sec:.3f},"
                 f"{build_prc_payload()}"
             )
             sock.sendto(response.encode('utf-8'), addr)

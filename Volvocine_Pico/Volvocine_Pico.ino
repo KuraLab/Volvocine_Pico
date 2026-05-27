@@ -67,6 +67,8 @@ float omega = 3.0f * 3.14f;
 float kappa = 1.0f;  // フィードバックゲイン
 float kappa_init = 0.0f;
 float kappa_now = 0.0f;
+float feedbackTauSec = 1.0f;       // 一次遅れフィルタの時定数 [s]
+float feedbackFiltered = 0.0f;     // 一次遅れ後のフィードバック項
 const int PRC_MAX_HARMONICS = 10;
 int prcHarmonics = 1;
 float prcCosCoeffs[PRC_MAX_HARMONICS + 1] = {0.0f};
@@ -242,7 +244,18 @@ void logSensorData() {
   // サーボ制御
   float psi = (float)elapsed / 1e6f * omega + phi;
   float zPrc = evaluatePRC(psi);
-  phi += (kappa_now * zPrc * flex) * (float)dt / 1e6f;
+  float dtSec = (float)dt * 1e-6f;
+  // 生のフィードバック項
+  float feedbackRaw = kappa_now * zPrc * flex;
+  // 一次遅れフィルタ: tau * df/dt = feedbackRaw - f
+  if (feedbackTauSec > 0.0f) {
+    float alpha = 1.0f - expf(-dtSec / feedbackTauSec);
+    feedbackFiltered += alpha * (feedbackRaw - feedbackFiltered);
+  } else {
+    feedbackFiltered = feedbackRaw;
+  }
+  // フィルタ後のフィードバック項をphiに積分
+  phi += feedbackFiltered * dtSec;
   float currentCos = cosf(psi);
   myServo.write(servoCenter + servoAmplitude * currentCos); // 変更点: 変数を使用
 
@@ -338,7 +351,7 @@ void setup() {
   Serial.printf("Loaded agent_id: %d\n", agent_id);
 
   // 最初はメインポート（5000）でパラメータリクエスト
-  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
+  requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, feedbackTauSec, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
 
   // パラメータ取得後、専用ポートに切り替え
   serverPort = agentPort;
@@ -357,6 +370,7 @@ void setup() {
   logIndex = 0;  // バッファインデックスを初期化
   sendLogBuffer();
   kappa_now = kappa_init;
+  feedbackFiltered = 0.0f;
   srand(micros());
   Serial.println("[INFO] System is paused. Press the button to start.");
 }
@@ -374,12 +388,17 @@ void checkControlCommand() {
       Serial.println("[INFO] Received START command from server.");
       t_delay = (rand() / (float)RAND_MAX) * wait_max;
       startLoggingMicros += (unsigned long)(t_delay * 1e6f);
+      unsigned long nowReset = micros();
+      prevLoopEndTime = nowReset;
+      prevLoopEndTime2 = nowReset;
+      feedbackFiltered = 0.0f;
     } else if (strcmp(buf, "STOP") == 0 && paused == false) {
       paused = true;
       Serial.println("[INFO] Received STOP command from server.");
       sendLogBuffer();
       logIndex = 0;
       kappa_now = kappa_init;
+      feedbackFiltered = 0.0f;
     }
   }
 }
@@ -410,6 +429,7 @@ void loop() {
     sendLogBuffer();
     logIndex = 0;
     kappa_now = kappa_init; // kappaを初期値に戻す
+    feedbackFiltered = 0.0f;
     
     Serial.println("[INFO] Resetting stop parameters (stopAgentId, stopDelaySeconds) to prevent re-triggering.");
     stopAgentId = 0; 
@@ -433,11 +453,12 @@ void loop() {
       // バッファ初期化
       logIndex = 0;
       kappa_now = kappa_init;
+      feedbackFiltered = 0.0f;
 
       // サーバーにパラメータをリクエスト（一時的にメインポートを使用）
       unsigned int tempPort = serverPort;
       serverPort = 5000; // メインポートに一時切り替え
-      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
+      requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, feedbackTauSec, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
       serverPort = tempPort; // 専用ポートに戻す
       lastRequestTime = millis();  // リクエスト送信時刻を記録
     } else{
@@ -445,6 +466,10 @@ void loop() {
       startLoggingMicros = micros(); // ログ開始時刻を記録 
       t_delay = (rand() / (float)RAND_MAX) * wait_max;
       startLoggingMicros += (unsigned long)(t_delay * 1e6f);
+      unsigned long nowReset = micros();
+      prevLoopEndTime = nowReset;
+      prevLoopEndTime2 = nowReset;
+      feedbackFiltered = 0.0f;
     }
   }
   lastButtonState = currentButtonState;
@@ -459,7 +484,7 @@ void loop() {
     // パラメータリクエスト時は一時的にメインポートを使用
     unsigned int tempPort = serverPort;
     serverPort = 5000; // メインポートに一時切り替え
-    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
+    requestParametersFromServer(udp, serverIP, serverPort, agent_id, omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, feedbackTauSec, prcHarmonics, prcCosCoeffs, prcSinCoeffs, PRC_MAX_HARMONICS);
     serverPort = tempPort; // 専用ポートに戻す
     lastRequestTime = millis();  // リクエスト送信時刻を更新
   }

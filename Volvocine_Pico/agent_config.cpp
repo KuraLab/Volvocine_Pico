@@ -38,7 +38,7 @@ int readAgentIdFromFile() {
     return line.toInt(); // ファイルの値をintに変換して返す
 }
 
-void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &servoCenter, float &servoAmplitude, int &stopAgentId, int &stopDelaySeconds, int &prcHarmonics, float *prcCosCoeffs, float *prcSinCoeffs, int prcMaxHarmonics) {
+void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int serverPort, int agent_id, float &omega, float &kappa, float &servoCenter, float &servoAmplitude, int &stopAgentId, int &stopDelaySeconds, float &feedbackTauSec, int &prcHarmonics, float *prcCosCoeffs, float *prcSinCoeffs, int prcMaxHarmonics) {
   // デバッグ情報を含むリクエスト文字列を作成
   int analogValue26 = analogRead(26);  // 26ピンのアナログ入力値を取得
   char requestBuffer[128]; // バッファサイズを拡張して新しいパラメータに対応
@@ -93,6 +93,9 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
           } else if (sscanf(token, "stop_delay:%d", &ival) == 1) {
             stopDelaySeconds = ival;
             parsedBaseFields++;
+          } else if (sscanf(token, "feedback_tau:%f", &fval) == 1) {
+            feedbackTauSec = fval;
+            parsedBaseFields++;
           } else if (sscanf(token, "prc_n:%d", &ival) == 1) {
             receivedPrcN = ival;
             gotPrcN = true;
@@ -136,7 +139,7 @@ void requestParametersFromServer(WiFiUDP &udp, IPAddress serverIP, unsigned int 
         }
 
         if (parsedBaseFields >= 6) {
-            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, center=%.1f, amplitude=%.1f, stop_id=%d, stop_delay=%d, prc_n=%d (parsed_prc=%d)\n", omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, prcHarmonics, parsedPrcFields);
+            Serial.printf("[INFO] Received parameters: omega=%.2f, kappa=%.2f, center=%.1f, amplitude=%.1f, stop_id=%d, stop_delay=%d, feedback_tau=%.3f, prc_n=%d (parsed_prc=%d)\n", omega, kappa, servoCenter, servoAmplitude, stopAgentId, stopDelaySeconds, feedbackTauSec, prcHarmonics, parsedPrcFields);
             printCurrentPrcSeries(prcHarmonics, prcCosCoeffs, prcSinCoeffs, prcMaxHarmonics);
         } else {
           Serial.printf("[WARN] Failed to parse all base parameters. Received: %s (parsed_base=%d, parsed_prc=%d)\n", originalBuffer, parsedBaseFields, parsedPrcFields);
