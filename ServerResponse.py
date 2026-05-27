@@ -5,17 +5,17 @@ import os
 import re
 
 omega_values = {
-    4: 3.14 * 1.8    # エージェント1の周波数
+    4: 3.14 * 2.3    # エージェント1の周波数
 }
 default_omega = 3.14 * 2.50 # デフォルト周波数（未定義IDの場合）
 
-kappa =3       # フィードバックゲイン
+kappa = 0       # フィードバックゲイン
 alpha = -3.14*0.6
 servo_center = 90.0  # サーボ中心角度
 servo_amplitude = 65.0 # サーボ振幅
 stop_agent_id = 4      # 停止対象のエージェントID (0の場合はどのも停止しない等を意味づけることも可能)
 stop_delay_seconds = 30000 # 停止までの秒数
-feedback_tau_sec = 1.0  # 一次遅れフィルタの時定数 [s]
+feedback_tau_sec = 0.0  # 一次遅れフィルタの時定数 [s]
 
 # PRCのフーリエ係数（0..prc_harmonics を使用）
 # z(psi) = Σ [ prc_a[n] * cos(n*psi) + prc_b[n] * sin(n*psi) ]
