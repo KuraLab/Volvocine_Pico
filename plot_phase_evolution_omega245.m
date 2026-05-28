@@ -16,7 +16,7 @@ function varargout = plot_phase_evolution_omega245(dirpath, n_seconds_to_cut, pl
 %   overlay_mode = true (true: overlay all chunks, false: separate figures for each chunk)
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('merged_chunks_organized','2026-05-12');
+        dirpath = fullfile('merged_chunks_organized','2026-05-28-test2');
         %dirpath = fullfile('EstimateF','Spring5/250');
         %dirpath = fullfile('EstimateQ','VerifyZopt/Spring3/w1/250');
     end
