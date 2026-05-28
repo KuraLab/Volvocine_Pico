@@ -5,7 +5,7 @@ import os
 import re
 
 omega_values = {
-    4: 3.14 * 2.4    # エージェント1の周波数
+    7: 3.14 * 2.4    # エージェント1の周波数
 }
 default_omega = 3.14 * 2.50 # デフォルト周波数（未定義IDの場合）
 
@@ -23,7 +23,7 @@ PRC_SOURCE_DIR = os.environ.get(
     "PRC_SOURCE_DIR",
     os.path.join("EstimateQ", "Spring3", "255", "gamma_exports")
 )
-PRC_SOURCE_FILE = "prc_snippet_ref_w2.txt"
+PRC_SOURCE_FILE = "prc_snippet_ref_cos.txt"
 
 
 def load_prc_from_directory(source_dir, source_file=PRC_SOURCE_FILE):

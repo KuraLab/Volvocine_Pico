@@ -55,7 +55,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('Spring3', '240_4800mV');
+        dirpath = fullfile('Spring5', '240');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -607,7 +607,7 @@ end
 function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt)
     requested_agents = unique([phase_agent_ids(:); z_agent_id]);
     series_by_agent = load_corrected_agent_series_from_csv( ...
-        csv_path, requested_agents, {'time_pc_sec_abs', 'a0', 'a2'});
+        csv_path, requested_agents, {'time_pc_sec_abs', 'a0', 'a1'});
     overlap_start = -inf;
     overlap_end = inf;
 
