@@ -13,7 +13,7 @@ function out = plot_prc_snippets_overlay(input_path, n_samples)
 
     % Change these defaults when calling with no input_path.
     default_spring = 'Spring3';
-    default_omega = '255';
+    default_omega = '230';
 
     if nargin < 1 || isempty(input_path)
         input_path = resolve_default_snippet_dir(default_spring, default_omega);

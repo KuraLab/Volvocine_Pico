@@ -9,7 +9,7 @@ if isempty(script_dir)
     script_dir = pwd;
 end
 
-if ~isempty(dir(fullfile(script_dir, 'Spring*')))
+if ~isempty(dir(fullfile(script_dir, 'Spring3', '295305')))
     estimateq_root = script_dir;
 elseif isfolder(fullfile(script_dir, 'EstimateQ'))
     estimateq_root = fullfile(script_dir, 'EstimateQ');
