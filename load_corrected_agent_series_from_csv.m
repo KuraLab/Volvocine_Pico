@@ -44,7 +44,7 @@ function [series_by_agent, all_agents] = load_corrected_agent_series_from_csv(cs
     end
 
     if isempty(requested_agents)
-        series_by_agent = struct('time', {}, 'a0_corr', {}, 'a2', {});
+        series_by_agent = struct('time', {}, 'a0_corr', {}, 'a1', {}, 'a2', {});
         return;
     end
 
@@ -57,7 +57,7 @@ function [series_by_agent, all_agents] = load_corrected_agent_series_from_csv(cs
             mat2str(requested_agents), mat2str(all_agents));
     end
 
-    series_template = struct('time', [], 'a0_corr', [], 'a2', []);
+    series_template = struct('time', [], 'a0_corr', [], 'a1', [], 'a2', []);
     series_by_agent = repmat(series_template, 1, max(requested_agents));
     for agent_idx = 1:numel(requested_agents)
         aid = requested_agents(agent_idx);
@@ -83,6 +83,12 @@ function series = get_agent_series(T, agent_id)
         valid = valid & isfinite(a0_vals);
     end
 
+    a1_vals = [];
+    if ismember('a1', sub.Properties.VariableNames)
+        a1_vals = double(sub.a1(:));
+        valid = valid & isfinite(a1_vals);
+    end
+
     a2_vals = [];
     if ismember('a2', sub.Properties.VariableNames)
         a2_vals = double(sub.a2(:));
@@ -101,13 +107,19 @@ function series = get_agent_series(T, agent_id)
     if ~isempty(a0_vals)
         a0_vals = a0_vals(ia);
     end
+    if ~isempty(a1_vals)
+        a1_vals = a1_vals(ia);
+    end
     if ~isempty(a2_vals)
         a2_vals = a2_vals(ia);
     end
 
-    series = struct('time', time_vals, 'a0_corr', [], 'a2', []);
+    series = struct('time', time_vals, 'a0_corr', [], 'a1', [], 'a2', []);
     if ~isempty(a0_vals)
         series.a0_corr = a0_vals;
+    end
+    if ~isempty(a1_vals)
+        series.a1 = a1_vals;
     end
     if ~isempty(a2_vals)
         series.a2 = a2_vals;

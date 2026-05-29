@@ -55,7 +55,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('Spring5', '240');
+        dirpath = fullfile('Spring3', '240_5250mV');
     end
     if nargin < 2
         phase_agent_ids = [];
@@ -86,11 +86,30 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     %tau = 0.6 * pi;
     tau = 3.246312408709;
 
-    % Ignore legacy weighted-fit arguments if they are still passed.
+    % Parse optional extra arguments. Supported extras:
+    %  - numeric [m n] (legacy) -> gamma_ratio
+    %  - name-value 'z_source', {'a1','a2','auto'} to choose which amplitude to use
+    z_source = 'a2';
     if ~isempty(varargin)
+        % legacy positional numeric arg
         first_extra = varargin{1};
         if isnumeric(first_extra) && numel(first_extra) == 2 && all(isfinite(first_extra(:)))
             gamma_ratio = double(first_extra(:).');
+        end
+        % name-value parsing
+        for vi = 1:2:numel(varargin)
+            if vi+1 <= numel(varargin) && ischar(varargin{vi})
+                key = lower(varargin{vi});
+                val = varargin{vi+1};
+                switch key
+                    case 'z_source'
+                        if ischar(val) && any(strcmpi(val, {'a1', 'a2', 'auto'}))
+                            z_source = lower(val);
+                        else
+                            warning('Invalid z_source value, using ''auto''');
+                        end
+                end
+            end
         end
     end
 
@@ -152,7 +171,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
             analysis_duration_sec, analysis_start_sec, sample_dt, ...
             M, N, gamma_ratio, point_color, marker_size, marker_alpha, ...
             gamma_settings_a2, gamma_settings_sin_phi2_a2, ...
-            derived_signal_func);
+            derived_signal_func, z_source);
 
         if agent_idx == 1
             agent_analysis = orderfields(agent_result);
@@ -286,7 +305,7 @@ function phase_agent_ids = detect_default_phase_agents(csv_paths)
     error('Could not determine default phase_agent_ids from the selected CSV files.');
 end
 
-function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, M, N, gamma_ratio, point_color, marker_size, marker_alpha, gamma_settings_a2, gamma_settings_sin_phi2_a2, derived_signal_func)
+function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, M, N, gamma_ratio, point_color, marker_size, marker_alpha, gamma_settings_a2, gamma_settings_sin_phi2_a2, derived_signal_func, z_source)
     fig = figure('Color', 'w', 'Name', sprintf('a2 agent %d', target_agent_id));
     ax = axes('Parent', fig);
     hold(ax, 'on');
@@ -317,7 +336,7 @@ function agent_out = run_single_agent_analysis(csv_paths, phase_agent_ids, targe
         csv_path = csv_paths{i};
         try
             [point_data, meta] = compute_points_for_csv( ...
-                csv_path, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt);
+                csv_path, phase_agent_ids, target_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, z_source);
         catch ME
             warning('Skipping %s for agent %d: %s', csv_path, target_agent_id, ME.message);
             skipped_files(end+1) = struct('file_path', csv_path, 'reason', ME.message); %#ok<AGROW>
@@ -604,10 +623,11 @@ function configure_phase_pair_axes(ax, z_axis_label)
     box(ax, 'on');
 end
 
-function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt)
+function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, z_agent_id, analysis_duration_sec, analysis_start_sec, sample_dt, z_source)
     requested_agents = unique([phase_agent_ids(:); z_agent_id]);
+    % Read both a1 and a2 from CSV; prefer a1 but fall back to a2 for compatibility
     series_by_agent = load_corrected_agent_series_from_csv( ...
-        csv_path, requested_agents, {'time_pc_sec_abs', 'a0', 'a1'});
+        csv_path, requested_agents, {'time_pc_sec_abs', 'a0', 'a1', 'a2'});
     overlap_start = -inf;
     overlap_end = inf;
 
@@ -641,7 +661,33 @@ function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, 
 
     a0_1 = interp1(series_by_agent(phase_agent_ids(1)).time, series_by_agent(phase_agent_ids(1)).a0_corr, time_abs, 'linear', NaN);
     a0_2 = interp1(series_by_agent(phase_agent_ids(2)).time, series_by_agent(phase_agent_ids(2)).a0_corr, time_abs, 'linear', NaN);
-    a2_z = interp1(series_by_agent(z_agent_id).time, series_by_agent(z_agent_id).a2, time_abs, 'linear', NaN);
+    % Determine which amplitude series to use for the z-axis (a1 or a2)
+    if nargin < 7 || isempty(z_source)
+        z_source = 'auto';
+    end
+    agent_series = series_by_agent(z_agent_id);
+    switch z_source
+        case 'a1'
+            if isfield(agent_series, 'a1') && ~isempty(agent_series.a1)
+                a2_z = interp1(agent_series.time, agent_series.a1, time_abs, 'linear', NaN);
+            else
+                error('Requested z_source ''a1'' but a1 column is missing for agent %d in %s', z_agent_id, csv_path);
+            end
+        case 'a2'
+            if isfield(agent_series, 'a2') && ~isempty(agent_series.a2)
+                a2_z = interp1(agent_series.time, agent_series.a2, time_abs, 'linear', NaN);
+            else
+                error('Requested z_source ''a2'' but a2 column is missing for agent %d in %s', z_agent_id, csv_path);
+            end
+        otherwise % 'auto'
+            if isfield(agent_series, 'a1') && ~isempty(agent_series.a1)
+                a2_z = interp1(agent_series.time, agent_series.a1, time_abs, 'linear', NaN);
+            elseif isfield(agent_series, 'a2') && ~isempty(agent_series.a2)
+                a2_z = interp1(agent_series.time, agent_series.a2, time_abs, 'linear', NaN);
+            else
+                a2_z = NaN(size(time_abs));
+            end
+    end
 
     valid = isfinite(a0_1) & isfinite(a0_2) & isfinite(a2_z);
     time_rel = time_rel(valid);
@@ -658,8 +704,24 @@ function [point_data, meta] = compute_points_for_csv(csv_path, phase_agent_ids, 
     point_data.phase1 = mod(a0_1, 256) * (2*pi/256);
     point_data.phase2 = mod(a0_2, 256) * (2*pi/256);
     point_data.a2_raw = a2_z;
+    % Normalize using the agent's a1 reference if present, else a2; keep field name a2_normalized
+    % Choose reference series for percentile normalization according to z_source preference
+    switch z_source
+        case 'a1'
+            ref_series = agent_series.a1;
+        case 'a2'
+            ref_series = agent_series.a2;
+        otherwise
+            if isfield(agent_series, 'a1') && ~isempty(agent_series.a1)
+                ref_series = agent_series.a1;
+            elseif isfield(agent_series, 'a2') && ~isempty(agent_series.a2)
+                ref_series = agent_series.a2;
+            else
+                ref_series = a2_z;
+            end
+    end
     point_data.a2_normalized = clip_values( ...
-        normalize_by_agent_percentile_span(a2_z, series_by_agent(z_agent_id).a2, 10), -0.5, 0.5);
+        normalize_by_agent_percentile_span(a2_z, ref_series, 10), -0.5, 0.5);
     point_data.a2 = point_data.a2_normalized;
 
     meta = struct();
