@@ -55,7 +55,7 @@ function varargout = plot_phase_pair_a2_3d_all_files(dirpath, phase_agent_ids, z
     end
 
     if nargin < 1 || isempty(dirpath)
-        dirpath = fullfile('Spring5', '295305');
+        dirpath = fullfile('Spring3', '255');
     end
     if nargin < 2
         phase_agent_ids = [];
