@@ -29,7 +29,7 @@ function out = plot_spring3_a2_reference_fit_error(varargin)
     p = inputParser;
     p.FunctionName = mfilename;
     addParameter(p, 'ParentDir', '', @(x) ischar(x) || isstring(x));
-    addParameter(p, 'ReferenceFolder', '255', @(x) ischar(x) || isstring(x));
+    addParameter(p, 'ReferenceFolder', '240_0531', @(x) ischar(x) || isstring(x));
     addParameter(p, 'AnalysisDurationSec', 80, @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive', 'finite'}));
     addParameter(p, 'AnalysisStartSec', 10, @(x) validateattributes(x, {'numeric'}, {'scalar', 'nonnegative', 'finite'}));
     addParameter(p, 'SampleDt', 0.01, @(x) validateattributes(x, {'numeric'}, {'scalar', 'positive', 'finite'}));
