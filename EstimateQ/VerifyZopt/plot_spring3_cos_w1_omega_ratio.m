@@ -9,7 +9,7 @@ t_end = 120;
 t_start_series = 0;  % start time for time-series overlay only
 mean_phase_band_half_width_rad = 0.10*pi;
 if nargin < 1 || isempty(enable_save_figure)
-    enable_save_figure = false;
+    enable_save_figure = true;
 end
 
 % Clear any existing figures before generating new plots.
@@ -61,7 +61,7 @@ x_limits = [min([xCos(:); xW1(:)]), max([xCos(:); xW1(:)])];
 xlim(x_limits);
 xtick_min = floor(x_limits(1) * 10) / 10;
 xtick_max = ceil(x_limits(2) * 10) / 10;
-xticks(xtick_min:0.1:xtick_max);
+xticks(-2:1:2);
 xlabel('$$\Delta\omega$$');
 ylabel('$$\bar{\dot{\phi_2}} / \bar{\dot{\phi_1}}$$');
 legend([hCosTrend, hW1Trend, hCosConv, hW1Conv], 'Location', 'best', 'Interpreter', 'latex');
@@ -76,7 +76,7 @@ if exist('tuneFigure', 'file') == 2
 end
 if enable_save_figure
     if exist('saveFigure', 'file') == 2
-        saveFigure();
+        saveFigure;
     else
         warning('enable_save_figure is true, but saveFigure.m was not found.');
     end
@@ -87,7 +87,7 @@ local_plot_phase_evolution_in_mean_band(phaseStatsCos, phaseStatsW1, t_start_ser
 
 if enable_save_figure
     if exist('saveFigure', 'file') == 2
-        saveFigure();
+        saveFigure;
     else
         warning('enable_save_figure is true, but saveFigure.m was not found.');
     end

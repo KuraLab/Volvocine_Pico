@@ -1,12 +1,12 @@
 function out = plot_spring3_a2_reference_fit_error(varargin)
-% plot_spring3_a2_reference_fit_error Compare Spring3 folders against a
-% Fourier fit learned from Spring3/255.
+% plot_spring3_a2_reference_fit_error Compare Spring3 folders ending in
+% _0531 against a Fourier fit learned from Spring3/255.
 %
 % The reference folder Spring3/255 is used to fit an unweighted double
 % Fourier model for a2 on the usual (phi1, phi2) phase-pair features.
 % The learned coefficients are then evaluated on the other immediate
-% subfolders under Spring3, and the prediction error is summarized and
-% plotted.
+% subfolders under Spring3 whose names end with _0531, and the prediction
+% error is summarized and plotted.
 %
 % Usage:
 %   out = plot_spring3_a2_reference_fit_error()
@@ -189,11 +189,13 @@ function out = plot_spring3_a2_reference_fit_error(varargin)
 
     summary_table = build_summary_table(comparison_results);
 
-    figure_error = [];
+    figure_rmse = [];
+    figure_mae = [];
     figure_residual = [];
     figure_omega = [];
     if show_figures
-        figure_error = plot_error_summary(summary_table, reference_folder);
+        figure_rmse = plot_single_error_summary(summary_table, reference_folder, 'rmse', 'RMSE', 'Spring3 a2 reference RMSE');
+        figure_mae = plot_single_error_summary(summary_table, reference_folder, 'mae', 'MAE', 'Spring3 a2 reference MAE');
         figure_residual = plot_residual_summary(comparison_results, reference_folder);
         figure_omega = plot_omega_summary(summary_table, reference_folder, phase_agent_ids);
     end
@@ -213,7 +215,9 @@ function out = plot_spring3_a2_reference_fit_error(varargin)
     out.reference_fit = reference_fit;
     out.comparison_results = comparison_results;
     out.summary_table = summary_table;
-    out.figure_error = figure_error;
+    out.figure_error = figure_rmse;
+    out.figure_rmse = figure_rmse;
+    out.figure_mae = figure_mae;
     out.figure_residual = figure_residual;
     out.figure_omega = figure_omega;
 
@@ -295,6 +299,9 @@ function folder_infos = list_spring3_subfolders(parent_dir)
     folder_infos = struct('folder_name', {}, 'folder_path', {}, 'is_reference', {});
     for i = 1:numel(listing)
         folder_name = listing(i).name;
+        if isempty(regexp(folder_name, '_0531$', 'once'))
+            continue;
+        end
         folder_path = fullfile(parent_dir, folder_name);
         if isempty(dir(fullfile(folder_path, '*.csv')))
             continue;
@@ -545,20 +552,20 @@ function summary_table = build_summary_table(comparison_results)
         'omega1_rad_s', 'omega2_rad_s', 'omega1_deg_s', 'omega2_deg_s', 'omega_delta_rad_s', 'omega_delta_deg_s', 'omega_ratio_2_over_1'});
 end
 
-function fig = plot_error_summary(summary_table, reference_folder)
-    fig = figure('Color', 'w', 'Name', 'Spring3 a2 reference fit error');
+function fig = plot_single_error_summary(summary_table, reference_folder, metric_field, metric_label, fig_name)
+    fig = figure('Color', 'w', 'Name', fig_name);
     ax = axes('Parent', fig);
     hold(ax, 'on');
 
     x = categorical(summary_table.folder_name);
     x = reordercats(x, cellstr(summary_table.folder_name));
-    bar(ax, x, [summary_table.rmse, summary_table.mae], 'grouped');
-    ylabel(ax, 'Error');
-    xlabel(ax, 'Folder');
-    legend(ax, {'RMSE', 'MAE'}, 'Location', 'northwest');
-    title(ax, sprintf('Reference fit from Spring3/%s', reference_folder));
+    bar(ax, x, summary_table.(metric_field));
+    ylabel(ax, metric_label);
+    xlabel(ax, '$$\Delta\omega$$','Interpreter', 'latex');
+    %title(ax, sprintf('Reference fit from Spring3/%s', reference_folder));
     grid(ax, 'on');
     xtickangle(ax, 30);
+    tuneFigure;
 end
 
 function fig = plot_residual_summary(comparison_results, reference_folder)
@@ -586,9 +593,9 @@ function fig = plot_residual_summary(comparison_results, reference_folder)
     xticks(ax, 1:numel(comparison_results));
     xticklabels(ax, {comparison_results.folder_name});
     xtickangle(ax, 30);
-    xlabel(ax, 'Folder');
+    xlabel(ax, '$$\Delta\omega$$','Interpreter', 'latex');
     ylabel(ax, 'Residual (a2 - prediction)');
-    title(ax, sprintf('Residuals vs reference fit from Spring3/%s', reference_folder));
+    %title(ax, sprintf('Residuals vs reference fit from Spring3/%s', reference_folder));
 end
 
 function fig = plot_omega_summary(summary_table, reference_folder, phase_agent_ids)
@@ -600,7 +607,7 @@ function fig = plot_omega_summary(summary_table, reference_folder, phase_agent_i
     x = reordercats(x, cellstr(summary_table.folder_name));
     bar(ax, x, [summary_table.omega1_rad_s, summary_table.omega2_rad_s], 'grouped');
     ylabel(ax, 'Mean angular velocity (rad/s)');
-    xlabel(ax, 'Folder');
+    xlabel(ax, '$$\Delta\omega$$','Interpreter', 'latex');
     legend(ax, {sprintf('Agent %d', phase_agent_ids(1)), sprintf('Agent %d', phase_agent_ids(2))}, 'Location', 'northwest');
     title(ax, sprintf('Per-folder mean angular velocity using reference window from Spring3/%s', reference_folder));
     grid(ax, 'on');
