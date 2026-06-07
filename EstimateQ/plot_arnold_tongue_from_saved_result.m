@@ -70,6 +70,33 @@ for i_sigma = 1:numel(sigma_values)
         last_hit_deltaomega(i_sigma) = deltaomega_values(hit_idx);
     end
 end
+
+% --- Print 1:1 boundary for requested sigma values (value-based)
+% Specify sigma values you want to query here
+requested_sigma_values = [3, 5];
+ts = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+for ii = 1:numel(requested_sigma_values)
+    req = requested_sigma_values(ii);
+    [~, idx] = min(abs(sigma_values - req));
+    if isempty(idx) || idx < 1 || idx > numel(sigma_values)
+        continue;
+    end
+    matched_sigma = sigma_values(idx);
+    f_delta = first_hit_deltaomega(idx);
+    l_delta = last_hit_deltaomega(idx);
+    if isfinite(f_delta)
+        f_str = sprintf('%.6g', f_delta);
+    else
+        f_str = 'NaN';
+    end
+    if isfinite(l_delta)
+        l_str = sprintf('%.6g', l_delta);
+    else
+        l_str = 'NaN';
+    end
+    fprintf('%s\t%s\trequested_sigma=%.6g\tmatched_index=%d\tmatched_sigma=%.6g\tfirst_deltaomega=%s\tlast_deltaomega=%s\n', ...
+        ts, mat_path, req, idx, matched_sigma, f_str, l_str);
+end
 valid_hit = isfinite(first_hit_deltaomega);
 first_label = sprintf('1:1 first-hit curve (%s, %.4g)', lock_mode, lock_value);
 last_label = sprintf('1:1 last-hit curve (%s, %.4g)', lock_mode, lock_value);

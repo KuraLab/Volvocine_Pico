@@ -565,6 +565,9 @@ function fig = plot_single_error_summary(summary_table, reference_folder, metric
     %title(ax, sprintf('Reference fit from Spring3/%s', reference_folder));
     grid(ax, 'on');
     xtickangle(ax, 30);
+    labels = format_folder_xticklabels(cellstr(summary_table.folder_name));
+    xticklabels(ax, labels);
+    set(ax, 'TickLabelInterpreter', 'latex');
     tuneFigure;
 end
 
@@ -591,7 +594,9 @@ function fig = plot_residual_summary(comparison_results, reference_folder)
     grid(ax, 'on');
     xlim(ax, [0.5, numel(comparison_results) + 0.5]);
     xticks(ax, 1:numel(comparison_results));
-    xticklabels(ax, {comparison_results.folder_name});
+    names = {comparison_results.folder_name};
+    labels = format_folder_xticklabels(names);
+    xticklabels(ax, labels);
     xtickangle(ax, 30);
     xlabel(ax, '$$\Delta\omega$$','Interpreter', 'latex');
     ylabel(ax, 'Residual (a2 - prediction)');
@@ -612,11 +617,37 @@ function fig = plot_omega_summary(summary_table, reference_folder, phase_agent_i
     title(ax, sprintf('Per-folder mean angular velocity using reference window from Spring3/%s', reference_folder));
     grid(ax, 'on');
     xtickangle(ax, 30);
+    labels = format_folder_xticklabels(cellstr(summary_table.folder_name));
+    xticklabels(ax, labels);
+    set(ax, 'TickLabelInterpreter', 'latex');
 end
 
 function [omega1_rad_s, omega2_rad_s] = estimate_file_omegas(time_sec, phase1_rad, phase2_rad)
     omega1_rad_s = estimate_mean_omega_from_phase(time_sec, phase1_rad);
     omega2_rad_s = estimate_mean_omega_from_phase(time_sec, phase2_rad);
+end
+
+function labels = format_folder_xticklabels(folder_names)
+    % Convert folder names like '260_0531' to LaTeX labels of the form
+    % '$<value>/\pi$' where value = 2.5 - (numeric_part / 100).
+    if isstring(folder_names)
+        folder_names = cellstr(folder_names);
+    end
+    labels = cell(size(folder_names));
+    for k = 1:numel(folder_names)
+        name = folder_names{k};
+        % remove trailing _0531 if present
+        numpart = regexprep(name, '_0531$', '');
+        val = str2double(numpart);
+        if isnan(val)
+            % fallback: escape underscores for LaTeX
+            labels{k} = strrep(name, '_', '\_');
+            continue;
+        end
+        scaled = val / 100;
+        result = -2.5 + scaled;
+        labels{k} = sprintf('$%0.3g\\pi$', result);
+    end
 end
 
 function omega_rad_s = estimate_mean_omega_from_phase(time_sec, phase_rad)

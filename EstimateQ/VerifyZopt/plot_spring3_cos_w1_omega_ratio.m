@@ -39,35 +39,41 @@ else
 end
 
 figure('Color', 'w');
-hW1Trend = plot(xW1, yW1, '-', 'LineWidth', 1.2, 'Color', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), q^*$');
+hW1Trend = plot(xW1, yW1, '-', 'LineWidth', 1.2, 'Color', [0.8500, 0.3250, 0.0980], 'DisplayName', '$k=5$');
 hold on;
-hCosTrend = plot(xCos, yCos, '-', 'LineWidth', 1.2, 'Color', [0.0, 0.4470, 0.7410], 'DisplayName', '$z_{\mathrm{sin}}(\theta), \tau_1^*$');
+hCosTrend = plot(xCos, yCos, '-', 'LineWidth', 1.2, 'Color', [0.0, 0.4470, 0.7410], 'DisplayName', '$k=3$');
 
 hW1Conv = plot(xW1(isConvergedW1), yW1(isConvergedW1), 'p', ...
     'LineStyle', 'none', 'MarkerSize', 10, 'MarkerFaceColor', [0.8500, 0.3250, 0.0980], ...
-    'MarkerEdgeColor', [0.8500, 0.3250, 0.0980], 'DisplayName', '$z_{\mathrm{opt}}(\theta), q^*$ converged');
+    'MarkerEdgeColor', [0.8500, 0.3250, 0.0980], 'DisplayName', '$k=5$ converged');
 plot(xW1(~isConvergedW1), yW1(~isConvergedW1), 's', ...
     'LineStyle', 'none', 'MarkerSize', 5, 'MarkerFaceColor', 'none', ...
     'MarkerEdgeColor', [0.8500, 0.3250, 0.0980]);
 
 hCosConv = plot(xCos(isConvergedCos), yCos(isConvergedCos), 'd', ...
     'LineStyle', 'none', 'MarkerSize', 6, 'MarkerFaceColor', [0.0, 0.4470, 0.7410], ...
-    'MarkerEdgeColor', [0.0, 0.4470, 0.7410], 'DisplayName', '$z_{\mathrm{sin}}(\theta), \tau_1^*$ converged');
+    'MarkerEdgeColor', [0.0, 0.4470, 0.7410], 'DisplayName', '$k=3$ converged');
 plot(xCos(~isConvergedCos), yCos(~isConvergedCos), 'o', ...
     'LineStyle', 'none', 'MarkerSize', 5, 'MarkerFaceColor', 'none', ...
     'MarkerEdgeColor', [0.0, 0.4470, 0.7410]);
 grid on;
-x_limits = [min([xCos(:); xW1(:)]), max([xCos(:); xW1(:)])];
+x_ref_lines = [-1.9, -0.9, 0.9, 1.65];
+x_limits = [min([xCos(:); xW1(:); x_ref_lines(:)]), max([xCos(:); xW1(:); x_ref_lines(:)])];
 xlim(x_limits);
 xtick_min = floor(x_limits(1) * 10) / 10;
 xtick_max = ceil(x_limits(2) * 10) / 10;
 xticks(-2:1:2);
+yl = ylim;
+for x_ref = x_ref_lines
+    line([x_ref x_ref], yl, 'Color', [0.85 0.85 0.85], 'LineWidth', 0.7, 'HandleVisibility', 'off');
+end
 xlabel('$$\Delta\omega$$');
 ylabel('$$\bar{\dot{\phi_2}} / \bar{\dot{\phi_1}}$$');
 legend([hCosTrend, hW1Trend, hCosConv, hW1Conv], 'Location', 'best', 'Interpreter', 'latex');
 lgd = legend(gca);
 if ~isempty(lgd) && isgraphics(lgd)
     lgd.Location = 'eastoutside';
+    lgd.Interpreter = 'latex';
 end
 hold off;
 

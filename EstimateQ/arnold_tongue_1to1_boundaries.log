@@ -1,0 +1,3 @@
+timestamp	mat_path	sigma_index	sigma_value	first_deltaomega	last_deltaomega
+2026-06-03 13:35:50	/home/kohei/codes/Volvocine_Pico/EstimateQ/arnold_tongue_result_20260524_233155.mat	3	0.1	-0.05	0.05
+2026-06-03 13:35:50	/home/kohei/codes/Volvocine_Pico/EstimateQ/arnold_tongue_result_20260524_233155.mat	5	0.2	-0.05	0.05
