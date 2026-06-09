@@ -224,6 +224,7 @@ function out = plot_spring3_a2_reference_fit_error(varargin)
     fprintf('[INFO] Reference fit built from %s (%d samples).\n', reference_dir, numel(reference_point_cloud.a2));
     fprintf('[INFO] Compared %d folder(s) under %s.\n', numel(comparison_results), parent_dir);
     disp(summary_table);
+    print_summary_table_latex(summary_table);
 end
 
 function parent_dir = resolve_parent_dirpath(parent_dir)
@@ -550,6 +551,37 @@ function summary_table = build_summary_table(comparison_results)
         omega1_rad_s, omega2_rad_s, omega1_deg_s, omega2_deg_s, omega_delta_rad_s, omega_delta_deg_s, omega_ratio_2_over_1, ...
         'VariableNames', {'folder_name', 'n_points', 'rmse', 'mae', 'bias', 'corrcoef', ...
         'omega1_rad_s', 'omega2_rad_s', 'omega1_deg_s', 'omega2_deg_s', 'omega_delta_rad_s', 'omega_delta_deg_s', 'omega_ratio_2_over_1'});
+end
+
+function print_summary_table_latex(summary_table)
+    fprintf('\n');
+    fprintf('%% LaTeX table generated from summary_table\n');
+    fprintf('\\begin{tabular}{cccc}\n');
+    fprintf('\\toprule\n');
+    fprintf('%s\n', '\\(\\Delta\\omega\\) & \\(\\omega_1\\) & \\(\\omega_2\\) & Fitting error(RMSE) \\\\');
+    fprintf('\\midrule\n');
+
+    folder_names = cellstr(summary_table.folder_name);
+    for i = 1:numel(folder_names)
+        delta_pi = folder_name_to_delta_pi(folder_names{i});
+        omega1 = summary_table.omega1_rad_s(i);
+        omega2 = summary_table.omega2_rad_s(i);
+        rmse = summary_table.rmse(i);
+        fprintf('%s\n', sprintf('\\(%0.1f\\pi\\) & %.6g & %.6g & %.6g \\\\', delta_pi, omega1, omega2, rmse));
+    end
+
+    fprintf('\\bottomrule\n');
+    fprintf('\\end{tabular}\n');
+end
+
+function delta_pi = folder_name_to_delta_pi(folder_name)
+    token = regexp(folder_name, '^(\d+)', 'tokens', 'once');
+    if isempty(token)
+        delta_pi = NaN;
+        return;
+    end
+    folder_value = str2double(token{1});
+    delta_pi = -2.5 + folder_value / 100;
 end
 
 function fig = plot_single_error_summary(summary_table, reference_folder, metric_field, metric_label, fig_name)
