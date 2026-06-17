@@ -9,7 +9,7 @@ if isempty(script_dir)
     script_dir = pwd;
 end
 
-if ~isempty(dir(fullfile(script_dir, 'Spring3', '295305')))
+if ~isempty(dir(fullfile(script_dir, 'Spring3', '255')))
     estimateq_root = script_dir;
 elseif isfolder(fullfile(script_dir, 'EstimateQ'))
     estimateq_root = fullfile(script_dir, 'EstimateQ');
@@ -18,7 +18,7 @@ else
 end
 
 % --- User settings ---
-mat_path = '';          % '' -> auto-pick newest gamma_export_latest.mat under estimateq_root
+mat_path = fullfile('Spring3', '255', 'gamma_exports', 'gamma_export_latest.mat');
 signal_role = 'a2';     % 'a2' or 'derived'
 n_grid = 121;
 n_phi_line = 401;       % sampling count for 1D W(phi) plot

@@ -15,8 +15,8 @@ end
 % Clear any existing figures before generating new plots.
 close all;
 
-rootDirCos = fullfile(pwd, 'EstimateQ', 'VerifyZopt', 'Spring3', 'k3w2');
-rootDirW1  = fullfile(pwd, 'EstimateQ', 'VerifyZopt', 'Spring3', 'k5w2');
+rootDirCos = fullfile(pwd, 'EstimateQ', 'VerifyZopt', 'Spring3', 'cos');
+rootDirW1  = fullfile(pwd, 'EstimateQ', 'VerifyZopt', 'Spring3', 'w1');
 
 [xCos, yCos, phaseStatsCos, folderLabelsCos] = local_collect_ratio_curve(rootDirCos, t_start, t_end);
 [xW1, yW1, phaseStatsW1, folderLabelsW1]  = local_collect_ratio_curve(rootDirW1, t_start, t_end);

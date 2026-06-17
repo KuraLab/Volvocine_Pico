@@ -86,18 +86,18 @@ void initIna226() {
 }
 
 bool detectIna226Address() {
-  Serial.println("[INA226] scanning I2C1 addresses 0x40-0x4F...");
+  if (Serial) Serial.println("[INA226] scanning I2C1 addresses 0x40-0x4F...");
   for (uint8_t addr = 0x40; addr <= 0x4F; addr++) {
     Wire1.beginTransmission(addr);
     uint8_t err = Wire1.endTransmission();
     if (err == 0) {
       ina226Addr = addr;
-      Serial.print("[INA226] device found at 0x");
-      Serial.println(ina226Addr, HEX);
+      if (Serial) Serial.print("[INA226] device found at 0x");
+      if (Serial) Serial.println(ina226Addr, HEX);
       return true;
     }
   }
-  Serial.println("[INA226] no device found in 0x40-0x4F");
+  if (Serial) Serial.println("[INA226] no device found in 0x40-0x4F");
   return false;
 }
 
@@ -109,7 +109,7 @@ bool readIna226Measurement(float &currentmA, float &busVoltV) {
     unsigned long nowMs = millis();
     if (nowMs - lastInaReadErrorLogMs >= inaReadErrorLogIntervalMs) {
       lastInaReadErrorLogMs = nowMs;
-      Serial.println("[INA226] read error (check wiring/pull-up/address)");
+        if (Serial) Serial.println("[INA226] read error (check wiring/pull-up/address)");
     }
     return false;
   }
@@ -162,7 +162,7 @@ void setup() {
   lastPhaseUpdateMs = millis();
   lastProfReportMs = millis();
 
-  Serial.println("[INFO] Servo + INA226 monitor start");
+  if (Serial) Serial.println("[INFO] Servo + INA226 monitor start");
 }
 
 void loop() {
@@ -267,35 +267,35 @@ void loop() {
       float controlPeriodMs = avgLoopUs / 1000.0f;
       float controlHz = avgLoopUs > 0.0f ? 1000000.0f / avgLoopUs : 0.0f;
 
-      Serial.print("[PROF] avg_us sw=");
-      Serial.print((float)profSwitchUsSum / (float)profLoopCount, 2);
-      Serial.print(", servo=");
-      Serial.print((float)profServoUsSum / (float)profLoopCount, 2);
-      Serial.print(", ina=");
-      Serial.print((float)profInaUsSum / (float)profLoopCount, 2);
-      Serial.print(", ina_read=");
-      Serial.print((float)profInaReadUsSum / (float)profLoopCount, 2);
-      Serial.print(", tx=");
-      Serial.print((float)profTxUsSum / (float)profLoopCount, 2);
-      Serial.print(", loop=");
-      Serial.print(avgLoopUs, 2);
-      Serial.print(" | ctrl=");
-      Serial.print(controlPeriodMs, 4);
-      Serial.print(" ms (");
-      Serial.print(controlHz, 1);
-      Serial.print(" Hz)");
-      Serial.print(" | max_us sw=");
-      Serial.print(profSwitchUsMax);
-      Serial.print(", servo=");
-      Serial.print(profServoUsMax);
-      Serial.print(", ina=");
-      Serial.print(profInaUsMax);
-      Serial.print(", ina_read=");
-      Serial.print(profInaReadUsMax);
-      Serial.print(", tx=");
-      Serial.print(profTxUsMax);
-      Serial.print(", loop=");
-      Serial.println(profLoopUsMax);
+      if (Serial) Serial.print("[PROF] avg_us sw=");
+      if (Serial) Serial.print((float)profSwitchUsSum / (float)profLoopCount, 2);
+      if (Serial) Serial.print(", servo=");
+      if (Serial) Serial.print((float)profServoUsSum / (float)profLoopCount, 2);
+      if (Serial) Serial.print(", ina=");
+      if (Serial) Serial.print((float)profInaUsSum / (float)profLoopCount, 2);
+      if (Serial) Serial.print(", ina_read=");
+      if (Serial) Serial.print((float)profInaReadUsSum / (float)profLoopCount, 2);
+      if (Serial) Serial.print(", tx=");
+      if (Serial) Serial.print((float)profTxUsSum / (float)profLoopCount, 2);
+      if (Serial) Serial.print(", loop=");
+      if (Serial) Serial.print(avgLoopUs, 2);
+      if (Serial) Serial.print(" | ctrl=");
+      if (Serial) Serial.print(controlPeriodMs, 4);
+      if (Serial) Serial.print(" ms (");
+      if (Serial) Serial.print(controlHz, 1);
+      if (Serial) Serial.print(" Hz)");
+      if (Serial) Serial.print(" | max_us sw=");
+      if (Serial) Serial.print(profSwitchUsMax);
+      if (Serial) Serial.print(", servo=");
+      if (Serial) Serial.print(profServoUsMax);
+      if (Serial) Serial.print(", ina=");
+      if (Serial) Serial.print(profInaUsMax);
+      if (Serial) Serial.print(", ina_read=");
+      if (Serial) Serial.print(profInaReadUsMax);
+      if (Serial) Serial.print(", tx=");
+      if (Serial) Serial.print(profTxUsMax);
+      if (Serial) Serial.print(", loop=");
+      if (Serial) Serial.println(profLoopUsMax);
 
       profSwitchUsSum = 0;
       profServoUsSum = 0;

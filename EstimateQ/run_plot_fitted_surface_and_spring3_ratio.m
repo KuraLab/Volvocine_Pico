@@ -142,37 +142,46 @@ end
 if run_overlay_s1
     plot(gamma_sine_cut_s1, psi_sine_cut_s1, '-', 'LineWidth', 1.4, ...
         'Color', overlay_color_sin_cos, ...
-        'DisplayName', '$$s_1, z_\sin(\theta)$$');
+        'DisplayName', '$s_1, z_\sin(\theta)$');
     plot(gamma_opt_cut_s1, psi_opt_cut_s1, '-', 'LineWidth', 1.8, ...
         'Color', overlay_color_w_opt, ...
-        'DisplayName', '$$s_1, z_{\mathrm{opt}}(\theta)$$');
+        'DisplayName', '$s_1, z_{\mathrm{opt}}(\theta)$');
 end
 if run_overlay_s2
     plot(gamma_sine_cut_s2, psi_sine_cut_s2, '-', 'LineWidth', 1.4, ...
         'Color', overlay_color_sin_cos, ...
-        'DisplayName', '$$z_{\sin}(\theta), \mathrm{predicted}$$');
+        'DisplayName', '$z_{\sin}(\theta), \mathrm{predicted}$');
     plot(gamma_opt_cut_s2, psi_opt_cut_s2, '-', 'LineWidth', 1.8, ...
         'Color', overlay_color_w_opt, ...
-        'DisplayName', '$$z_{\mathrm{opt}}(\theta), \mathrm{predicted}$$');
+        'DisplayName', '$z_{\mathrm{opt}}(\theta), \mathrm{predicted}$');
 end
 
 % 9th-plot mean lines as-is.
 plot(pm.xCosMean(:), -pm.yCosMean(:), 'o', 'MarkerSize', 8, ...
     'Color', overlay_color_sin_cos, 'MarkerFaceColor', overlay_color_sin_cos, ...
-    'DisplayName', '$$z_{\sin}(\theta), \mathrm{measured}$$');
+    'DisplayName', '$z_{\sin}(\theta), \mathrm{measured}$');
 plot(pm.xW1Mean(:), -pm.yW1Mean(:), 's', 'MarkerSize', 8, ...
     'Color', overlay_color_w_opt, 'MarkerFaceColor', overlay_color_w_opt, ...
-    'DisplayName', '$$z_{\mathrm{opt}}(\theta), \mathrm{measured}$$');
+    'DisplayName', '$z_{\mathrm{opt}}(\theta), \mathrm{measured}$');
 
 xlabel('$$\Delta\omega$$','Interpreter', 'latex');
 ylabel('$$\psi$$','Interpreter', 'latex');
 yticks([-pi, -pi/2, 0, pi/2, pi]);
 yticklabels({'-\pi', '-\pi/2', '0', '\pi/2', '\pi'});
-legend('Location', 'best');
 hold off;
 
 if exist('tuneFigure', 'file') == 2
     tuneFigure;
+end
+
+lgd = legend(gca, 'show', 'Location', 'eastoutside');
+local_force_legend_latex(lgd);
+set(lgd, 'AutoUpdate', 'off');
+
+local_expand_legend_box_for_pdf(lgd, 1.25, 1.10);
+local_force_legend_latex(lgd);
+
+if exist('saveFigure', 'file') == 2
     saveFigure;
 end
 
@@ -218,4 +227,56 @@ end
 idx_range = idx_max:step:idx_min;
 x_cut = x(idx_range);
 y_cut = y(idx_range);
+end
+
+function local_expand_legend_box_for_pdf(lgd, width_scale, height_scale)
+if nargin < 2 || isempty(width_scale)
+    width_scale = 1.25;
+end
+if nargin < 3 || isempty(height_scale)
+    height_scale = 1.10;
+end
+
+if isempty(lgd) || ~isvalid(lgd)
+    return;
+end
+
+drawnow;
+
+old_units = lgd.Units;
+cleanup_obj = onCleanup(@() set(lgd, 'Units', old_units)); %#ok<NASGU>
+
+lgd.Units = 'normalized';
+pos = lgd.Position;
+
+center_x = pos(1) + pos(3)/2;
+center_y = pos(2) + pos(4)/2;
+
+pos(3) = pos(3) * width_scale;
+pos(4) = pos(4) * height_scale;
+
+pos(1) = center_x - pos(3)/2;
+pos(2) = center_y - pos(4)/2;
+
+pos(1) = max(0, min(pos(1), 1 - pos(3)));
+pos(2) = max(0, min(pos(2), 1 - pos(4)));
+
+lgd.Position = pos;
+
+drawnow;
+end
+
+function local_force_legend_latex(lgd)
+if isempty(lgd) || ~isvalid(lgd)
+    return;
+end
+
+set(lgd, 'Interpreter', 'latex');
+
+legend_texts = findall(lgd, 'Type', 'Text');
+if ~isempty(legend_texts)
+    set(legend_texts, 'Interpreter', 'latex');
+end
+
+drawnow;
 end

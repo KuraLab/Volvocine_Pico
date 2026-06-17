@@ -75,7 +75,7 @@ function varargout = plot_psi_with_desined_Z(dirpath, phase_agent_ids, z_agent_i
     gamma_ratio = [1 1];
 
     % Processing switches (w2s == W2). Override via varargin struct.
-    processing_modes = struct('cos', true, 'w1', true, 'w2s', false);
+    processing_modes = struct('cos', true, 'w1', true, 'w2s', true);
 
     % Optional extras:
     %   - numeric [m_phi2, n_phi1] -> gamma_ratio (legacy behavior)
