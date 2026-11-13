@@ -47,6 +47,7 @@ function out = evaluate_delta0_closed_loop(varargin)
 % recomputing the analysis or rewriting CSV/MAT results.
 % Zoom figures compare Module 2 in two feedback-time windows, specified
 % by ZoomFeedbackWindows (default [0 5; 60 65]).
+% SaveZoomPanels=true also exports all six zoom panels as individual PNG/PDF.
 
     here = fileparts(mfilename('fullpath'));
     estimate_dir = fileparts(here);
@@ -73,6 +74,7 @@ function out = evaluate_delta0_closed_loop(varargin)
     addParameter(p, 'SaveTimeSeries', true, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'ReplotOnly', false, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'ZoomFeedbackWindows', [0 5; 60 65], @(x) isnumeric(x) && isequal(size(x),[2 2]) && all(isfinite(x(:))) && all(x(:,1)>=0) && all(x(:,2)>x(:,1)));
+    addParameter(p, 'SaveZoomPanels', true, @(x) islogical(x) && isscalar(x));
     parse(p, varargin{:});
     cfg = p.Results;
     if cfg.ReplotOnly
@@ -87,6 +89,7 @@ function out = evaluate_delta0_closed_loop(varargin)
         plot_cfg.ShowFigures = cfg.ShowFigures;
         plot_cfg.SaveOutputs = cfg.SaveOutputs;
         plot_cfg.ZoomFeedbackWindows = cfg.ZoomFeedbackWindows;
+        plot_cfg.SaveZoomPanels = cfg.SaveZoomPanels;
         n_redrawn = 0;
         for k = 1:numel(out.runs)
             run = out.runs(k);
@@ -430,7 +433,12 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         panel_axes(1,column) = ax;
         plot(ax, times, data.(sprintf('dotphi_rad_s_%d', j)), 'Color', [0 .35 .7]);
         hold(ax, 'on');
-        yline(ax, nominal_omega(j), '--', 'Natural frequency', 'Color', [.3 .3 .3]);
+        if j == 2
+            yline(ax,nominal_omega(j),':','Color',[.1 .1 .1],'LineWidth',2.5, ...
+                'Tag','NaturalOmega2','HandleVisibility','off');
+        else
+            yline(ax, nominal_omega(j), '--', 'Natural frequency', 'Color', [.3 .3 .3]);
+        end
         ylabel(ax, sprintf('$\\dot{\\phi}_{%d}\\;(\\mathrm{rad}\\,\\mathrm{s}^{-1})$', j), 'Interpreter', 'latex');
         ylim(ax, [0 Inf]);
         if compare_windows
@@ -472,9 +480,59 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         xlabel(ax, '$t\;(\mathrm{s})$', 'Interpreter', 'latex');
     end
     tune_analysis_figure(f);
+    for column = 1:2
+        if modules(column)==2, style_module2_phase_rate(panel_axes(1,column),nominal_omega(2)); end
+    end
     if cfg.SaveOutputs
         exportgraphics(f, fullfile(cfg.OutputDir, [label '.png']), 'Resolution', 160);
         exportgraphics(f, fullfile(cfg.OutputDir, [label '.pdf']), 'ContentType', 'vector');
+        if compare_windows && cfg.SaveZoomPanels
+            quantities = {'dotphi','sensory','error'};
+            for column = 1:2
+                for row = 1:3
+                    stem = sprintf('%s_module2_%s_%g_%gs',label,quantities{row},panel_limits(column,:));
+                    export_zoom_panel(panel_axes(row,column),cfg,stem);
+                end
+            end
+        end
     end
     if ~cfg.ShowFigures, close(f); end
+end
+
+function export_zoom_panel(source_axes,cfg,stem)
+    f = figure('Color','w','Visible','off','Position',[80 60 800 500]);
+    ax = copyobj(source_axes,f);
+    ax.Units = 'normalized';
+    ax.Position = [0.16 0.18 0.80 0.68];
+    title(ax,'');
+    if ~isempty(source_axes.Legend) && isgraphics(source_axes.Legend)
+        curves = flipud(findobj(ax,'Type','line'));
+        legend(ax,curves,source_axes.Legend.String,'Location','best', ...
+            'Interpreter',source_axes.Legend.Interpreter);
+    end
+    tune_analysis_figure(f);
+    reference = findobj(ax,'Tag','NaturalOmega2');
+    if ~isempty(reference), style_module2_phase_rate(ax,reference(1).Value); end
+    exportgraphics(f,fullfile(cfg.OutputDir,[stem '.png']),'Resolution',160);
+    exportgraphics(f,fullfile(cfg.OutputDir,[stem '.pdf']),'ContentType','vector');
+    close(f);
+end
+
+function style_module2_phase_rate(ax,omega2)
+    % Apply after tuneFigure, which otherwise resets grid opacity.
+    ax.GridColor = [.8 .8 .8];
+    ax.GridAlpha = 0.18;
+    ax.MinorGridAlpha = 0.08;
+    reference = findobj(ax,'Tag','NaturalOmega2');
+    set(reference,'Color',[.1 .1 .1],'LineStyle',':','LineWidth',2.5,'Label','');
+    ticks = [0 pi 2*pi];
+    labels = {'$0$','$\pi$','$2\pi$'};
+    keep = ticks>=ax.YLim(1) & ticks<=ax.YLim(2) & abs(ticks-omega2)>0.3*pi;
+    ticks = [ticks(keep),omega2];
+    labels = [labels(keep),{'$\omega_2$'}];
+    [ticks,order] = sort(ticks);
+    labels = labels(order);
+    ax.YTick = ticks;
+    ax.YTickLabel = labels;
+    ax.TickLabelInterpreter = 'latex';
 end
