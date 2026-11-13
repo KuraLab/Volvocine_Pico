@@ -43,6 +43,10 @@ function out = evaluate_delta0_closed_loop(varargin)
 % sets omega1; omega2 scales with folder/250 and is rounded to two decimals
 % to match the historical parameter payload. At folder 250 both are 7.85.
 % Outputs: MAT, per-file time-series CSV, summary/sensitivity CSV, PNG/PDF.
+% ReplotOnly=true redraws the saved time series in OutputDir without
+% recomputing the analysis or rewriting CSV/MAT results.
+% Zoom figures compare Module 2 in two feedback-time windows, specified
+% by ZoomFeedbackWindows (default [0 5; 60 65]).
 
     here = fileparts(mfilename('fullpath'));
     estimate_dir = fileparts(here);
@@ -67,8 +71,42 @@ function out = evaluate_delta0_closed_loop(varargin)
     addParameter(p, 'SaveOutputs', true, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'PlotTimeSeries', true, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'SaveTimeSeries', true, @(x) islogical(x) && isscalar(x));
+    addParameter(p, 'ReplotOnly', false, @(x) islogical(x) && isscalar(x));
+    addParameter(p, 'ZoomFeedbackWindows', [0 5; 60 65], @(x) isnumeric(x) && isequal(size(x),[2 2]) && all(isfinite(x(:))) && all(x(:,1)>=0) && all(x(:,2)>x(:,1)));
     parse(p, varargin{:});
     cfg = p.Results;
+    if cfg.ReplotOnly
+        saved = load(fullfile(cfg.OutputDir, 'delta0_validation.mat'), 'out');
+        out = saved.out;
+        plot_cfg = out.config;
+        defaults = fieldnames(cfg);
+        for k = 1:numel(defaults)
+            if ~isfield(plot_cfg, defaults{k}), plot_cfg.(defaults{k}) = cfg.(defaults{k}); end
+        end
+        plot_cfg.OutputDir = cfg.OutputDir;
+        plot_cfg.ShowFigures = cfg.ShowFigures;
+        plot_cfg.SaveOutputs = cfg.SaveOutputs;
+        plot_cfg.ZoomFeedbackWindows = cfg.ZoomFeedbackWindows;
+        n_redrawn = 0;
+        for k = 1:numel(out.runs)
+            run = out.runs(k);
+            if ~ismember('Conditions', p.UsingDefaults) && ~ismember(run.condition,cfg.Conditions), continue; end
+            [folder, stem] = fileparts(run.file);
+            [~, folder_name] = fileparts(folder);
+            folder_value = str2double(folder_name);
+            assert(isfinite(folder_value), 'Cannot identify the frequency folder for %s.', run.file);
+            delta_pi = (250-folder_value)/100;
+            nominal = [plot_cfg.NominalOmegaRadS, round(plot_cfg.NominalOmegaRadS*folder_value/250,2)];
+            label = [run.condition '_' stem];
+            if folder_value ~= 250, label = sprintf('%s_%d_%s', run.condition, folder_value, stem); end
+            plot_run(run.timeseries, plot_cfg, label, [0 plot_cfg.AnalysisWindow(2)], nominal, delta_pi);
+            plot_run(run.timeseries, plot_cfg, [label '_zoom'], ...
+                [], nominal, delta_pi, true);
+            n_redrawn = n_redrawn+1;
+        end
+        fprintf('Updated full and zoom figures for %d saved runs: %s\n', n_redrawn, cfg.OutputDir);
+        return;
+    end
     assert(cfg.BaselineWindow(2) < cfg.AnalysisWindow(1), 'Baseline must precede analysis window.');
     S = load(cfg.ModelFile, 'gamma_export');
     G = S.gamma_export;
@@ -266,7 +304,7 @@ function out = evaluate_delta0_closed_loop(varargin)
             end
             if cfg.PlotTimeSeries && (cfg.ShowFigures || cfg.SaveOutputs)
                 plot_run(T, cfg, label, [0 cfg.AnalysisWindow(2)], nominal_omega, delta_pi);
-                plot_run(T, cfg, [label '_zoom'], [cfg.AnalysisWindow(1), min(cfg.AnalysisWindow(1)+5, cfg.AnalysisWindow(2))], nominal_omega, delta_pi);
+                plot_run(T, cfg, [label '_zoom'], [], nominal_omega, delta_pi, true);
             end
         end
       end
@@ -363,42 +401,77 @@ function y = predict_s(phi1, phi2, fit)
     y(~isfinite(phi1) | ~isfinite(phi2)) = NaN;
 end
 
-function plot_run(T, cfg, label, limits, nominal_omega, delta_pi)
+function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_windows)
+    if nargin < 7, compare_windows = false; end
     plot_time = T.time_s - cfg.FeedbackStartSec;
-    limits = max(0, limits - cfg.FeedbackStartSec);
+    if compare_windows
+        modules = [2 2];
+        panel_limits = cfg.ZoomFeedbackWindows;
+    else
+        modules = [1 2];
+        panel_limits = repmat(max(0,limits-cfg.FeedbackStartSec),2,1);
+    end
     visibility = 'off';
     if cfg.ShowFigures, visibility = 'on'; end
     f = figure('Color', 'w', 'Visible', visibility, 'Position', [80 60 1400 900]);
     layout = tiledlayout(f, 3, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
     title(layout, sprintf('%s | Delta omega=%+.1f pi | slope window %.3g s', strrep(label, '_', ' '), ...
         delta_pi, actual_window(cfg.SampleDt, cfg.RateWindowSec)), 'Interpreter', 'none');
-    for j = 1:2
-        ax = nexttile(layout, j);
-        plot(ax, plot_time, T.(sprintf('dotphi_rad_s_%d', j)), 'Color', [0 .35 .7]);
+    panel_axes = gobjects(3,2);
+    for column = 1:2
+        j = modules(column);
+        bounds = panel_limits(column,:);
+        assert(bounds(1)>=min(plot_time)-cfg.SampleDt/2 && bounds(2)<=max(plot_time)+cfg.SampleDt/2, ...
+            'Plot window %.1f--%.1f s is outside the saved feedback-time range.',bounds);
+        mask = plot_time>=bounds(1) & plot_time<=bounds(2);
+        times = plot_time(mask);
+        data = T(mask,:);
+        ax = nexttile(layout, column);
+        panel_axes(1,column) = ax;
+        plot(ax, times, data.(sprintf('dotphi_rad_s_%d', j)), 'Color', [0 .35 .7]);
         hold(ax, 'on');
         yline(ax, nominal_omega(j), '--', 'Natural frequency', 'Color', [.3 .3 .3]);
         ylabel(ax, sprintf('$\\dot{\\phi}_{%d}\\;(\\mathrm{rad}\\,\\mathrm{s}^{-1})$', j), 'Interpreter', 'latex');
         ylim(ax, [0 Inf]);
-        title(ax, sprintf('Module %d: phase rate', j));
-        ax = nexttile(layout, j+2);
-        plot(ax, plot_time, T.(sprintf('s_file_normalized_%d', j)), 'Color', [0 .35 .7]);
+        if compare_windows
+            title(ax,sprintf('Module 2: %.0f--%.0f s',bounds));
+        else
+            title(ax, sprintf('Module %d: phase rate', j));
+        end
+        ax = nexttile(layout, column+2);
+        panel_axes(2,column) = ax;
+        plot(ax, times, data.(sprintf('s_file_normalized_%d', j)), 'Color', [0 .35 .7]);
         hold(ax, 'on');
-        plot(ax, plot_time, T.(sprintf('s_predicted_%d', j)), 'Color', [.85 .25 .1]);
+        plot(ax, times, data.(sprintf('s_predicted_%d', j)), 'Color', [.85 .25 .1]);
         ylabel(ax, sprintf('$s_{%d}$', j), 'Interpreter', 'latex');
         legend(ax, 'Measured (file scale)', 'Open-loop prediction', 'Location', 'best');
-        ax = nexttile(layout, j+4);
-        plot(ax, plot_time, T.(sprintf('s_error_file_%d', j)), 'Color', [0 .35 .7]);
+        ax = nexttile(layout, column+4);
+        panel_axes(3,column) = ax;
+        plot(ax, times, data.(sprintf('s_error_file_%d', j)), 'Color', [0 .35 .7]);
         hold(ax, 'on');
         yline(ax, 0, 'k--');
         ylabel(ax, sprintf('$s_{%d}^{\\mathrm{meas}}-\\hat{s}_{%d}$', j, j), 'Interpreter', 'latex');
         legend(ax, 'File scale error', 'Location', 'best');
+        for row = 1:3
+            xlim(panel_axes(row,column),bounds);
+        end
+    end
+    if compare_windows
+        % Use identical vertical scales for the two time windows.
+        for row = 1:3
+            a = ylim(panel_axes(row,1));
+            b = ylim(panel_axes(row,2));
+            shared_limits = [min(a(1),b(1)),max(a(2),b(2))];
+            ylim(panel_axes(row,1),shared_limits);
+            ylim(panel_axes(row,2),shared_limits);
+        end
     end
     axes_list = findall(f, 'Type', 'axes');
     for ax = axes_list(:).'
-        xlim(ax, limits);
         grid(ax, 'on');
         xlabel(ax, '$t\;(\mathrm{s})$', 'Interpreter', 'latex');
     end
+    tune_analysis_figure(f);
     if cfg.SaveOutputs
         exportgraphics(f, fullfile(cfg.OutputDir, [label '.png']), 'Resolution', 160);
         exportgraphics(f, fullfile(cfg.OutputDir, [label '.pdf']), 'ContentType', 'vector');

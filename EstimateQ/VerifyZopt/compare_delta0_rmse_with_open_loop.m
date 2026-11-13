@@ -5,8 +5,8 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
 % Reproduces the six open-loop table values with the 240_0531 reference fit
 % (M=N=10, log time 10--90 s), then evaluates the SAME model on closed-loop
 % all numeric frequency folders in cos and w1 (k=1) by default. High-gain
-% trials are opt-in through Conditions; their requested detunings are
-% controlled by HighGainDeltaOmegaOverPi.
+% trials are opt-in through Conditions; HighGainDeltaOmegaOverPi=[] selects
+% all numeric frequency folders, or a vector selects specific detunings.
 % Default closed-loop evaluation: feedback time 0--115 s
 % = original common-overlap log time 5--120 s, sampled every 0.01 s.
 % The endpoint excludes the trial-end signal transition, which the user
@@ -25,6 +25,8 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
 % Options: FeedbackDurationSec (115), Conditions (cos,w1),
 % HighGainDeltaOmegaOverPi, OutputDir, ShowFigures (true),
 % PlotTimeSeries (false), SaveTimeSeries (false).
+% ReplotOnly=true redraws summary figures from OutputDir/rmse_comparison.mat
+% without rerunning the log analysis. Detuning axes use rad/s, not Delta/pi.
 % Outputs: combined CSV/LaTeX table, per-window/per-bin RMSE, matched-model
 % phase/sensory time series and figures, MAT with provenance and coefficients.
 
@@ -34,15 +36,30 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
     p = inputParser;
     addParameter(p, 'FeedbackDurationSec', 115, @(x) isnumeric(x) && isscalar(x) && isfinite(x) && x >= 90);
     addParameter(p, 'Conditions', {'cos','w1'}, @(x) iscellstr(x) && ~isempty(x) && all(ismember(x, {'cos','w1','k3w2','k5w2'})) && numel(unique(x)) == numel(x));
-    addParameter(p, 'HighGainDeltaOmegaOverPi', [0.6 0.3 0 -0.3 -0.6], ...
-        @(x) isnumeric(x) && isvector(x) && ~isempty(x) && all(isfinite(x)) && numel(unique(x)) == numel(x));
+    addParameter(p, 'HighGainDeltaOmegaOverPi', [], ...
+        @(x) isnumeric(x) && (isempty(x) || (isvector(x) && all(isfinite(x)) && numel(unique(x)) == numel(x))));
     addParameter(p, 'OutputDir', fullfile(here, 'k1_all_detunings_rmse_240'));
     addParameter(p, 'ShowFigures', true, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'PlotTimeSeries', false, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'SaveTimeSeries', false, @(x) islogical(x) && isscalar(x));
+    addParameter(p, 'ReplotOnly', false, @(x) islogical(x) && isscalar(x));
     parse(p, varargin{:});
     cfg = p.Results;
     if ~isfolder(cfg.OutputDir), mkdir(cfg.OutputDir); end
+    if cfg.ReplotOnly
+        saved = load(fullfile(cfg.OutputDir, 'rmse_comparison.mat'), 'out');
+        out = saved.out;
+        plot_cfg = out.config;
+        plot_cfg.OutputDir = cfg.OutputDir;
+        plot_cfg.ShowFigures = cfg.ShowFigures;
+        plot_comparison(out.comparison, out.closed_loop_10s_bins, out.reference_fit.rmse, plot_cfg);
+        if any(out.comparison.gain > 1)
+            plot_detuned_windows(out.closed_loop_10s_bins, out.reference_fit.rmse, plot_cfg);
+        end
+        plot_closed_loop_detunings(out.comparison, out.reference_fit.rmse, plot_cfg);
+        fprintf('Updated summary figures: %s\n', cfg.OutputDir);
+        return;
+    end
 
     % Some fitting helpers can create figures even with ShowFigures=false.
     previous_visibility = get(groot, 'DefaultFigureVisible');
@@ -89,7 +106,7 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
     assert(all(high_gain_folders > 0 & abs(high_gain_folders-round(high_gain_folders)) < 1e-8), ...
         'Detunings must correspond to positive integer folder names.');
     for k = 1:numel(cfg.Conditions)
-        if condition_gain(cfg.Conditions{k}) > 1
+        if condition_gain(cfg.Conditions{k}) > 1 && ~isempty(high_gain_folders)
             trial_folders{k} = round(high_gain_folders);
         else
             listing = dir(fullfile(here, 'Spring3', cfg.Conditions{k}));
@@ -175,7 +192,7 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
     if any(comparison.gain > 1)
         plot_detuned_windows(bin_table, fit.rmse, cfg);
     end
-    plot_k1_all_detunings(comparison, fit.rmse, cfg);
+    plot_closed_loop_detunings(comparison, fit.rmse, cfg);
     fprintf('\nMatched-model s2 comparison (feedback time 0--%.0f s):\n', cfg.FeedbackDurationSec);
     disp(comparison(:, {'operation','condition','delta_omega_over_pi','n_samples','rmse','rmse_over_reference_training'}));
     fprintf('Additional windows:\n');
@@ -183,9 +200,14 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
     fprintf('Saved to: %s\n', cfg.OutputDir);
 end
 
-function plot_k1_all_detunings(T, training_rmse, cfg)
-    C = T(strcmp(T.operation,'closed_loop') & T.gain==1,:);
-    if isempty(C), return; end
+function plot_closed_loop_detunings(T, training_rmse, cfg)
+    groups = {{'cos','w1'}, {'k3w2','k5w2'}};
+    stems = {'k1_rmse_by_detuning', 'k3_k5_rmse_by_detuning'};
+    titles = {'k=1', 'k=3,5'};
+    for g = 1:numel(groups)
+    conditions = groups{g};
+    C = T(strcmp(T.operation,'closed_loop') & ismember(T.condition,conditions),:);
+    if isempty(C), continue; end
     folders = sort(unique(C.frequency_folder));
     P = table(folders, (250-folders)/100, repmat(2.5,size(folders)), folders/100, ...
         'VariableNames', {'frequency_folder','delta_omega_over_pi','omega1_over_pi','omega2_over_pi'});
@@ -194,30 +216,32 @@ function plot_k1_all_detunings(T, training_rmse, cfg)
     f = figure('Color','w','Visible',visibility,'Position',[100 100 1000 650]);
     ax = axes(f);
     hold(ax,'on');
-    for condition = {'cos','w1'}
+    for condition = conditions
         subset = C(strcmp(C.condition,condition{1}),:);
         if isempty(subset), continue; end
         values = nan(size(folders));
         for k = 1:numel(folders)
             mask = subset.frequency_folder==folders(k);
-            assert(nnz(mask)==1, 'Expected one k=1 trial per condition and frequency folder.');
+            assert(nnz(mask)==1, 'Expected one trial per condition and frequency folder.');
             values(k) = subset.rmse(mask);
         end
         P.(['rmse_' condition{1}]) = values;
-        [x, order] = sort(P.delta_omega_over_pi);
+        [x, order] = sort(P.delta_omega_over_pi*pi);
         plot(ax,x,values(order),'-o','DisplayName',condition_label(condition{1}));
     end
     yline(ax,training_rmse,'k--','Reference training RMSE','HandleVisibility','off');
-    xlabel(ax,'$\Delta\omega/\pi=(\omega_1-\omega_2)/\pi$','Interpreter','latex');
+    xlabel(ax,'$\Delta\omega\;(\mathrm{rad}\,\mathrm{s}^{-1})$','Interpreter','latex');
     ylabel(ax,'$\mathrm{RMSE}(s_2^{\mathrm{meas}}-\hat{s}_2)$','Interpreter','latex');
-    title(ax,sprintf('k=1, feedback time 0--%.0f s',cfg.FeedbackDurationSec));
+    title(ax,sprintf('%s, feedback time 0--%.0f s',titles{g},cfg.FeedbackDurationSec));
     ylim(ax,[0 Inf]);
     grid(ax,'on');
     legend(ax,'Location','best');
-    writetable(P,fullfile(cfg.OutputDir,'k1_rmse_by_detuning.csv'));
-    exportgraphics(f,fullfile(cfg.OutputDir,'k1_rmse_by_detuning.png'),'Resolution',160);
-    exportgraphics(f,fullfile(cfg.OutputDir,'k1_rmse_by_detuning.pdf'),'ContentType','vector');
+    tune_analysis_figure(f);
+    writetable(P,fullfile(cfg.OutputDir,[stems{g} '.csv']));
+    exportgraphics(f,fullfile(cfg.OutputDir,[stems{g} '.png']),'Resolution',160);
+    exportgraphics(f,fullfile(cfg.OutputDir,[stems{g} '.pdf']),'ContentType','vector');
     if ~cfg.ShowFigures, close(f); end
+    end
 end
 
 function restore_fit_figures(visibility, previous)
@@ -274,18 +298,18 @@ function plot_comparison(T, bins, training_rmse, cfg)
     closed_rows = find(strcmp(T.operation, 'closed_loop'));
     conditions = unique(T.condition(closed_rows), 'stable');
     open = T(strcmp(T.operation, 'open_loop'), :);
-    [x, order] = sort(open.delta_omega_over_pi);
+    [x, order] = sort(open.delta_omega_over_pi*pi);
     plot(ax, x, open.rmse(order), '-s', 'Color', [.4 .4 .4], 'DisplayName', 'Open loop');
     for k = 1:numel(conditions)
         mask = strcmp(T.operation, 'closed_loop') & strcmp(T.condition, conditions{k});
         subset = T(mask,:);
-        [x, order] = sort(subset.delta_omega_over_pi);
+        [x, order] = sort(subset.delta_omega_over_pi*pi);
         plot(ax, x, subset.rmse(order), '-o', 'Color', palette(k,:), ...
             'DisplayName', condition_label(conditions{k}));
     end
     set(ax, 'TickLabelInterpreter', 'latex');
     ylabel(ax, '$\mathrm{RMSE}(s_2^{\mathrm{meas}}-\hat{s}_2)$', 'Interpreter', 'latex');
-    xlabel(ax, '$\Delta\omega/\pi=(\omega_1-\omega_2)/\pi$', 'Interpreter', 'latex');
+    xlabel(ax, '$\Delta\omega\;(\mathrm{rad}\,\mathrm{s}^{-1})$', 'Interpreter', 'latex');
     title(ax, 'Same model: identified at \Delta\omega=0.1\pi', 'Interpreter', 'tex');
     yline(ax, training_rmse, 'k--', 'Reference training RMSE', 'HandleVisibility', 'off');
     ylim(ax, [0 1.15*max(T.rmse)]);
@@ -307,6 +331,7 @@ function plot_comparison(T, bins, training_rmse, cfg)
     ylim(ax, [0 Inf]);
     legend(ax, 'Location', 'best');
     grid(ax, 'on');
+    tune_analysis_figure(f);
     exportgraphics(f, fullfile(cfg.OutputDir, 'rmse_comparison.png'), 'Resolution', 160);
     exportgraphics(f, fullfile(cfg.OutputDir, 'rmse_comparison.pdf'), 'ContentType', 'vector');
     if ~cfg.ShowFigures, close(f); end
@@ -337,6 +362,7 @@ function plot_detuned_windows(bins, training_rmse, cfg)
         grid(ax, 'on');
         if ~isempty(deltas), legend(ax, 'Interpreter', 'latex', 'Location', 'best'); end
     end
+    tune_analysis_figure(f);
     exportgraphics(f, fullfile(cfg.OutputDir, 'rmse_detuned_windows.png'), 'Resolution', 160);
     exportgraphics(f, fullfile(cfg.OutputDir, 'rmse_detuned_windows.pdf'), 'ContentType', 'vector');
     if ~cfg.ShowFigures, close(f); end
