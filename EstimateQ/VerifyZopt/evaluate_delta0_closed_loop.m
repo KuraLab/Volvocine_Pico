@@ -459,9 +459,9 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         panel_axes(3,column) = ax;
         plot(ax, times, data.(sprintf('s_error_file_%d', j)), 'Color', [0 .35 .7]);
         hold(ax, 'on');
-        yline(ax, 0, 'k--');
-        ylabel(ax, sprintf('$s_{%d}^{\\mathrm{meas}}-\\hat{s}_{%d}$', j, j), 'Interpreter', 'latex');
-        legend(ax, 'File scale error', 'Location', 'best');
+        yline(ax, 0, 'k--', 'HandleVisibility', 'off');
+        ylabel(ax, sprintf('$s_{%d}^{\\mathrm{meas}}-s_{%d}^{\\mathrm{pred}}$', j, j), 'Interpreter', 'latex');
+        legend(ax, sprintf('$s_{%d}^{\\mathrm{meas}}-s_{%d}^{\\mathrm{pred}}$', j, j), 'Location', 'best', 'Interpreter', 'latex');
         for row = 1:3
             xlim(panel_axes(row,column),bounds);
         end
@@ -497,6 +497,7 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
                     export_zoom_panel(panel_axes(row,column),cfg,stem);
                 end
             end
+            export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega);
         end
     end
     if ~cfg.ShowFigures, close(f); end
@@ -514,14 +515,15 @@ function export_zoom_panel(source_axes,cfg,stem)
             'Interpreter',source_axes.Legend.Interpreter);
     end
     tune_analysis_figure(f);
+    enlarge_panel_fonts(f, ax, 1.12);
     reference = findobj(ax,'Tag','NaturalOmega2');
     if ~isempty(reference), style_module2_phase_rate(ax,reference(1).Value); end
-    exportgraphics(f,fullfile(cfg.OutputDir,[stem '.png']),'Resolution',160);
-    exportgraphics(f,fullfile(cfg.OutputDir,[stem '.pdf']),'ContentType','vector');
+    export_panel_files(f,cfg,stem);
     close(f);
 end
 
-function style_module2_phase_rate(ax,omega2)
+function style_module2_phase_rate(ax,omega2,omega_label)
+    if nargin < 3, omega_label = '$\omega_2$'; end
     % Apply after tuneFigure, which otherwise resets grid opacity.
     ax.GridColor = [.8 .8 .8];
     ax.GridAlpha = 0.18;
@@ -532,10 +534,106 @@ function style_module2_phase_rate(ax,omega2)
     labels = {'$0$','$\pi$','$2\pi$','$3\pi$'};
     keep = ticks>=ax.YLim(1)-1e-9 & ticks<=ax.YLim(2)+1e-9 & abs(ticks-omega2)>0.3*pi;
     ticks = [ticks(keep),omega2];
-    labels = [labels(keep),{'$\omega_2$'}];
+    labels = [labels(keep),{omega_label}];
     [ticks,order] = sort(ticks);
     labels = labels(order);
     ax.YTick = ticks;
     ax.YTickLabel = labels;
     ax.TickLabelInterpreter = 'latex';
+end
+
+function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega)
+    all_mask = false(size(plot_time));
+    for column = 1:2
+        bounds = panel_limits(column,:);
+        all_mask = all_mask | (plot_time>=bounds(1) & plot_time<=bounds(2));
+    end
+    err_all = [T.s_error_file_1(all_mask); T.s_error_file_2(all_mask)];
+    err_min = floor(min(err_all)*10)/10;
+    err_max = ceil(max(err_all)*10)/10;
+    err_ylim = [min(-0.3, err_min), max(0.55, err_max + 0.25)];
+    omega_label = '$\omega_{1,2}$';
+    if abs(nominal_omega(1)-nominal_omega(2)) > 1e-6
+        omega_label = '$\omega_2$';
+    end
+    quantities = {'dotphi12','s12','s12_error'};
+    for column = 1:2
+        bounds = panel_limits(column,:);
+        mask = plot_time>=bounds(1) & plot_time<=bounds(2);
+        times = plot_time(mask);
+        data = T(mask,:);
+        for row = 1:3
+            f = figure('Color','w','Visible','off','Position',[80 60 800 500]);
+            ax = axes(f,'Units','normalized','Position',[0.16 0.18 0.80 0.68]);
+            hold(ax,'on');
+            if row == 1
+                p1 = plot(ax,times,data.dotphi_rad_s_1,'Color',[0 .35 .7]);
+                p2 = plot(ax,times,data.dotphi_rad_s_2,'Color',[.85 .25 .1]);
+                if abs(nominal_omega(1)-nominal_omega(2)) > 1e-6
+                    yline(ax,nominal_omega(1),'--','Color',[.3 .3 .3],'HandleVisibility','off');
+                end
+                yline(ax,nominal_omega(2),':','Color',[.1 .1 .1],'LineWidth',2.5, ...
+                    'Tag','NaturalOmega2','HandleVisibility','off');
+                ylabel(ax,'$\dot{\phi}_1,\dot{\phi}_2\;(\mathrm{rad/s})$','Interpreter','latex');
+                ylim(ax,[0 3*pi]);
+                legend(ax,[p1 p2],{'$\dot{\phi}_1$','$\dot{\phi}_2$'}, ...
+                    'Location','southeast','Interpreter','latex');
+            elseif row == 2
+                p1 = plot(ax,times,data.s_file_normalized_1,'-','Color',[0 .35 .7]);
+                p2 = plot(ax,times,data.s_predicted_1,'--','Color',[0 .60 .85]);
+                p3 = plot(ax,times,data.s_file_normalized_2,'-','Color',[.85 .25 .1]);
+                p4 = plot(ax,times,data.s_predicted_2,'--','Color',[.93 .60 0]);
+                ylabel(ax,'$s_1,s_2$','Interpreter','latex');
+                ylim(ax,[-0.6 1.2]);
+                yticks(ax,[-0.5 0 0.5 1]);
+                legend(ax,[p1 p2 p3 p4], ...
+                    {'Measured $s_1$','Predicted $s_1$','Measured $s_2$','Predicted $s_2$'}, ...
+                    'Location','northeast','NumColumns',2,'Interpreter','latex');
+            else
+                p1 = plot(ax,times,data.s_error_file_1,'Color',[0 .35 .7]);
+                p2 = plot(ax,times,data.s_error_file_2,'Color',[.85 .25 .1]);
+                yline(ax,0,'k--','HandleVisibility','off');
+                ylabel(ax,'$s_j^{\mathrm{meas}}-s_j^{\mathrm{pred}}$','Interpreter','latex');
+                ylim(ax,err_ylim);
+                legend(ax,[p1 p2], ...
+                    {'$s_1^{\mathrm{meas}}-s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}-s_2^{\mathrm{pred}}$'}, ...
+                    'Location','northeast','Interpreter','latex');
+            end
+            xlim(ax,bounds);
+            grid(ax,'on');
+            xlabel(ax,'$t\;(\mathrm{s})$','Interpreter','latex');
+            tune_analysis_figure(f);
+            enlarge_panel_fonts(f, ax, 1.12);
+            if row == 1
+                style_module2_phase_rate(ax,nominal_omega(2),omega_label);
+            elseif row == 2
+                ax.Legend.NumColumns = 2;
+                ax.Legend.Location = 'northeast';
+            end
+            stem = sprintf('%s_%s_%g_%gs',zoom_prefix,quantities{row},bounds);
+            export_panel_files(f,cfg,stem);
+            close(f);
+        end
+    end
+end
+
+function enlarge_panel_fonts(fig, ax, scale)
+    objs = findall(fig, '-property', 'FontSize');
+    sizes = arrayfun(@(h) h.FontSize, objs);
+    for k = 1:numel(objs)
+        objs(k).FontSize = sizes(k) * scale;
+    end
+    ax.Units = 'normalized';
+    ax.Position = [0.19 0.23 0.77 0.70];
+    drawnow;
+end
+
+function export_panel_files(f, cfg, stem)
+    exportgraphics(f, fullfile(cfg.OutputDir, [stem '.png']), 'Resolution', 160);
+    pdf_path = fullfile(cfg.OutputDir, [stem '.pdf']);
+    try
+        exportgraphics(f, pdf_path, 'ContentType', 'vector');
+    catch err
+        warning('Could not overwrite %s (%s).', pdf_path, err.message);
+    end
 end
