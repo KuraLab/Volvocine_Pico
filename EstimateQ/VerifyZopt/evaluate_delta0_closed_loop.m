@@ -454,7 +454,7 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         ylabel(ax, sprintf('$s_{%d}$', j), 'Interpreter', 'latex');
         ylim(ax, [-0.6 1.2]);
         yticks(ax, [-0.5 0 0.5 1]);
-        legend(ax, 'Measured (file scale)', 'Open-loop prediction', 'Location', 'northeast');
+        legend(ax, 'Measured (file scale)', 'Open-loop prediction', 'Location', 'northeast', 'Interpreter', 'latex');
         ax = nexttile(layout, column+4);
         panel_axes(3,column) = ax;
         plot(ax, times, data.(sprintf('s_error_file_%d', j)), 'Color', [0 .35 .7]);
@@ -482,6 +482,9 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         xlabel(ax, '$t\;(\mathrm{s})$', 'Interpreter', 'latex');
     end
     tune_analysis_figure(f);
+    for ax = axes_list(:).'
+        ax.TickLabelInterpreter = 'latex';
+    end
     for column = 1:2
         if modules(column)==2, style_module2_phase_rate(panel_axes(1,column),nominal_omega(2)); end
     end
@@ -515,7 +518,7 @@ function export_zoom_panel(source_axes,cfg,stem)
             'Interpreter',source_axes.Legend.Interpreter);
     end
     tune_analysis_figure(f);
-    enlarge_panel_fonts(f, ax, 1.12);
+    enlarge_panel_fonts(f, ax, 1.28);
     reference = findobj(ax,'Tag','NaturalOmega2');
     if ~isempty(reference), style_module2_phase_rate(ax,reference(1).Value); end
     export_panel_files(f,cfg,stem);
@@ -551,7 +554,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
     err_all = [T.s_error_file_1(all_mask); T.s_error_file_2(all_mask)];
     err_min = floor(min(err_all)*10)/10;
     err_max = ceil(max(err_all)*10)/10;
-    err_ylim = [min(-0.3, err_min), max(0.55, err_max + 0.25)];
+    err_ylim = [min(-0.32, err_min), max(0.60, err_max + 0.30)];
     omega_label = '$\omega_{1,2}$';
     if abs(nominal_omega(1)-nominal_omega(2)) > 1e-6
         omega_label = '$\omega_2$';
@@ -584,10 +587,10 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 p3 = plot(ax,times,data.s_file_normalized_2,'-','Color',[.85 .25 .1]);
                 p4 = plot(ax,times,data.s_predicted_2,'--','Color',[.93 .60 0]);
                 ylabel(ax,'$s_1,s_2$','Interpreter','latex');
-                ylim(ax,[-0.6 1.2]);
+                ylim(ax,[-0.6 1.3]);
                 yticks(ax,[-0.5 0 0.5 1]);
                 legend(ax,[p1 p2 p3 p4], ...
-                    {'Measured $s_1$','Predicted $s_1$','Measured $s_2$','Predicted $s_2$'}, ...
+                    {'$s_1^{\mathrm{meas}}$','$s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}$','$s_2^{\mathrm{pred}}$'}, ...
                     'Location','northeast','NumColumns',2,'Interpreter','latex');
             else
                 p1 = plot(ax,times,data.s_error_file_1,'Color',[0 .35 .7]);
@@ -595,6 +598,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 yline(ax,0,'k--','HandleVisibility','off');
                 ylabel(ax,'$s_j^{\mathrm{meas}}-s_j^{\mathrm{pred}}$','Interpreter','latex');
                 ylim(ax,err_ylim);
+                yticks(ax,[-0.2 0 0.2 0.4]);
                 legend(ax,[p1 p2], ...
                     {'$s_1^{\mathrm{meas}}-s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}-s_2^{\mathrm{pred}}$'}, ...
                     'Location','northeast','Interpreter','latex');
@@ -603,7 +607,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
             grid(ax,'on');
             xlabel(ax,'$t\;(\mathrm{s})$','Interpreter','latex');
             tune_analysis_figure(f);
-            enlarge_panel_fonts(f, ax, 1.12);
+            enlarge_panel_fonts(f, ax, 1.28);
             if row == 1
                 style_module2_phase_rate(ax,nominal_omega(2),omega_label);
             elseif row == 2
@@ -623,8 +627,9 @@ function enlarge_panel_fonts(fig, ax, scale)
     for k = 1:numel(objs)
         objs(k).FontSize = sizes(k) * scale;
     end
+    ax.TickLabelInterpreter = 'latex';
     ax.Units = 'normalized';
-    ax.Position = [0.19 0.23 0.77 0.70];
+    ax.Position = [0.21 0.25 0.75 0.68];
     drawnow;
 end
 
