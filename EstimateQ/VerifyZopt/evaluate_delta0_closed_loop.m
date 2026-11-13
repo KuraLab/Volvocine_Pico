@@ -439,8 +439,8 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         else
             yline(ax, nominal_omega(j), '--', 'Natural frequency', 'Color', [.3 .3 .3]);
         end
-        ylabel(ax, sprintf('$\\dot{\\phi}_{%d}\\;(\\mathrm{rad}\\,\\mathrm{s}^{-1})$', j), 'Interpreter', 'latex');
-        ylim(ax, [0 Inf]);
+        ylabel(ax, sprintf('$\\dot{\\phi}_{%d}\\;(\\mathrm{rad/s})$', j), 'Interpreter', 'latex');
+        ylim(ax, [0 3*pi]);
         if compare_windows
             title(ax,sprintf('Module 2: %.0f--%.0f s',bounds));
         else
@@ -452,7 +452,9 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         hold(ax, 'on');
         plot(ax, times, data.(sprintf('s_predicted_%d', j)), 'Color', [.85 .25 .1]);
         ylabel(ax, sprintf('$s_{%d}$', j), 'Interpreter', 'latex');
-        legend(ax, 'Measured (file scale)', 'Open-loop prediction', 'Location', 'best');
+        ylim(ax, [-0.6 1.2]);
+        yticks(ax, [-0.5 0 0.5 1]);
+        legend(ax, 'Measured (file scale)', 'Open-loop prediction', 'Location', 'northeast');
         ax = nexttile(layout, column+4);
         panel_axes(3,column) = ax;
         plot(ax, times, data.(sprintf('s_error_file_%d', j)), 'Color', [0 .35 .7]);
@@ -487,10 +489,11 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
         exportgraphics(f, fullfile(cfg.OutputDir, [label '.png']), 'Resolution', 160);
         exportgraphics(f, fullfile(cfg.OutputDir, [label '.pdf']), 'ContentType', 'vector');
         if compare_windows && cfg.SaveZoomPanels
-            quantities = {'dotphi','sensory','error'};
+            zoom_prefix = regexprep(label, '_merged_.*$', '');
+            quantities = {'dotphi2','s2','s2_error'};
             for column = 1:2
                 for row = 1:3
-                    stem = sprintf('%s_module2_%s_%g_%gs',label,quantities{row},panel_limits(column,:));
+                    stem = sprintf('%s_%s_%g_%gs',zoom_prefix,quantities{row},panel_limits(column,:));
                     export_zoom_panel(panel_axes(row,column),cfg,stem);
                 end
             end
@@ -507,7 +510,7 @@ function export_zoom_panel(source_axes,cfg,stem)
     title(ax,'');
     if ~isempty(source_axes.Legend) && isgraphics(source_axes.Legend)
         curves = flipud(findobj(ax,'Type','line'));
-        legend(ax,curves,source_axes.Legend.String,'Location','best', ...
+        legend(ax,curves,source_axes.Legend.String,'Location',source_axes.Legend.Location, ...
             'Interpreter',source_axes.Legend.Interpreter);
     end
     tune_analysis_figure(f);
@@ -525,9 +528,9 @@ function style_module2_phase_rate(ax,omega2)
     ax.MinorGridAlpha = 0.08;
     reference = findobj(ax,'Tag','NaturalOmega2');
     set(reference,'Color',[.1 .1 .1],'LineStyle',':','LineWidth',2.5,'Label','');
-    ticks = [0 pi 2*pi];
-    labels = {'$0$','$\pi$','$2\pi$'};
-    keep = ticks>=ax.YLim(1) & ticks<=ax.YLim(2) & abs(ticks-omega2)>0.3*pi;
+    ticks = [0 pi 2*pi 3*pi];
+    labels = {'$0$','$\pi$','$2\pi$','$3\pi$'};
+    keep = ticks>=ax.YLim(1)-1e-9 & ticks<=ax.YLim(2)+1e-9 & abs(ticks-omega2)>0.3*pi;
     ticks = [ticks(keep),omega2];
     labels = [labels(keep),{'$\omega_2$'}];
     [ticks,order] = sort(ticks);
