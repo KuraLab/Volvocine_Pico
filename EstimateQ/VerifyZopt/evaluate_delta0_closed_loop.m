@@ -102,10 +102,17 @@ function out = evaluate_delta0_closed_loop(varargin)
             nominal = [plot_cfg.NominalOmegaRadS, round(plot_cfg.NominalOmegaRadS*folder_value/250,2)];
             label = [run.condition '_' stem];
             if folder_value ~= 250, label = sprintf('%s_%d_%s', run.condition, folder_value, stem); end
-            plot_run(run.timeseries, plot_cfg, label, [0 plot_cfg.AnalysisWindow(2)], nominal, delta_pi);
-            plot_run(run.timeseries, plot_cfg, [label '_zoom'], ...
-                [], nominal, delta_pi, true);
-            n_redrawn = n_redrawn+1;
+            if cfg.PlotTimeSeries
+                plot_run(run.timeseries, plot_cfg, label, [0 plot_cfg.AnalysisWindow(2)], nominal, delta_pi);
+                plot_run(run.timeseries, plot_cfg, [label '_zoom'], ...
+                    [], nominal, delta_pi, true);
+                n_redrawn = n_redrawn+1;
+            end
+        end
+        out.dotphi_relative_deviation_stats = compute_dotphi_window_stats(out.runs, plot_cfg);
+        if plot_cfg.SaveOutputs
+            writetable(out.dotphi_relative_deviation_stats, ...
+                fullfile(plot_cfg.OutputDir, 'dotphi_relative_deviation_stats.csv'));
         end
         fprintf('Updated full and zoom figures for %d saved runs: %s\n', n_redrawn, cfg.OutputDir);
         return;
@@ -314,6 +321,7 @@ function out = evaluate_delta0_closed_loop(varargin)
     end
     out.summary = struct2table(summary);
     out.rate_window_sensitivity = struct2table(sensitivity);
+    out.dotphi_relative_deviation_stats = compute_dotphi_window_stats(out.runs, cfg);
     out.notes = { ...
         'Rate correction dotphi-omega is observational; exact logged feedback is unavailable.', ...
         'Derivative code period=255 by default; Fourier model input code period=256.', ...
@@ -324,6 +332,8 @@ function out = evaluate_delta0_closed_loop(varargin)
     if cfg.SaveOutputs
         writetable(out.summary, fullfile(cfg.OutputDir, 'summary.csv'));
         writetable(out.rate_window_sensitivity, fullfile(cfg.OutputDir, 'rate_window_sensitivity.csv'));
+        writetable(out.dotphi_relative_deviation_stats, ...
+            fullfile(cfg.OutputDir, 'dotphi_relative_deviation_stats.csv'));
         save(fullfile(cfg.OutputDir, 'delta0_validation.mat'), 'out');
     end
     fprintf('\nOpen-loop model: %s\nExported: %s\n', cfg.ModelFile, G.created_at);
@@ -641,4 +651,48 @@ function export_panel_files(f, cfg, stem)
     catch err
         warning('Could not overwrite %s (%s).', pdf_path, err.message);
     end
+end
+
+function stats_table = compute_dotphi_window_stats(runs, cfg)
+    rows = struct([]);
+    fb_end = cfg.AnalysisWindow(2) - cfg.FeedbackStartSec;
+    windows = [cfg.ZoomFeedbackWindows; 0 fb_end; -cfg.FeedbackStartSec fb_end];
+    window_names = { ...
+        sprintf('fb_%g_%gs', cfg.ZoomFeedbackWindows(1,:)), ...
+        sprintf('fb_%g_%gs', cfg.ZoomFeedbackWindows(2,:)), ...
+        sprintf('fb_0_%gs', fb_end), ...
+        sprintf('log_0_%gs', cfg.AnalysisWindow(2))};
+    for r = 1:numel(runs)
+        run = runs(r);
+        T = run.timeseries;
+        fb_time = T.time_s - cfg.FeedbackStartSec;
+        [~, fname, fext] = fileparts(run.file);
+        for w = 1:size(windows, 1)
+            bounds = windows(w, :);
+            mask = fb_time >= bounds(1) - 1e-9 & fb_time <= bounds(2) + 1e-9;
+            for j = 1:2
+                rel = T.(sprintf('correction_over_nominal_%d', j))(mask);
+                rel = rel(isfinite(rel));
+                abs_rel = abs(rel);
+                row = struct( ...
+                    'condition', run.condition, ...
+                    'file', [fname fext], ...
+                    'window', window_names{w}, ...
+                    'feedback_start_s', bounds(1), ...
+                    'feedback_end_s', bounds(2), ...
+                    'log_start_s', bounds(1) + cfg.FeedbackStartSec, ...
+                    'log_end_s', bounds(2) + cfg.FeedbackStartSec, ...
+                    'module', j, ...
+                    'nominal_omega_rad_s', run.nominal_omega_rad_s(j), ...
+                    'n_samples', numel(abs_rel), ...
+                    'max_abs_correction_over_omega', max(abs_rel), ...
+                    'var_abs_correction_over_omega', var(abs_rel), ...
+                    'std_abs_correction_over_omega', std(abs_rel), ...
+                    'mean_abs_correction_over_omega', mean(abs_rel), ...
+                    'rms_correction_over_omega', rms_value(rel));
+                rows = [rows; row]; %#ok<AGROW>
+            end
+        end
+    end
+    stats_table = struct2table(rows);
 end
