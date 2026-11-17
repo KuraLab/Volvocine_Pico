@@ -48,6 +48,9 @@ function out = evaluate_delta0_closed_loop(varargin)
 % Zoom figures compare Module 2 in two feedback-time windows, specified
 % by ZoomFeedbackWindows (default [0 5; 60 65]).
 % SaveZoomPanels=true also exports all six zoom panels as individual PNG/PDF.
+% For k3w2/k5w2 at Delta omega=0.2*pi and 0.5*pi, it additionally saves six
+% Module 1/2 overlays under OutputDir/overlaid_zoom/k{gain}_delta_omega_{d}pi,
+% even with PlotTimeSeries=false. This also works with ReplotOnly=true.
 
     here = fileparts(mfilename('fullpath'));
     estimate_dir = fileparts(here);
@@ -109,6 +112,11 @@ function out = evaluate_delta0_closed_loop(varargin)
                 n_redrawn = n_redrawn+1;
             end
         end
+        selected_runs = out.runs;
+        if ~ismember('Conditions', p.UsingDefaults)
+            selected_runs = selected_runs(ismember({selected_runs.condition}, cfg.Conditions));
+        end
+        export_high_gain_zoom_panels(selected_runs, plot_cfg);
         out.dotphi_relative_deviation_stats = compute_dotphi_window_stats(out.runs, plot_cfg);
         if plot_cfg.SaveOutputs
             writetable(out.dotphi_relative_deviation_stats, ...
@@ -319,6 +327,7 @@ function out = evaluate_delta0_closed_loop(varargin)
         end
       end
     end
+    export_high_gain_zoom_panels(out.runs, cfg);
     out.summary = struct2table(summary);
     out.rate_window_sensitivity = struct2table(sensitivity);
     out.dotphi_relative_deviation_stats = compute_dotphi_window_stats(out.runs, cfg);
@@ -555,10 +564,45 @@ function style_module2_phase_rate(ax,omega2,omega_label)
     ax.TickLabelInterpreter = 'latex';
 end
 
+function export_high_gain_zoom_panels(runs, cfg)
+    if ~cfg.SaveOutputs || ~cfg.SaveZoomPanels, return; end
+    for k = 1:numel(runs)
+        run = runs(k);
+        switch run.condition
+            case 'k3w2', gain = 3;
+            case 'k5w2', gain = 5;
+            otherwise, continue;
+        end
+        [folder, trial_stem] = fileparts(run.file);
+        [~, folder_name] = fileparts(folder);
+        folder_value = str2double(folder_name);
+        delta_pi = (250-folder_value)/100;
+        if ~any(abs(delta_pi-[0.2 0.5]) < 1e-8), continue; end
+        delta_label = strrep(sprintf('%.1f',delta_pi),'.','p');
+        prefix = sprintf('k%d_delta_omega_%spi',gain,delta_label);
+        panel_cfg = cfg;
+        panel_cfg.OutputDir = fullfile(cfg.OutputDir,'overlaid_zoom',prefix);
+        % Preserve every trial if additional CSVs are added to a condition.
+        same_condition = strcmp({runs.condition},run.condition);
+        same_folder = cellfun(@(f) strcmp(fileparts(f),folder),{runs.file});
+        if nnz(same_condition & same_folder) > 1
+            panel_cfg.OutputDir = fullfile(panel_cfg.OutputDir,trial_stem);
+        end
+        if ~isfolder(panel_cfg.OutputDir), mkdir(panel_cfg.OutputDir); end
+        nominal = [cfg.NominalOmegaRadS, round(cfg.NominalOmegaRadS*folder_value/250,2)];
+        export_overlaid_zoom_panels(run.timeseries, ...
+            run.timeseries.time_s-cfg.FeedbackStartSec, panel_cfg, prefix, ...
+            cfg.ZoomFeedbackWindows, nominal);
+        fprintf('Saved six Module 1/2 zoom overlays (PNG/PDF): %s\n',panel_cfg.OutputDir);
+    end
+end
+
 function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega)
     all_mask = false(size(plot_time));
     for column = 1:2
         bounds = panel_limits(column,:);
+        assert(bounds(1)>=min(plot_time)-cfg.SampleDt/2 && bounds(2)<=max(plot_time)+cfg.SampleDt/2, ...
+            'Plot window %.1f--%.1f s is outside the saved feedback-time range.',bounds);
         all_mask = all_mask | (plot_time>=bounds(1) & plot_time<=bounds(2));
     end
     err_all = [T.s_error_file_1(all_mask); T.s_error_file_2(all_mask)];
