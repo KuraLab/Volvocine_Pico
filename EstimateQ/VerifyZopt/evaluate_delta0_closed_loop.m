@@ -48,7 +48,7 @@ function out = evaluate_delta0_closed_loop(varargin)
 % Zoom figures compare Module 2 in two feedback-time windows, specified
 % by ZoomFeedbackWindows (default [0 5; 60 65]).
 % SaveZoomPanels=true also exports all six zoom panels as individual PNG/PDF.
-% For k3w2/k5w2 at Delta omega=0.2*pi and 0.5*pi, it additionally saves six
+% For k3w2/k5w2 at Delta omega=0.3*pi and 0.5*pi, it additionally saves six
 % Module 1/2 overlays under OutputDir/overlaid_zoom/k{gain}_delta_omega_{d}pi,
 % even with PlotTimeSeries=false. This also works with ReplotOnly=true.
 
@@ -544,7 +544,7 @@ function export_zoom_panel(source_axes,cfg,stem)
     close(f);
 end
 
-function style_module2_phase_rate(ax,omega2,omega_label)
+function style_module2_phase_rate(ax,omega2,omega_label,omega1)
     if nargin < 3, omega_label = '$\omega_2$'; end
     % Apply after tuneFigure, which otherwise resets grid opacity.
     ax.GridColor = [.8 .8 .8];
@@ -552,11 +552,19 @@ function style_module2_phase_rate(ax,omega2,omega_label)
     ax.MinorGridAlpha = 0.08;
     reference = findobj(ax,'Tag','NaturalOmega2');
     set(reference,'Color',[.1 .1 .1],'LineStyle',':','LineWidth',2.5,'Label','');
+    set(findobj(ax,'Tag','NaturalOmega1'),'Color',[.1 .1 .1],'LineWidth',2.5);
     ticks = [0 pi 2*pi 3*pi];
     labels = {'$0$','$\pi$','$2\pi$','$3\pi$'};
     keep = ticks>=ax.YLim(1)-1e-9 & ticks<=ax.YLim(2)+1e-9 & abs(ticks-omega2)>0.3*pi;
-    ticks = [ticks(keep),omega2];
-    labels = [labels(keep),{omega_label}];
+    natural_ticks = omega2;
+    natural_labels = {omega_label};
+    if nargin >= 4 && abs(omega1-omega2) > 1e-6
+        keep = keep & abs(ticks-omega1)>0.3*pi;
+        natural_ticks = [omega2 omega1];
+        natural_labels = {omega_label,'$\omega_1$'};
+    end
+    ticks = [ticks(keep),natural_ticks];
+    labels = [labels(keep),natural_labels];
     [ticks,order] = sort(ticks);
     labels = labels(order);
     ax.YTick = ticks;
@@ -577,7 +585,7 @@ function export_high_gain_zoom_panels(runs, cfg)
         [~, folder_name] = fileparts(folder);
         folder_value = str2double(folder_name);
         delta_pi = (250-folder_value)/100;
-        if ~any(abs(delta_pi-[0.2 0.5]) < 1e-8), continue; end
+        if ~any(abs(delta_pi-[0.3 0.5]) < 1e-8), continue; end
         delta_label = strrep(sprintf('%.1f',delta_pi),'.','p');
         prefix = sprintf('k%d_delta_omega_%spi',gain,delta_label);
         panel_cfg = cfg;
@@ -627,7 +635,8 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 p1 = plot(ax,times,data.dotphi_rad_s_1,'Color',[0 .35 .7]);
                 p2 = plot(ax,times,data.dotphi_rad_s_2,'Color',[.85 .25 .1]);
                 if abs(nominal_omega(1)-nominal_omega(2)) > 1e-6
-                    yline(ax,nominal_omega(1),'--','Color',[.3 .3 .3],'HandleVisibility','off');
+                    yline(ax,nominal_omega(1),'--','Color',[.1 .1 .1],'LineWidth',2.5, ...
+                        'Tag','NaturalOmega1','HandleVisibility','off');
                 end
                 yline(ax,nominal_omega(2),':','Color',[.1 .1 .1],'LineWidth',2.5, ...
                     'Tag','NaturalOmega2','HandleVisibility','off');
@@ -652,7 +661,6 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 yline(ax,0,'k--','HandleVisibility','off');
                 ylabel(ax,'$s_j^{\mathrm{meas}}-s_j^{\mathrm{pred}}$','Interpreter','latex');
                 ylim(ax,err_ylim);
-                yticks(ax,[-0.2 0 0.2 0.4]);
                 legend(ax,[p1 p2], ...
                     {'$s_1^{\mathrm{meas}}-s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}-s_2^{\mathrm{pred}}$'}, ...
                     'Location','northeast','Interpreter','latex');
@@ -663,7 +671,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
             tune_analysis_figure(f);
             enlarge_panel_fonts(f, ax, 1.28);
             if row == 1
-                style_module2_phase_rate(ax,nominal_omega(2),omega_label);
+                style_module2_phase_rate(ax,nominal_omega(2),omega_label,nominal_omega(1));
             elseif row == 2
                 ax.Legend.NumColumns = 2;
                 ax.Legend.Location = 'northeast';
