@@ -12,7 +12,8 @@ function out = compare_k3_k5_rmse_with_open_loop(varargin)
 % To export from the existing analysis without refitting:
 %   out = compare_k3_k5_rmse_with_open_loop('ReplotOnly',true,'ShowFigures',false);
 % SaveZoomPanels=false disables these additional exports.
-% ShowReconstructedRate=false hides the rates reconstructed from s1 and s2.
+% The dotphi12 panels compare the logged phase slopes with rates from predicted s.
+% ShowReconstructedRate=false hides the rates computed from predicted s.
 % Other name/value options are forwarded to the common comparison function.
 
     here = fileparts(mfilename('fullpath'));

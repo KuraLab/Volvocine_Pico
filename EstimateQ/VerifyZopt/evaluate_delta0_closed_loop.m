@@ -49,9 +49,10 @@ function out = evaluate_delta0_closed_loop(varargin)
 % SaveZoomPanels=true also exports all six zoom panels as individual PNG/PDF.
 % For k3w2/k5w2 at Delta omega=0.2*pi, 0.3*pi and 0.5*pi, it also saves six
 % Module 1/2 overlays under OutputDir/overlaid_zoom/k{gain}_delta_omega_{d}pi,
-% even with PlotTimeSeries=false or ReplotOnly=true. Phase-rate overlays
-% compare the logged phase slopes with a reconstruction from logged a2 and W2.
-% Set ShowReconstructedRate=false to show only the phase slopes from the log.
+% even with PlotTimeSeries=false or ReplotOnly=true. The dotphi12 panels overlay
+% the logged phase slopes and the rates computed from the predicted sensory input.
+% ShowReconstructedRate=false shows only the logged slopes. For cos/w1 at
+% Delta omega=0 the dotphi12 panels are saved directly in OutputDir.
 
     here = fileparts(mfilename('fullpath'));
     estimate_dir = fileparts(here);
@@ -109,9 +110,9 @@ function out = evaluate_delta0_closed_loop(varargin)
             label = [run.condition '_' stem];
             if folder_value ~= 250, label = sprintf('%s_%d_%s', run.condition, folder_value, stem); end
             if cfg.PlotTimeSeries
-                plot_run(run.timeseries, plot_cfg, label, [0 plot_cfg.AnalysisWindow(2)], nominal, delta_pi);
+                plot_run(run.timeseries, plot_cfg, label, [0 plot_cfg.AnalysisWindow(2)], nominal, delta_pi, run.condition);
                 plot_run(run.timeseries, plot_cfg, [label '_zoom'], ...
-                    [], nominal, delta_pi, true);
+                    [], nominal, delta_pi, run.condition, true);
                 n_redrawn = n_redrawn+1;
             end
         end
@@ -119,7 +120,7 @@ function out = evaluate_delta0_closed_loop(varargin)
         if ~ismember('Conditions', p.UsingDefaults)
             selected_runs = selected_runs(ismember({selected_runs.condition}, cfg.Conditions));
         end
-        export_high_gain_zoom_panels(selected_runs, plot_cfg);
+        export_feedback_zoom_panels(selected_runs, plot_cfg);
         out.dotphi_relative_deviation_stats = compute_dotphi_window_stats(out.runs, plot_cfg);
         if plot_cfg.SaveOutputs
             writetable(out.dotphi_relative_deviation_stats, ...
@@ -324,13 +325,13 @@ function out = evaluate_delta0_closed_loop(varargin)
                 writetable(T, fullfile(cfg.OutputDir, [label '_timeseries.csv']));
             end
             if cfg.PlotTimeSeries && (cfg.ShowFigures || cfg.SaveOutputs)
-                plot_run(T, cfg, label, [0 cfg.AnalysisWindow(2)], nominal_omega, delta_pi);
-                plot_run(T, cfg, [label '_zoom'], [], nominal_omega, delta_pi, true);
+                plot_run(T, cfg, label, [0 cfg.AnalysisWindow(2)], nominal_omega, delta_pi, run.condition);
+                plot_run(T, cfg, [label '_zoom'], [], nominal_omega, delta_pi, run.condition, true);
             end
         end
       end
     end
-    export_high_gain_zoom_panels(out.runs, cfg);
+    export_feedback_zoom_panels(out.runs, cfg);
     out.summary = struct2table(summary);
     out.rate_window_sensitivity = struct2table(sensitivity);
     out.dotphi_relative_deviation_stats = compute_dotphi_window_stats(out.runs, cfg);
@@ -426,8 +427,8 @@ function y = predict_s(phi1, phi2, fit)
     y(~isfinite(phi1) | ~isfinite(phi2)) = NaN;
 end
 
-function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_windows)
-    if nargin < 7, compare_windows = false; end
+function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, condition, compare_windows)
+    if nargin < 8, compare_windows = false; end
     plot_time = T.time_s - cfg.FeedbackStartSec;
     if compare_windows
         modules = [2 2];
@@ -522,7 +523,9 @@ function plot_run(T, cfg, label, limits, nominal_omega, delta_pi, compare_window
                     export_zoom_panel(panel_axes(row,column),cfg,stem);
                 end
             end
-            export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega);
+            rows = 1:3;
+            if has_feedback_zoom(condition,delta_pi), rows = 2:3; end
+            export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega,[],rows);
         end
     end
     if ~cfg.ShowFigures, close(f); end
@@ -556,8 +559,12 @@ function style_module2_phase_rate(ax,omega2,omega_label,omega1)
     reference = findobj(ax,'Tag','NaturalOmega2');
     set(reference,'Color',[.1 .1 .1],'LineStyle',':','LineWidth',2.5,'Label','');
     set(findobj(ax,'Tag','NaturalOmega1'),'Color',[.1 .1 .1],'LineWidth',2.5);
-    ticks = [0 pi 2*pi 3*pi];
-    labels = {'$0$','$\pi$','$2\pi$','$3\pi$'};
+    multiples = ceil((ax.YLim(1)-1e-9)/pi):floor((ax.YLim(2)+1e-9)/pi);
+    ticks = multiples*pi;
+    labels = arrayfun(@(n) sprintf('$%d\\pi$',n), multiples, 'UniformOutput', false);
+    labels(multiples == -1) = {'$-\pi$'};
+    labels(multiples == 0) = {'$0$'};
+    labels(multiples == 1) = {'$\pi$'};
     keep = ticks>=ax.YLim(1)-1e-9 & ticks<=ax.YLim(2)+1e-9 & abs(ticks-omega2)>0.3*pi;
     natural_ticks = omega2;
     natural_labels = {omega_label};
@@ -575,11 +582,20 @@ function style_module2_phase_rate(ax,omega2,omega_label,omega1)
     ax.TickLabelInterpreter = 'latex';
 end
 
-function export_high_gain_zoom_panels(runs, cfg)
+function yes = has_feedback_zoom(condition, delta_pi)
+    if ismember(condition, {'cos','w1'})
+        yes = delta_pi == 0;
+    else
+        yes = ismember(condition, {'k3w2','k5w2'}) && any(abs(delta_pi-[0.2 0.3 0.5]) < 1e-8);
+    end
+end
+
+function export_feedback_zoom_panels(runs, cfg)
     if ~cfg.SaveOutputs || ~cfg.SaveZoomPanels, return; end
     for k = 1:numel(runs)
         run = runs(k);
         switch run.condition
+            case {'cos','w1'}, gain = 1;
             case 'k3w2', gain = 3;
             case 'k5w2', gain = 5;
             otherwise, continue;
@@ -588,87 +604,84 @@ function export_high_gain_zoom_panels(runs, cfg)
         [~, folder_name] = fileparts(folder);
         folder_value = str2double(folder_name);
         delta_pi = (250-folder_value)/100;
-        if ~any(abs(delta_pi-[0.2 0.3 0.5]) < 1e-8), continue; end
-        delta_label = strrep(sprintf('%.1f',delta_pi),'.','p');
-        prefix = sprintf('k%d_delta_omega_%spi',gain,delta_label);
+        if ~has_feedback_zoom(run.condition,delta_pi), continue; end
         panel_cfg = cfg;
-        panel_cfg.OutputDir = fullfile(cfg.OutputDir,'overlaid_zoom',prefix);
         % Preserve every trial if additional CSVs are added to a condition.
         same_condition = strcmp({runs.condition},run.condition);
         same_folder = cellfun(@(f) strcmp(fileparts(f),folder),{runs.file});
-        if nnz(same_condition & same_folder) > 1
-            panel_cfg.OutputDir = fullfile(panel_cfg.OutputDir,trial_stem);
+        repeated_trial = nnz(same_condition & same_folder) > 1;
+        reference = '255';
+        tau = 0;
+        if gain == 1
+            rows = 1;
+            prefix = run.condition;
+            if repeated_trial, prefix = [prefix '_' trial_stem]; end
+            % The April runs applied the condition's PRC without a feedback filter.
+            prc_variant = run.condition;
+        else
+            rows = 1:3;
+            delta_label = strrep(sprintf('%.1f',delta_pi),'.','p');
+            prefix = sprintf('k%d_delta_omega_%spi',gain,delta_label);
+            panel_cfg.OutputDir = fullfile(cfg.OutputDir,'overlaid_zoom',prefix);
+            if repeated_trial, panel_cfg.OutputDir = fullfile(panel_cfg.OutputDir,trial_stem); end
+            prc_variant = 'w2';
+            % The later W2 runs used the 240_0531 coefficients and a 1 s lag.
+            if ~startsWith(trial_stem, {'merged_20260527_', 'merged_20260528_'})
+                reference = '240_0531';
+                tau = 1;
+            end
         end
         if ~isfolder(panel_cfg.OutputDir), mkdir(panel_cfg.OutputDir); end
         nominal = [cfg.NominalOmegaRadS, round(cfg.NominalOmegaRadS*folder_value/250,2)];
-        estimated_rate = [];
+        predicted_rate = [];
         if cfg.ShowReconstructedRate
-            % Infer the controller settings from the experiment batches. May 27/28
-            % used Spring3/255 W2 with no lag, while May 31/June 1 used 240_0531 and 1 s.
-            reference = '240_0531';
-            tau = 1;
-            if startsWith(trial_stem, {'merged_20260527_', 'merged_20260528_'})
-                reference = '255';
-                tau = 0;
-            end
             prc_file = fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
-                'Spring3', reference, 'gamma_exports', 'prc_snippet_ref_w2.txt');
+                'Spring3', reference, 'gamma_exports', ['prc_snippet_ref_' prc_variant '.txt']);
             [prc_a, prc_b] = parse_prc_snippet_file(prc_file);
-            estimated_rate = reconstruct_w2_rate(run.timeseries, cfg, nominal, gain, prc_a, prc_b, tau);
+            predicted_rate = predict_feedback_rates(run.timeseries, cfg, nominal, gain, prc_a, prc_b, tau);
         end
         export_overlaid_zoom_panels(run.timeseries, ...
             run.timeseries.time_s-cfg.FeedbackStartSec, panel_cfg, prefix, ...
-            cfg.ZoomFeedbackWindows, nominal, estimated_rate);
-        fprintf('Saved six Module 1/2 zoom overlays (PNG/PDF): %s\n',panel_cfg.OutputDir);
+            cfg.ZoomFeedbackWindows, nominal, predicted_rate, rows);
+        fprintf('Saved Module 1/2 zoom overlays (PNG/PDF) for %s in %s\n',prefix,panel_cfg.OutputDir);
     end
 end
 
-function rate = reconstruct_w2_rate(T, cfg, nominal_omega, gain, prc_a, prc_b, tau)
-    % Each logged a2 is floor(rawADC/4), saturated at 255. Approximate the
-    % firmware's 1000-sample ring buffer at 2 ms using 2 s of logged samples.
-    window_samples = max(1, round(2/cfg.SampleDt));
-    percentile_index = floor(window_samples*[0.1 0.9])+1;
+function predicted_rate = predict_feedback_rates(T, cfg, nominal_omega, gain, prc_a, prc_b, tau)
     pre_feedback = T.time_s < cfg.FeedbackStartSec;
-    slope_samples = round(actual_window(cfg.SampleDt,cfg.RateWindowSec)/cfg.SampleDt)+1;
     alpha = 1;
     if tau > 0, alpha = -expm1(-cfg.SampleDt/tau); end
-    rate = nan(height(T),2);
+    predicted_rate = nan(height(T),2);
     for j = 1:2
-        a2 = T.(sprintf('a2_raw_%d',j));
-        sensor = (4*a2+1.5)/4095;
-        sensor(a2 >= 255) = NaN;
-        % Use the center of each phase-code bin to evaluate the uploaded W2.
+        % Use the center of each phase-code bin to evaluate the uploaded PRC.
         phase = T.(sprintf('phi_unwrapped_rad_%d',j))+pi/cfg.PhaseCodePeriod;
         angles = mod(phase,2*pi)*(0:numel(prc_a)-1);
         z = cos(angles)*round(prc_a,6)+sin(angles)*round(prc_b,6);
-        correction = nan(height(T),1);
-        correction(pre_feedback) = 0;
-        for k = window_samples:height(T)
-            if pre_feedback(k) || ~isfinite(z(k)), continue; end
-            samples = sort(sensor(k-window_samples+1:k),'MissingPlacement','last');
-            if ~isfinite(samples(end)), continue; end
-            bounds = samples(percentile_index);
-            if bounds(1) == bounds(2), bounds = [0.10 0.16]; end
-            flex = clip_half((sensor(k)-mean(bounds))/diff(bounds));
-            correction(k) = gain*z(k)*flex;
-        end
-        % Compare at the same slope-window resolution as the logged phase.
-        % Start a new filter segment when a gap makes the input unavailable.
-        edges = diff([false; isfinite(correction); false]);
-        starts = find(edges == 1);
-        stops = find(edges == -1)-1;
-        for k = 1:numel(starts)
-            ix = starts(k):stops(k);
-            if numel(ix) < slope_samples, continue; end
-            filtered = filter(alpha,[1 alpha-1],correction(ix));
-            phase_correction = cumsum(filtered)*cfg.SampleDt;
-            rate(ix,j) = nominal_omega(j)+local_slope(phase_correction,cfg.SampleDt,cfg.RateWindowSec);
-        end
+        % The Fourier model predicts normalized s. Apply the firmware input limits.
+        predicted_s = clip_half(T.(sprintf('s_predicted_%d',j)));
+        predicted_rate(:,j) = feedback_phase_rate(gain*z.*predicted_s, pre_feedback, cfg, nominal_omega(j), alpha);
     end
 end
 
-function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega,estimated_rate)
-    if nargin < 7, estimated_rate = []; end
+function rate = feedback_phase_rate(correction, pre_feedback, cfg, nominal_omega, alpha)
+    % Use the log's slope-window resolution and start a new filter segment
+    % when a gap makes the feedback input unavailable.
+    correction(pre_feedback) = 0;
+    slope_samples = round(actual_window(cfg.SampleDt,cfg.RateWindowSec)/cfg.SampleDt)+1;
+    edges = diff([false; isfinite(correction); false]);
+    starts = find(edges == 1);
+    stops = find(edges == -1)-1;
+    rate = nan(size(correction));
+    for k = 1:numel(starts)
+        ix = starts(k):stops(k);
+        if numel(ix) < slope_samples, continue; end
+        filtered = filter(alpha,[1 alpha-1],correction(ix));
+        phase_correction = cumsum(filtered)*cfg.SampleDt;
+        rate(ix) = nominal_omega+local_slope(phase_correction,cfg.SampleDt,cfg.RateWindowSec);
+    end
+end
+
+function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega,predicted_rate,rows)
     all_mask = false(size(plot_time));
     for column = 1:2
         bounds = panel_limits(column,:);
@@ -676,21 +689,30 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
             'Plot window %.1f--%.1f s is outside the saved feedback-time range.',bounds);
         all_mask = all_mask | (plot_time>=bounds(1) & plot_time<=bounds(2));
     end
-    err_all = [T.s_error_file_1(all_mask); T.s_error_file_2(all_mask)];
-    err_min = floor(min(err_all)*10)/10;
-    err_max = ceil(max(err_all)*10)/10;
-    err_ylim = [min(-0.32, err_min), max(0.60, err_max + 0.30)];
+    if ismember(3,rows)
+        err_all = [T.s_error_file_1(all_mask); T.s_error_file_2(all_mask)];
+        err_min = floor(min(err_all)*10)/10;
+        err_max = ceil(max(err_all)*10)/10;
+        err_ylim = [min(-0.32, err_min), max(0.60, err_max + 0.30)];
+    end
     omega_label = '$\omega_{1,2}$';
     if abs(nominal_omega(1)-nominal_omega(2)) > 1e-6
         omega_label = '$\omega_2$';
     end
     quantities = {'dotphi12','s12','s12_error'};
+    show_prediction = ~isempty(predicted_rate);
+    if show_prediction
+        rates = [T.dotphi_rad_s_1(all_mask), T.dotphi_rad_s_2(all_mask), predicted_rate(all_mask,:)];
+        values = [rates(isfinite(rates)); nominal_omega(:)];
+        lowest_rate = min(values);
+        comparison_ylim = pi*[min(0,floor(lowest_rate/pi-0.05)), max(3,ceil(max(values)/pi+0.05))];
+    end
     for column = 1:2
         bounds = panel_limits(column,:);
         mask = plot_time>=bounds(1) & plot_time<=bounds(2);
         times = plot_time(mask);
         data = T(mask,:);
-        for row = 1:3
+        for row = rows
             f = figure('Color','w','Visible','off','Position',[80 60 800 500]);
             ax = axes(f,'Units','normalized','Position',[0.16 0.18 0.80 0.68]);
             hold(ax,'on');
@@ -704,16 +726,17 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 yline(ax,nominal_omega(2),':','Color',[.1 .1 .1],'LineWidth',2.5, ...
                     'Tag','NaturalOmega2','HandleVisibility','off');
                 ylabel(ax,'$\dot{\phi}_1,\dot{\phi}_2\;(\mathrm{rad/s})$','Interpreter','latex');
-                ylim(ax,[0 3*pi]);
-                if isempty(estimated_rate)
+                if show_prediction
+                    ylim(ax,comparison_ylim);
+                    p3 = plot(ax,times,predicted_rate(mask,1),'--','Color',[0 .60 .85]);
+                    p4 = plot(ax,times,predicted_rate(mask,2),'--','Color',[.93 .60 0]);
+                    legend(ax,[p1 p2 p3 p4],{'$\dot{\phi}_1$ (log)','$\dot{\phi}_2$ (log)', ...
+                        '$\dot{\phi}_1$ from $s_1^{\mathrm{pred}}$','$\dot{\phi}_2$ from $s_2^{\mathrm{pred}}$'}, ...
+                        'Location','southeast','NumColumns',2,'Interpreter','latex');
+                else
+                    ylim(ax,[0 3*pi]);
                     legend(ax,[p1 p2],{'$\dot{\phi}_1$','$\dot{\phi}_2$'}, ...
                         'Location','southeast','Interpreter','latex');
-                else
-                    p3 = plot(ax,times,estimated_rate(mask,1),'--','Color',[0 .60 .85]);
-                    p4 = plot(ax,times,estimated_rate(mask,2),'--','Color',[.93 .60 0]);
-                    legend(ax,[p1 p2 p3 p4],{'$\dot{\phi}_1$ (log)','$\dot{\phi}_2$ (log)', ...
-                        '$\dot{\phi}_1$ from $s_1$','$\dot{\phi}_2$ from $s_2$'}, ...
-                        'Location','southeast','NumColumns',2,'Interpreter','latex');
                 end
             elseif row == 2
                 p1 = plot(ax,times,data.s_file_normalized_1,'-','Color',[0 .35 .7]);
@@ -743,6 +766,24 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
             enlarge_panel_fonts(f, ax, 1.28);
             if row == 1
                 style_module2_phase_rate(ax,nominal_omega(2),omega_label,nominal_omega(1));
+                if show_prediction
+                    lg = ax.Legend;
+                    lg.FontSize = 0.8*lg.FontSize;
+                    lg.Units = 'normalized';
+                    drawnow;
+                    % Use both windows to keep the legend placement consistent.
+                    lowest_y = ax.Position(2)+ax.Position(4)*(lowest_rate-ax.YLim(1))/diff(ax.YLim);
+                    legend_top = lg.Position(2)+lg.Position(4);
+                    if lowest_y <= legend_top+0.012
+                        f.Position(4) = 620;
+                        ax.Position = [0.21 0.22 0.75 0.57];
+                        drawnow;
+                        legend_position = lg.Position;
+                        legend_position(1) = ax.Position(1)+(ax.Position(3)-legend_position(3))/2;
+                        legend_position(2) = 0.97-legend_position(4);
+                        lg.Position = legend_position;
+                    end
+                end
             elseif row == 2
                 ax.Legend.NumColumns = 2;
                 ax.Legend.Location = 'northeast';
