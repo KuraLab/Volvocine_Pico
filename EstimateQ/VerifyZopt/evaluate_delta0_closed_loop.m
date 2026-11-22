@@ -692,7 +692,8 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
     if ismember(3,rows)
         err_all = [T.s_error_file_1(all_mask); T.s_error_file_2(all_mask)];
         err_min = floor(min(err_all)*10)/10;
-        err_max = ceil(max(err_all)*10)/10;
+        highest_error = max([0; err_all]);
+        err_max = ceil(highest_error*10)/10;
         err_ylim = [min(-0.32, err_min), max(0.60, err_max + 0.30)];
     end
     omega_label = '$\omega_{1,2}$';
@@ -705,7 +706,8 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
         rates = [T.dotphi_rad_s_1(all_mask), T.dotphi_rad_s_2(all_mask), predicted_rate(all_mask,:)];
         values = [rates(isfinite(rates)); nominal_omega(:)];
         lowest_rate = min(values);
-        comparison_ylim = pi*[min(0,floor(lowest_rate/pi-0.05)), max(3,ceil(max(values)/pi+0.05))];
+        highest_rate = max(values);
+        comparison_ylim = pi*[min(0,floor(lowest_rate/pi)), max(3,ceil(highest_rate/pi+0.05))];
     end
     for column = 1:2
         bounds = panel_limits(column,:);
@@ -757,7 +759,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 ylim(ax,err_ylim);
                 legend(ax,[p1 p2], ...
                     {'$s_1^{\mathrm{meas}}-s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}-s_2^{\mathrm{pred}}$'}, ...
-                    'Location','northeast','Interpreter','latex');
+                    'Location','north','Orientation','horizontal','NumColumns',2,'Interpreter','latex');
             end
             xlim(ax,bounds);
             grid(ax,'on');
@@ -765,34 +767,53 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
             tune_analysis_figure(f);
             enlarge_panel_fonts(f, ax, 1.28);
             if row == 1
-                style_module2_phase_rate(ax,nominal_omega(2),omega_label,nominal_omega(1));
                 if show_prediction
                     lg = ax.Legend;
                     lg.FontSize = 0.8*lg.FontSize;
                     lg.Units = 'normalized';
                     drawnow;
-                    % Use both windows to keep the legend placement consistent.
-                    lowest_y = ax.Position(2)+ax.Position(4)*(lowest_rate-ax.YLim(1))/diff(ax.YLim);
-                    legend_top = lg.Position(2)+lg.Position(4);
-                    if lowest_y <= legend_top+0.012
-                        f.Position(4) = 620;
-                        ax.Position = [0.21 0.22 0.75 0.57];
+                    % Use both windows to reserve room above the curves if the lower corner is occupied.
+                    clearance = 0.012;
+                    limits = ax.YLim;
+                    bottom_fraction = (lg.Position(2)+lg.Position(4)+clearance-ax.Position(2))/ax.Position(4);
+                    if lowest_rate <= limits(1)+bottom_fraction*diff(limits)
+                        lg.Location = 'northeast';
                         drawnow;
-                        legend_position = lg.Position;
-                        legend_position(1) = ax.Position(1)+(ax.Position(3)-legend_position(3))/2;
-                        legend_position(2) = 0.97-legend_position(4);
-                        lg.Position = legend_position;
+                        top_fraction = (lg.Position(2)-clearance-ax.Position(2))/ax.Position(4);
+                        upper_limit = limits(1)+(highest_rate-limits(1))/top_fraction;
+                        ylim(ax,[limits(1), max(limits(2),(pi/2)*ceil(upper_limit/(pi/2)))]);
                     end
                 end
+                style_module2_phase_rate(ax,nominal_omega(2),omega_label,nominal_omega(1));
             elseif row == 2
                 ax.Legend.NumColumns = 2;
                 ax.Legend.Location = 'northeast';
+            else
+                lg = ax.Legend;
+                lg.FontSize = 0.8*lg.FontSize;
+                lg.Units = 'normalized';
+                drawnow;
+                % Leave space above the highest curve in either time window.
+                highest_y = ax.Position(2)+ax.Position(4)*(highest_error-ax.YLim(1))/diff(ax.YLim);
+                if highest_y >= lg.Position(2)-0.012
+                    place_legend_above_axes(f,ax,lg);
+                end
             end
             stem = sprintf('%s_%s_%g_%gs',zoom_prefix,quantities{row},bounds);
             export_panel_files(f,cfg,stem);
             close(f);
         end
     end
+end
+
+function place_legend_above_axes(fig, ax, lg)
+    fig.Position(4) = 620;
+    ax.Position = [0.21 0.22 0.75 0.57];
+    drawnow;
+    legend_position = lg.Position;
+    legend_position(1) = ax.Position(1)+(ax.Position(3)-legend_position(3))/2;
+    legend_position(2) = 0.97-legend_position(4);
+    lg.Position = legend_position;
 end
 
 function enlarge_panel_fonts(fig, ax, scale)
