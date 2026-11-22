@@ -7,11 +7,12 @@ function out = compare_k3_k5_rmse_with_open_loop(varargin)
 % and feedback-time 0--115 s interval as the k=1 analysis. Delta omega is
 % omega1-omega2. Results are saved separately from k=1 and prior subset runs.
 % Six Module 1/2 zoom overlays (0--5 and 60--65 s) are also saved for each
-% gain at Delta omega=0.3*pi,0.5*pi, under closed_loop_timeseries/overlaid_zoom
-% in four separate k{gain}_delta_omega_{0p3,0p5}pi folders (PNG and PDF).
+% gain at Delta omega=0.2*pi,0.3*pi,0.5*pi, under closed_loop_timeseries/overlaid_zoom
+% in separate k{gain}_delta_omega_{0p2,0p3,0p5}pi folders (PNG and PDF).
 % To export from the existing analysis without refitting:
 %   out = compare_k3_k5_rmse_with_open_loop('ReplotOnly',true,'ShowFigures',false);
 % SaveZoomPanels=false disables these additional exports.
+% ShowReconstructedRate=false hides the rates reconstructed from s1 and s2.
 % Other name/value options are forwarded to the common comparison function.
 
     here = fileparts(mfilename('fullpath'));

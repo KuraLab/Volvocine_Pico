@@ -19,8 +19,7 @@ function out = evaluate_delta0_closed_loop(varargin)
 %   used to identify the saved Fourier coefficients. These are separate.
 % * Natural frequency of module 1 was sent as 7.85 rad/s (3.14*2.5 rounded
 %   to two decimals); module 2 depends on its frequency folder. Estimate
-%   each independently from the baseline as well. dot(phi)-omega is an observed
-%   rate correction, not a reconstruction of the unlogged k*z(phi)*flex.
+%   each independently from the baseline as well.
 % * a2 is compared with the model under two explicit normalizations:
 %   (a) each closed-loop file's full-log p10/p90, clipped to [-.5,.5], as in
 %       plot_spring3_a2_reference_fit_error (shape-normalized comparison);
@@ -48,14 +47,16 @@ function out = evaluate_delta0_closed_loop(varargin)
 % Zoom figures compare Module 2 in two feedback-time windows, specified
 % by ZoomFeedbackWindows (default [0 5; 60 65]).
 % SaveZoomPanels=true also exports all six zoom panels as individual PNG/PDF.
-% For k3w2/k5w2 at Delta omega=0.3*pi and 0.5*pi, it additionally saves six
+% For k3w2/k5w2 at Delta omega=0.2*pi, 0.3*pi and 0.5*pi, it also saves six
 % Module 1/2 overlays under OutputDir/overlaid_zoom/k{gain}_delta_omega_{d}pi,
-% even with PlotTimeSeries=false. This also works with ReplotOnly=true.
+% even with PlotTimeSeries=false or ReplotOnly=true. Phase-rate overlays
+% compare the logged phase slopes with a reconstruction from logged a2 and W2.
+% Set ShowReconstructedRate=false to show only the phase slopes from the log.
 
     here = fileparts(mfilename('fullpath'));
     estimate_dir = fileparts(here);
     repo_dir = fileparts(estimate_dir);
-    addpath(repo_dir);
+    addpath(repo_dir, estimate_dir);
     p = inputParser;
     addParameter(p, 'ModelFile', fullfile(estimate_dir, 'Spring3', '255', 'gamma_exports', 'gamma_export_latest.mat'));
     addParameter(p, 'ReferenceDir', '');
@@ -78,6 +79,7 @@ function out = evaluate_delta0_closed_loop(varargin)
     addParameter(p, 'ReplotOnly', false, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'ZoomFeedbackWindows', [0 5; 60 65], @(x) isnumeric(x) && isequal(size(x),[2 2]) && all(isfinite(x(:))) && all(x(:,1)>=0) && all(x(:,2)>x(:,1)));
     addParameter(p, 'SaveZoomPanels', true, @(x) islogical(x) && isscalar(x));
+    addParameter(p, 'ShowReconstructedRate', true, @(x) islogical(x) && isscalar(x));
     parse(p, varargin{:});
     cfg = p.Results;
     if cfg.ReplotOnly
@@ -93,6 +95,7 @@ function out = evaluate_delta0_closed_loop(varargin)
         plot_cfg.SaveOutputs = cfg.SaveOutputs;
         plot_cfg.ZoomFeedbackWindows = cfg.ZoomFeedbackWindows;
         plot_cfg.SaveZoomPanels = cfg.SaveZoomPanels;
+        plot_cfg.ShowReconstructedRate = cfg.ShowReconstructedRate;
         n_redrawn = 0;
         for k = 1:numel(out.runs)
             run = out.runs(k);
@@ -585,7 +588,7 @@ function export_high_gain_zoom_panels(runs, cfg)
         [~, folder_name] = fileparts(folder);
         folder_value = str2double(folder_name);
         delta_pi = (250-folder_value)/100;
-        if ~any(abs(delta_pi-[0.3 0.5]) < 1e-8), continue; end
+        if ~any(abs(delta_pi-[0.2 0.3 0.5]) < 1e-8), continue; end
         delta_label = strrep(sprintf('%.1f',delta_pi),'.','p');
         prefix = sprintf('k%d_delta_omega_%spi',gain,delta_label);
         panel_cfg = cfg;
@@ -598,14 +601,74 @@ function export_high_gain_zoom_panels(runs, cfg)
         end
         if ~isfolder(panel_cfg.OutputDir), mkdir(panel_cfg.OutputDir); end
         nominal = [cfg.NominalOmegaRadS, round(cfg.NominalOmegaRadS*folder_value/250,2)];
+        estimated_rate = [];
+        if cfg.ShowReconstructedRate
+            % Infer the controller settings from the experiment batches. May 27/28
+            % used Spring3/255 W2 with no lag, while May 31/June 1 used 240_0531 and 1 s.
+            reference = '240_0531';
+            tau = 1;
+            if startsWith(trial_stem, {'merged_20260527_', 'merged_20260528_'})
+                reference = '255';
+                tau = 0;
+            end
+            prc_file = fullfile(fileparts(fileparts(mfilename('fullpath'))), ...
+                'Spring3', reference, 'gamma_exports', 'prc_snippet_ref_w2.txt');
+            [prc_a, prc_b] = parse_prc_snippet_file(prc_file);
+            estimated_rate = reconstruct_w2_rate(run.timeseries, cfg, nominal, gain, prc_a, prc_b, tau);
+        end
         export_overlaid_zoom_panels(run.timeseries, ...
             run.timeseries.time_s-cfg.FeedbackStartSec, panel_cfg, prefix, ...
-            cfg.ZoomFeedbackWindows, nominal);
+            cfg.ZoomFeedbackWindows, nominal, estimated_rate);
         fprintf('Saved six Module 1/2 zoom overlays (PNG/PDF): %s\n',panel_cfg.OutputDir);
     end
 end
 
-function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega)
+function rate = reconstruct_w2_rate(T, cfg, nominal_omega, gain, prc_a, prc_b, tau)
+    % Each logged a2 is floor(rawADC/4), saturated at 255. Approximate the
+    % firmware's 1000-sample ring buffer at 2 ms using 2 s of logged samples.
+    window_samples = max(1, round(2/cfg.SampleDt));
+    percentile_index = floor(window_samples*[0.1 0.9])+1;
+    pre_feedback = T.time_s < cfg.FeedbackStartSec;
+    slope_samples = round(actual_window(cfg.SampleDt,cfg.RateWindowSec)/cfg.SampleDt)+1;
+    alpha = 1;
+    if tau > 0, alpha = -expm1(-cfg.SampleDt/tau); end
+    rate = nan(height(T),2);
+    for j = 1:2
+        a2 = T.(sprintf('a2_raw_%d',j));
+        sensor = (4*a2+1.5)/4095;
+        sensor(a2 >= 255) = NaN;
+        % Use the center of each phase-code bin to evaluate the uploaded W2.
+        phase = T.(sprintf('phi_unwrapped_rad_%d',j))+pi/cfg.PhaseCodePeriod;
+        angles = mod(phase,2*pi)*(0:numel(prc_a)-1);
+        z = cos(angles)*round(prc_a,6)+sin(angles)*round(prc_b,6);
+        correction = nan(height(T),1);
+        correction(pre_feedback) = 0;
+        for k = window_samples:height(T)
+            if pre_feedback(k) || ~isfinite(z(k)), continue; end
+            samples = sort(sensor(k-window_samples+1:k),'MissingPlacement','last');
+            if ~isfinite(samples(end)), continue; end
+            bounds = samples(percentile_index);
+            if bounds(1) == bounds(2), bounds = [0.10 0.16]; end
+            flex = clip_half((sensor(k)-mean(bounds))/diff(bounds));
+            correction(k) = gain*z(k)*flex;
+        end
+        % Compare at the same slope-window resolution as the logged phase.
+        % Start a new filter segment when a gap makes the input unavailable.
+        edges = diff([false; isfinite(correction); false]);
+        starts = find(edges == 1);
+        stops = find(edges == -1)-1;
+        for k = 1:numel(starts)
+            ix = starts(k):stops(k);
+            if numel(ix) < slope_samples, continue; end
+            filtered = filter(alpha,[1 alpha-1],correction(ix));
+            phase_correction = cumsum(filtered)*cfg.SampleDt;
+            rate(ix,j) = nominal_omega(j)+local_slope(phase_correction,cfg.SampleDt,cfg.RateWindowSec);
+        end
+    end
+end
+
+function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,nominal_omega,estimated_rate)
+    if nargin < 7, estimated_rate = []; end
     all_mask = false(size(plot_time));
     for column = 1:2
         bounds = panel_limits(column,:);
@@ -642,8 +705,16 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                     'Tag','NaturalOmega2','HandleVisibility','off');
                 ylabel(ax,'$\dot{\phi}_1,\dot{\phi}_2\;(\mathrm{rad/s})$','Interpreter','latex');
                 ylim(ax,[0 3*pi]);
-                legend(ax,[p1 p2],{'$\dot{\phi}_1$','$\dot{\phi}_2$'}, ...
-                    'Location','southeast','Interpreter','latex');
+                if isempty(estimated_rate)
+                    legend(ax,[p1 p2],{'$\dot{\phi}_1$','$\dot{\phi}_2$'}, ...
+                        'Location','southeast','Interpreter','latex');
+                else
+                    p3 = plot(ax,times,estimated_rate(mask,1),'--','Color',[0 .60 .85]);
+                    p4 = plot(ax,times,estimated_rate(mask,2),'--','Color',[.93 .60 0]);
+                    legend(ax,[p1 p2 p3 p4],{'$\dot{\phi}_1$ (log)','$\dot{\phi}_2$ (log)', ...
+                        '$\dot{\phi}_1$ from $s_1$','$\dot{\phi}_2$ from $s_2$'}, ...
+                        'Location','southeast','NumColumns',2,'Interpreter','latex');
+                end
             elseif row == 2
                 p1 = plot(ax,times,data.s_file_normalized_1,'-','Color',[0 .35 .7]);
                 p2 = plot(ax,times,data.s_predicted_1,'--','Color',[0 .60 .85]);

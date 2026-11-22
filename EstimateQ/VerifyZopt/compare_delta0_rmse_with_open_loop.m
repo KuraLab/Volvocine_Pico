@@ -24,8 +24,9 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
 %
 % Options: FeedbackDurationSec (115), Conditions (cos,w1),
 % HighGainDeltaOmegaOverPi, OutputDir, ShowFigures (true),
-% PlotTimeSeries (false), SaveTimeSeries (false), SaveZoomPanels (true).
-% High-gain trials at Delta omega=0.3*pi,0.5*pi also export six Module 1/2
+% PlotTimeSeries (false), SaveTimeSeries (false), SaveZoomPanels (true),
+% ShowReconstructedRate (true).
+% High-gain trials at Delta omega=0.2*pi,0.3*pi,0.5*pi also export six Module 1/2
 % zoom overlays per condition into closed_loop_timeseries/overlaid_zoom,
 % including with PlotTimeSeries=false or ReplotOnly=true.
 % ReplotOnly=true redraws summary figures from OutputDir/rmse_comparison.mat
@@ -46,6 +47,7 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
     addParameter(p, 'PlotTimeSeries', false, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'SaveTimeSeries', false, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'SaveZoomPanels', true, @(x) islogical(x) && isscalar(x));
+    addParameter(p, 'ShowReconstructedRate', true, @(x) islogical(x) && isscalar(x));
     addParameter(p, 'ReplotOnly', false, @(x) islogical(x) && isscalar(x));
     parse(p, varargin{:});
     cfg = p.Results;
@@ -65,7 +67,8 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
             evaluate_delta0_closed_loop('ReplotOnly', true, ...
                 'OutputDir', fullfile(cfg.OutputDir, 'closed_loop_timeseries'), ...
                 'Conditions', out.config.Conditions, 'PlotTimeSeries', false, ...
-                'ShowFigures', cfg.ShowFigures, 'SaveZoomPanels', cfg.SaveZoomPanels);
+                'ShowFigures', cfg.ShowFigures, 'SaveZoomPanels', cfg.SaveZoomPanels, ...
+                'ShowReconstructedRate', cfg.ShowReconstructedRate);
         end
         fprintf('Updated summary figures: %s\n', cfg.OutputDir);
         return;
@@ -133,6 +136,7 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
         'FrequencyFolders', trial_folders, ...
         'PlotTimeSeries', cfg.PlotTimeSeries, 'SaveTimeSeries', cfg.SaveTimeSeries, ...
         'SaveZoomPanels', cfg.SaveZoomPanels, ...
+        'ShowReconstructedRate', cfg.ShowReconstructedRate, ...
         'OutputDir', fullfile(cfg.OutputDir, 'closed_loop_timeseries'));
     windows = struct([]);
     bins = struct([]);
