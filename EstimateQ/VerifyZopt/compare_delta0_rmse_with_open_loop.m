@@ -26,7 +26,7 @@ function out = compare_delta0_rmse_with_open_loop(varargin)
 % HighGainDeltaOmegaOverPi, OutputDir, ShowFigures (true),
 % PlotTimeSeries (false), SaveTimeSeries (false), SaveZoomPanels (true),
 % ShowReconstructedRate (true).
-% High-gain trials at Delta omega=0.2*pi,0.3*pi,0.5*pi also export six Module 1/2
+% High-gain trials at Delta omega=0.2*pi,0.3*pi,0.5*pi also export eight Module 1/2
 % zoom overlays per condition into closed_loop_timeseries/overlaid_zoom,
 % including with PlotTimeSeries=false or ReplotOnly=true.
 % ReplotOnly=true redraws summary figures from OutputDir/rmse_comparison.mat

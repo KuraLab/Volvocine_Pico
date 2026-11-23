@@ -47,12 +47,15 @@ function out = evaluate_delta0_closed_loop(varargin)
 % Zoom figures compare Module 2 in two feedback-time windows, specified
 % by ZoomFeedbackWindows (default [0 5; 60 65]).
 % SaveZoomPanels=true also exports all six zoom panels as individual PNG/PDF.
-% For k3w2/k5w2 at Delta omega=0.2*pi, 0.3*pi and 0.5*pi, it also saves six
+% For k3w2/k5w2 at Delta omega=0.2*pi, 0.3*pi and 0.5*pi, it also saves eight
 % Module 1/2 overlays under OutputDir/overlaid_zoom/k{gain}_delta_omega_{d}pi,
 % even with PlotTimeSeries=false or ReplotOnly=true. The dotphi12 panels overlay
 % the logged phase slopes and the rates computed from the predicted sensory input.
+% The phi12 panels overlay both logged phases wrapped to [0, 2*pi).
+% The phase_diff panels show phi2-phi1 wrapped to [-pi, pi) for up to 100 s
+% after feedback onset.
 % ShowReconstructedRate=false shows only the logged slopes. For cos/w1 at
-% Delta omega=0 the dotphi12 panels are saved directly in OutputDir.
+% Delta omega=0 the dotphi12 and phi12 panels are saved directly in OutputDir.
 
     here = fileparts(mfilename('fullpath'));
     estimate_dir = fileparts(here);
@@ -613,13 +616,13 @@ function export_feedback_zoom_panels(runs, cfg)
         reference = '255';
         tau = 0;
         if gain == 1
-            rows = 1;
+            rows = [1 4];
             prefix = run.condition;
             if repeated_trial, prefix = [prefix '_' trial_stem]; end
             % The April runs applied the condition's PRC without a feedback filter.
             prc_variant = run.condition;
         else
-            rows = 1:3;
+            rows = 1:4;
             delta_label = strrep(sprintf('%.1f',delta_pi),'.','p');
             prefix = sprintf('k%d_delta_omega_%spi',gain,delta_label);
             panel_cfg.OutputDir = fullfile(cfg.OutputDir,'overlaid_zoom',prefix);
@@ -640,9 +643,10 @@ function export_feedback_zoom_panels(runs, cfg)
             [prc_a, prc_b] = parse_prc_snippet_file(prc_file);
             predicted_rate = predict_feedback_rates(run.timeseries, cfg, nominal, gain, prc_a, prc_b, tau);
         end
-        export_overlaid_zoom_panels(run.timeseries, ...
-            run.timeseries.time_s-cfg.FeedbackStartSec, panel_cfg, prefix, ...
+        plot_time = run.timeseries.time_s-cfg.FeedbackStartSec;
+        export_overlaid_zoom_panels(run.timeseries, plot_time, panel_cfg, prefix, ...
             cfg.ZoomFeedbackWindows, nominal, predicted_rate, rows);
+        export_phase_difference(run.timeseries, plot_time, panel_cfg, prefix);
         fprintf('Saved Module 1/2 zoom overlays (PNG/PDF) for %s in %s\n',prefix,panel_cfg.OutputDir);
     end
 end
@@ -700,7 +704,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
     if abs(nominal_omega(1)-nominal_omega(2)) > 1e-6
         omega_label = '$\omega_2$';
     end
-    quantities = {'dotphi12','s12','s12_error'};
+    quantities = {'dotphi12','s12','s12_error','phi12'};
     show_prediction = ~isempty(predicted_rate);
     if show_prediction
         rates = [T.dotphi_rad_s_1(all_mask), T.dotphi_rad_s_2(all_mask), predicted_rate(all_mask,:)];
@@ -751,7 +755,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 legend(ax,[p1 p2 p3 p4], ...
                     {'$s_1^{\mathrm{meas}}$','$s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}$','$s_2^{\mathrm{pred}}$'}, ...
                     'Location','northeast','NumColumns',2,'Interpreter','latex');
-            else
+            elseif row == 3
                 p1 = plot(ax,times,data.s_error_file_1,'Color',[0 .35 .7]);
                 p2 = plot(ax,times,data.s_error_file_2,'Color',[.85 .25 .1]);
                 yline(ax,0,'k--','HandleVisibility','off');
@@ -759,6 +763,17 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 ylim(ax,err_ylim);
                 legend(ax,[p1 p2], ...
                     {'$s_1^{\mathrm{meas}}-s_1^{\mathrm{pred}}$','$s_2^{\mathrm{meas}}-s_2^{\mathrm{pred}}$'}, ...
+                    'Location','north','Orientation','horizontal','NumColumns',2,'Interpreter','latex');
+            else
+                [time1, phase1] = split_phase_wraps(times,data.phi_unwrapped_rad_1,0);
+                [time2, phase2] = split_phase_wraps(times,data.phi_unwrapped_rad_2,0);
+                p1 = plot(ax,time1,phase1,'Color',[0 .35 .7]);
+                p2 = plot(ax,time2,phase2,'--','Color',[.85 .25 .1]);
+                ylabel(ax,'$\phi_1,\phi_2\;(\mathrm{rad})$','Interpreter','latex');
+                ylim(ax,[0 2.5*pi]);
+                yticks(ax,[0 pi/2 pi 3*pi/2 2*pi]);
+                yticklabels(ax,{'$0$','$\pi/2$','$\pi$','$3\pi/2$','$2\pi$'});
+                legend(ax,[p1 p2],{'$\phi_1$','$\phi_2$'}, ...
                     'Location','north','Orientation','horizontal','NumColumns',2,'Interpreter','latex');
             end
             xlim(ax,bounds);
@@ -788,7 +803,7 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
             elseif row == 2
                 ax.Legend.NumColumns = 2;
                 ax.Legend.Location = 'northeast';
-            else
+            elseif row == 3
                 lg = ax.Legend;
                 lg.FontSize = 0.8*lg.FontSize;
                 lg.Units = 'normalized';
@@ -798,12 +813,49 @@ function export_overlaid_zoom_panels(T,plot_time,cfg,zoom_prefix,panel_limits,no
                 if highest_y >= lg.Position(2)-0.012
                     place_legend_above_axes(f,ax,lg);
                 end
+            else
+                ax.Legend.FontSize = 0.8*ax.Legend.FontSize;
             end
             stem = sprintf('%s_%s_%g_%gs',zoom_prefix,quantities{row},bounds);
             export_panel_files(f,cfg,stem);
             close(f);
         end
     end
+end
+
+function export_phase_difference(T, time, cfg, prefix)
+    bounds = [0 min(100,max(time))];
+    mask = time>=bounds(1) & time<=bounds(2);
+    delta = T.phi_unwrapped_rad_2(mask)-T.phi_unwrapped_rad_1(mask);
+    [plot_time, plot_phase] = split_phase_wraps(time(mask),delta,-pi);
+    f = figure('Color','w','Visible','off','Position',[80 60 800 500]);
+    ax = axes(f,'Units','normalized','Position',[0.16 0.18 0.80 0.68]);
+    trace = plot(ax,plot_time,plot_phase,'Color',[0 .35 .7]);
+    yline(ax,0,'--','Color',[.45 .45 .45]);
+    xlim(ax,bounds);
+    xticks(ax,0:20:bounds(2));
+    ylim(ax,[-pi pi]);
+    yticks(ax,[-pi -pi/2 0 pi/2 pi]);
+    yticklabels(ax,{'$-\pi$','$-\pi/2$','$0$','$\pi/2$','$\pi$'});
+    xlabel(ax,'$t\;(\mathrm{s})$','Interpreter','latex');
+    ylabel(ax,'$\phi_2-\phi_1\;(\mathrm{rad})$','Interpreter','latex');
+    grid(ax,'on');
+    tune_analysis_figure(f);
+    enlarge_panel_fonts(f,ax,1.28);
+    trace.LineWidth = 1.6;
+    export_panel_files(f,cfg,sprintf('%s_phase_diff_%g_%gs',prefix,bounds));
+    close(f);
+end
+
+function [plot_time, plot_phase] = split_phase_wraps(time, phase, lower_bound)
+    phase = mod(phase-lower_bound,2*pi)+lower_bound;
+    wraps = find(abs(diff(phase)) > pi);
+    keep = true(numel(phase)+numel(wraps),1);
+    keep(wraps+(1:numel(wraps)).') = false;
+    plot_time = nan(size(keep));
+    plot_phase = nan(size(keep));
+    plot_time(keep) = time;
+    plot_phase(keep) = phase;
 end
 
 function place_legend_above_axes(fig, ax, lg)
